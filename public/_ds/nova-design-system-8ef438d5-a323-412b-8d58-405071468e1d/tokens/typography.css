@@ -1,0 +1,8 @@
+/* Nova / MyDesignSystem — typography tokens.
+   Geist for UI/headings (bundled as "Geist Variable"). Verbatim from upstream.
+   Note: the system ships no bundled mono webfont, so there is no --font-mono token — code
+   surfaces fall back to the platform ui-monospace stack. */
+:root {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, sans-serif; /* @kind font */
+  --font-heading: var(--font-sans); /* @kind font */
+}

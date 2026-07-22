@@ -1,0 +1,13 @@
+/* Nova / MyDesignSystem — radius scale.
+   Derived from --radius (0.625rem / 10px), verbatim from upstream @theme. Classify by name.
+   Cards use --radius-xl (14px); buttons/inputs --radius-lg (10px); badges are fully pill (--radius-4xl). */
+:root {
+  --radius: 0.625rem;                        /* 10px base */
+  --radius-sm: calc(var(--radius) * 0.6);    /* 6px  */
+  --radius-md: calc(var(--radius) * 0.8);    /* 8px  */
+  --radius-lg: var(--radius);                /* 10px */
+  --radius-xl: calc(var(--radius) * 1.4);    /* 14px */
+  --radius-2xl: calc(var(--radius) * 1.8);   /* 18px */
+  --radius-3xl: calc(var(--radius) * 2.2);   /* 22px */
+  --radius-4xl: calc(var(--radius) * 2.6);   /* 26px (pill) */
+}

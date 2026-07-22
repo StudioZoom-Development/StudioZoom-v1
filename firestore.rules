@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdmin()          { return isSignedIn() && getRole() == 'admin'; }
+    function isManager()        { return isSignedIn() && getRole() == 'manager'; }
+    function isStaff()          { return isSignedIn() && getRole() == 'staff'; }
+    function isAdminOrManager() { return isAdmin() || isManager(); }
+    function isOwner(uid)       { return isSignedIn() && request.auth.uid == uid; }
+
+    match /users/{uid} {
+      // Any signed-in user can read their own doc (avoids recursive getRole() deadlock)
+      // Admins/managers can read all user docs
+      allow read:   if isSignedIn() && (
+                      request.auth.uid == uid ||
+                      isAdminOrManager()
+                    );
+      allow write:  if isAdmin();
+      allow delete: if false;
+    }
+
+    match /clients/{clientId} {
+      allow read, write: if isAdminOrManager();
+      allow delete:      if isAdmin();
+      match /payments/{paymentId} {
+        allow read, write: if isAdminOrManager();
+      }
+    }
+
+    match /leads/{leadId} {
+      allow read, write: if isAdminOrManager();
+      allow delete:      if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
+
+    match /staffAssignments/{assignmentId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
+
+    match /workItems/{workItemId} {
+      allow read:           if isSignedIn();
+      allow create, delete: if isAdminOrManager();
+      // Staff can only update the status field of their own work items
+      allow update: if isAdminOrManager() || (
+        isStaff() &&
+        resource.data.assignedToUid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+      );
+    }
+
+    match /equipment/{itemId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
+
+    match /checkouts/{checkoutId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
+
+    match /timeLogs/{logId} {
+      allow read: if isAdminOrManager() ||
+        (isStaff() && resource.data.staffUid == request.auth.uid);
+      // Staff can create their own check-in record
+      allow create: if isSignedIn() &&
+        request.resource.data.staffUid == request.auth.uid;
+      // Staff can update only their own open sessions (check-out)
+      allow update: if isAdminOrManager() || (
+        isStaff() &&
+        resource.data.staffUid == request.auth.uid &&
+        resource.data.status == 'open'
+      );
+    }
+
+    match /salaries/{salaryId}    { allow read, write: if isAdmin(); }
+    match /payslips/{payslipId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.staffUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /freelancers/{freelancerId}   { allow read, write: if isAdminOrManager(); }
+    match /freelancerPayouts/{payoutId} { allow read, write: if isAdmin(); }
+    match /expenses/{expenseId}         { allow read, write: if isAdmin(); }
+    match /budgets/{budgetId}           { allow read, write: if isAdmin(); }
+    match /quotations/{quotationId}     { allow read, write: if isAdminOrManager(); }
+    match /invoices/{invoiceId}         { allow read, write: if isAdmin(); }
+
+    match /studioSettings/{doc} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

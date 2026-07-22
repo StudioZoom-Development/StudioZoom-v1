@@ -1,0 +1,8 @@
+/* Nova / MyDesignSystem — single stylesheet entry (the token + font surface).
+   Consumers: link this for the design tokens + webfonts, and additionally link the compiled
+   component CSS `_ds_bundle.css` (and load `_ds_bundle.js`) for the component visuals —
+   exactly as every card in this project does. */
+@import "./fonts/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/radius.css";

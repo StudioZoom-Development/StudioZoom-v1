@@ -1,0 +1,1 @@
+export default function Page() { return <div style={{color:'var(--color-foreground-muted)',padding:'40px',textAlign:'center',fontFamily:'var(--font-inter)'}}><i className="ti ti-tools" style={{fontSize:'32px',display:'block',marginBottom:'12px'}}/>Equipment — coming in next build</div> }

@@ -1,0 +1,56 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "staffAssignments",
+      "fields": [{"fieldPath":"eventDate","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "staffAssignments",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"eventDate","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "workItems",
+      "fields": [{"fieldPath":"assignedToUid","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "workItems",
+      "fields": [{"fieldPath":"projectId","order":"ASCENDING"},{"fieldPath":"track","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "checkouts",
+      "fields": [{"fieldPath":"itemId","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "checkouts",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "checkouts",
+      "fields": [{"fieldPath":"projectId","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "attendance",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"year","order":"ASCENDING"},{"fieldPath":"month","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "timeLogs",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"date","order":"DESCENDING"}]
+    },
+    {
+      "collectionGroup": "salaries",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"year","order":"ASCENDING"},{"fieldPath":"month","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "projects",
+      "fields": [{"fieldPath":"stage","order":"ASCENDING"},{"fieldPath":"eventDate","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "clients",
+      "fields": [{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"eventDate","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "leads",
+      "fields": [{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]
+    }
+  ]
+}

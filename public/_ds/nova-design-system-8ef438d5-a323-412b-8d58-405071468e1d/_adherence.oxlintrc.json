@@ -1,0 +1,1030 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/21stdev/TwentyFirstGlowBorder/**",
+              "components/21stdev/TwentyFirstGradientText/**",
+              "components/21stdev/TwentyFirstInteractiveDock/**",
+              "components/21stdev/TwentyFirstShimmerCard/**",
+              "components/aceternity/AceternityAnimatedTestimonials/**",
+              "components/aceternity/AceternityAnimatedTooltip/**",
+              "components/aceternity/AceternityAsciiArt/**",
+              "components/aceternity/AceternityAuroraBackground/**",
+              "components/aceternity/AceternityBackgroundBeams/**",
+              "components/aceternity/AceternityBackgroundBeamsWithCollision/**",
+              "components/aceternity/AceternityBackgroundGradient/**",
+              "components/aceternity/AceternityBackgroundGradientAnimation/**",
+              "components/aceternity/AceternityBackgroundLines/**",
+              "components/aceternity/AceternityBackgroundRippleEffect/**",
+              "components/aceternity/AceternityBentoGrid/**",
+              "components/aceternity/AceternityBoxesCore/**",
+              "components/aceternity/AceternityCardContainer/**",
+              "components/aceternity/AceternityCardStack/**",
+              "components/aceternity/AceternityCarousel/**",
+              "components/aceternity/AceternityCodeBlock/**",
+              "components/aceternity/AceternityColourfulText/**",
+              "components/aceternity/AceternityCometCard/**",
+              "components/aceternity/AceternityCompare/**",
+              "components/aceternity/AceternityContainerScroll/**",
+              "components/aceternity/AceternityDirectionAwareHover/**",
+              "components/aceternity/AceternityDottedGlowBackground/**",
+              "components/aceternity/AceternityDraggableCardBody/**",
+              "components/aceternity/AceternityEncryptedText/**",
+              "components/aceternity/AceternityEvervaultCard/**",
+              "components/aceternity/AceternityFileUpload/**",
+              "components/aceternity/AceternityFlipWords/**",
+              "components/aceternity/AceternityFloatingDock/**",
+              "components/aceternity/AceternityFloatingNav/**",
+              "components/aceternity/AceternityFocusCards/**",
+              "components/aceternity/AceternityFollowerPointerCard/**",
+              "components/aceternity/AceternityGlareCard/**",
+              "components/aceternity/AceternityGlowingEffect/**",
+              "components/aceternity/AceternityGooeyInput/**",
+              "components/aceternity/AceternityGoogleGeminiEffect/**",
+              "components/aceternity/AceternityHeroHighlight/**",
+              "components/aceternity/AceternityHeroParallax/**",
+              "components/aceternity/AceternityHoverBorderGradient/**",
+              "components/aceternity/AceternityHoverEffect/**",
+              "components/aceternity/AceternityImagesBadge/**",
+              "components/aceternity/AceternityImagesSlider/**",
+              "components/aceternity/AceternityInfiniteMovingCards/**",
+              "components/aceternity/AceternityLayoutGrid/**",
+              "components/aceternity/AceternityLens/**",
+              "components/aceternity/AceternityLinkPreview/**",
+              "components/aceternity/AceternityMacbookScroll/**",
+              "components/aceternity/AceternityMagneticButton/**",
+              "components/aceternity/AceternityMaskContainer/**",
+              "components/aceternity/AceternityMeteors/**",
+              "components/aceternity/AceternityModal/**",
+              "components/aceternity/AceternityMovingBorder/**",
+              "components/aceternity/AceternityMultiStepLoader/**",
+              "components/aceternity/AceternityParallaxScroll/**",
+              "components/aceternity/AceternityPinContainer/**",
+              "components/aceternity/AceternityPixelatedCanvas/**",
+              "components/aceternity/AceternityPlaceholdersAndVanishInput/**",
+              "components/aceternity/AceternityPointerHighlight/**",
+              "components/aceternity/AceternitySidebar/**",
+              "components/aceternity/AceternitySparklesCore/**",
+              "components/aceternity/AceternitySpotlight/**",
+              "components/aceternity/AceternitySpotlightNew/**",
+              "components/aceternity/AceternityStickyBanner/**",
+              "components/aceternity/AceternityStickyScroll/**",
+              "components/aceternity/AceternityTabs/**",
+              "components/aceternity/AceternityTerminal/**",
+              "components/aceternity/AceternityTextGenerateEffect/**",
+              "components/aceternity/AceternityTextHoverEffect/**",
+              "components/aceternity/AceternityTextRevealCard/**",
+              "components/aceternity/AceternityTimeline/**",
+              "components/aceternity/AceternityTracingBeam/**",
+              "components/aceternity/AceternityTypewriterEffect/**",
+              "components/aceternity/AceternityVortex/**",
+              "components/aceternity/AceternityWavyBackground/**",
+              "components/aceternity/AceternityWobbleCard/**",
+              "components/aceternity/AceternityWorldMap/**",
+              "components/heroui/HeroAccordion/**",
+              "components/heroui/HeroAlert/**",
+              "components/heroui/HeroAutocomplete/**",
+              "components/heroui/HeroAvatar/**",
+              "components/heroui/HeroBadge/**",
+              "components/heroui/HeroBreadcrumbs/**",
+              "components/heroui/HeroButton/**",
+              "components/heroui/HeroButtonGroup/**",
+              "components/heroui/HeroCalendar/**",
+              "components/heroui/HeroCard/**",
+              "components/heroui/HeroCheckbox/**",
+              "components/heroui/HeroCheckboxGroup/**",
+              "components/heroui/HeroChip/**",
+              "components/heroui/HeroDatePicker/**",
+              "components/heroui/HeroDateRangePicker/**",
+              "components/heroui/HeroDrawer/**",
+              "components/heroui/HeroDropdown/**",
+              "components/heroui/HeroEmptyState/**",
+              "components/heroui/HeroForm/**",
+              "components/heroui/HeroInput/**",
+              "components/heroui/HeroKbd/**",
+              "components/heroui/HeroLink/**",
+              "components/heroui/HeroModal/**",
+              "components/heroui/HeroPagination/**",
+              "components/heroui/HeroPopover/**",
+              "components/heroui/HeroRadio/**",
+              "components/heroui/HeroRadioGroup/**",
+              "components/heroui/HeroRangeCalendar/**",
+              "components/heroui/HeroScrollShadow/**",
+              "components/heroui/HeroSelect/**",
+              "components/heroui/HeroSeparator/**",
+              "components/heroui/HeroSkeleton/**",
+              "components/heroui/HeroSlider/**",
+              "components/heroui/HeroSpinner/**",
+              "components/heroui/HeroSwitch/**",
+              "components/heroui/HeroTable/**",
+              "components/heroui/HeroTabs/**",
+              "components/heroui/HeroTooltip/**",
+              "components/motion/MotionFadeIn/**",
+              "components/motion/MotionHoverCard/**",
+              "components/motion/MotionScaleIn/**",
+              "components/motion/MotionSlideIn/**",
+              "components/motion/MotionStaggerList/**",
+              "components/pines/PinesAccordion/**",
+              "components/pines/PinesModal/**",
+              "components/pines/PinesRating/**",
+              "components/pines/PinesSlideover/**",
+              "components/shadcn/ShadcnAccordion/**",
+              "components/shadcn/ShadcnAlert/**",
+              "components/shadcn/ShadcnAlertDialog/**",
+              "components/shadcn/ShadcnAspectRatio/**",
+              "components/shadcn/ShadcnAttachment/**",
+              "components/shadcn/ShadcnAvatar/**",
+              "components/shadcn/ShadcnBadge/**",
+              "components/shadcn/ShadcnBreadcrumb/**",
+              "components/shadcn/ShadcnBubble/**",
+              "components/shadcn/ShadcnButton/**",
+              "components/shadcn/ShadcnButtonGroup/**",
+              "components/shadcn/ShadcnCalendar/**",
+              "components/shadcn/ShadcnCard/**",
+              "components/shadcn/ShadcnCarousel/**",
+              "components/shadcn/ShadcnChartContainer/**",
+              "components/shadcn/ShadcnCheckbox/**",
+              "components/shadcn/ShadcnCollapsible/**",
+              "components/shadcn/ShadcnCombobox/**",
+              "components/shadcn/ShadcnCommand/**",
+              "components/shadcn/ShadcnContextMenu/**",
+              "components/shadcn/ShadcnDialog/**",
+              "components/shadcn/ShadcnDirectionProvider/**",
+              "components/shadcn/ShadcnDrawer/**",
+              "components/shadcn/ShadcnDropdownMenu/**",
+              "components/shadcn/ShadcnEmpty/**",
+              "components/shadcn/ShadcnField/**",
+              "components/shadcn/ShadcnHoverCard/**",
+              "components/shadcn/ShadcnInput/**",
+              "components/shadcn/ShadcnInputGroup/**",
+              "components/shadcn/ShadcnInputOTP/**",
+              "components/shadcn/ShadcnItem/**",
+              "components/shadcn/ShadcnKbd/**",
+              "components/shadcn/ShadcnLabel/**",
+              "components/shadcn/ShadcnMarker/**",
+              "components/shadcn/ShadcnMenubar/**",
+              "components/shadcn/ShadcnMessage/**",
+              "components/shadcn/ShadcnMessageScroller/**",
+              "components/shadcn/ShadcnNativeSelect/**",
+              "components/shadcn/ShadcnNavigationMenu/**",
+              "components/shadcn/ShadcnPagination/**",
+              "components/shadcn/ShadcnPopover/**",
+              "components/shadcn/ShadcnProgress/**",
+              "components/shadcn/ShadcnRadioGroup/**",
+              "components/shadcn/ShadcnResizablePanelGroup/**",
+              "components/shadcn/ShadcnScrollArea/**",
+              "components/shadcn/ShadcnSelect/**",
+              "components/shadcn/ShadcnSeparator/**",
+              "components/shadcn/ShadcnSheet/**",
+              "components/shadcn/ShadcnSidebar/**",
+              "components/shadcn/ShadcnSkeleton/**",
+              "components/shadcn/ShadcnSlider/**",
+              "components/shadcn/ShadcnSpinner/**",
+              "components/shadcn/ShadcnSwitch/**",
+              "components/shadcn/ShadcnTable/**",
+              "components/shadcn/ShadcnTabs/**",
+              "components/shadcn/ShadcnTextarea/**",
+              "components/shadcn/ShadcnToaster/**",
+              "components/shadcn/ShadcnToggle/**",
+              "components/shadcn/ShadcnToggleGroup/**",
+              "components/shadcn/ShadcnTooltip/**",
+              "components/skiper/Skiper16/**",
+              "components/skiper/Skiper17/**",
+              "components/skiper/Skiper19/**",
+              "components/skiper/Skiper25/**",
+              "components/skiper/Skiper26/**",
+              "components/skiper/Skiper28/**",
+              "components/skiper/Skiper3/**",
+              "components/skiper/Skiper30/**",
+              "components/skiper/Skiper31/**",
+              "components/skiper/Skiper34/**",
+              "components/skiper/Skiper37/**",
+              "components/skiper/Skiper39/**",
+              "components/skiper/Skiper4/**",
+              "components/skiper/Skiper40/**",
+              "components/skiper/Skiper41/**",
+              "components/skiper/Skiper47/**",
+              "components/skiper/Skiper48/**",
+              "components/skiper/Skiper49/**",
+              "components/skiper/Skiper50/**",
+              "components/skiper/Skiper51/**",
+              "components/skiper/Skiper52/**",
+              "components/skiper/Skiper53/**",
+              "components/skiper/Skiper54/**",
+              "components/skiper/Skiper58/**",
+              "components/skiper/Skiper61/**",
+              "components/skiper/Skiper62/**",
+              "components/skiper/Skiper63/**",
+              "components/skiper/Skiper64/**",
+              "components/skiper/Skiper65/**",
+              "components/skiper/Skiper66/**",
+              "components/skiper/Skiper67/**",
+              "components/skiper/Skiper87/**",
+              "components/skiper/Skiper89/**",
+              "components/skiper/Skiper99/**",
+              "components/skiper/SkiperAnimatedCard/**",
+              "components/skiper/SkiperGlassContainer/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Geist Variable))/i]",
+        "message": "Font not provided by the design system. Available: Geist Variable."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "AceternityAnimatedTestimonials": {
+        "replaces": []
+      },
+      "AceternityAnimatedTooltip": {
+        "replaces": []
+      },
+      "AceternityAsciiArt": {
+        "replaces": []
+      },
+      "AceternityAuroraBackground": {
+        "replaces": []
+      },
+      "AceternityBackgroundBeams": {
+        "replaces": []
+      },
+      "AceternityBackgroundBeamsWithCollision": {
+        "replaces": []
+      },
+      "AceternityBackgroundGradient": {
+        "replaces": []
+      },
+      "AceternityBackgroundGradientAnimation": {
+        "replaces": []
+      },
+      "AceternityBackgroundLines": {
+        "replaces": []
+      },
+      "AceternityBackgroundRippleEffect": {
+        "replaces": []
+      },
+      "AceternityBentoGrid": {
+        "replaces": []
+      },
+      "AceternityBoxesCore": {
+        "replaces": []
+      },
+      "AceternityCardContainer": {
+        "replaces": []
+      },
+      "AceternityCardStack": {
+        "replaces": []
+      },
+      "AceternityCarousel": {
+        "replaces": []
+      },
+      "AceternityCodeBlock": {
+        "replaces": []
+      },
+      "AceternityColourfulText": {
+        "replaces": []
+      },
+      "AceternityCometCard": {
+        "replaces": []
+      },
+      "AceternityCompare": {
+        "replaces": []
+      },
+      "AceternityContainerScroll": {
+        "replaces": []
+      },
+      "AceternityDirectionAwareHover": {
+        "replaces": []
+      },
+      "AceternityDottedGlowBackground": {
+        "replaces": []
+      },
+      "AceternityDraggableCardBody": {
+        "replaces": []
+      },
+      "AceternityEncryptedText": {
+        "replaces": []
+      },
+      "AceternityEvervaultCard": {
+        "replaces": []
+      },
+      "AceternityFileUpload": {
+        "replaces": []
+      },
+      "AceternityFlipWords": {
+        "replaces": []
+      },
+      "AceternityFloatingDock": {
+        "replaces": []
+      },
+      "AceternityFloatingNav": {
+        "replaces": []
+      },
+      "AceternityFocusCards": {
+        "replaces": []
+      },
+      "AceternityFollowerPointerCard": {
+        "replaces": []
+      },
+      "AceternityGlareCard": {
+        "replaces": []
+      },
+      "AceternityGlowingEffect": {
+        "replaces": []
+      },
+      "AceternityGooeyInput": {
+        "replaces": []
+      },
+      "AceternityGoogleGeminiEffect": {
+        "replaces": []
+      },
+      "AceternityHeroHighlight": {
+        "replaces": []
+      },
+      "AceternityHeroParallax": {
+        "replaces": []
+      },
+      "AceternityHoverBorderGradient": {
+        "replaces": []
+      },
+      "AceternityHoverEffect": {
+        "replaces": []
+      },
+      "AceternityImagesBadge": {
+        "replaces": []
+      },
+      "AceternityImagesSlider": {
+        "replaces": []
+      },
+      "AceternityInfiniteMovingCards": {
+        "replaces": []
+      },
+      "AceternityLayoutGrid": {
+        "replaces": []
+      },
+      "AceternityLens": {
+        "replaces": []
+      },
+      "AceternityLinkPreview": {
+        "replaces": []
+      },
+      "AceternityMacbookScroll": {
+        "replaces": []
+      },
+      "AceternityMagneticButton": {
+        "replaces": []
+      },
+      "AceternityMaskContainer": {
+        "replaces": []
+      },
+      "AceternityMeteors": {
+        "replaces": []
+      },
+      "AceternityModal": {
+        "replaces": []
+      },
+      "AceternityMovingBorder": {
+        "replaces": []
+      },
+      "AceternityMultiStepLoader": {
+        "replaces": []
+      },
+      "AceternityParallaxScroll": {
+        "replaces": []
+      },
+      "AceternityPinContainer": {
+        "replaces": []
+      },
+      "AceternityPixelatedCanvas": {
+        "replaces": []
+      },
+      "AceternityPlaceholdersAndVanishInput": {
+        "replaces": []
+      },
+      "AceternityPointerHighlight": {
+        "replaces": []
+      },
+      "AceternitySidebar": {
+        "replaces": []
+      },
+      "AceternitySparklesCore": {
+        "replaces": []
+      },
+      "AceternitySpotlight": {
+        "replaces": []
+      },
+      "AceternitySpotlightNew": {
+        "replaces": []
+      },
+      "AceternityStickyBanner": {
+        "replaces": []
+      },
+      "AceternityStickyScroll": {
+        "replaces": []
+      },
+      "AceternityTabs": {
+        "replaces": []
+      },
+      "AceternityTerminal": {
+        "replaces": []
+      },
+      "AceternityTextGenerateEffect": {
+        "replaces": []
+      },
+      "AceternityTextHoverEffect": {
+        "replaces": []
+      },
+      "AceternityTextRevealCard": {
+        "replaces": []
+      },
+      "AceternityTimeline": {
+        "replaces": []
+      },
+      "AceternityTracingBeam": {
+        "replaces": []
+      },
+      "AceternityTypewriterEffect": {
+        "replaces": []
+      },
+      "AceternityVortex": {
+        "replaces": []
+      },
+      "AceternityWavyBackground": {
+        "replaces": []
+      },
+      "AceternityWobbleCard": {
+        "replaces": []
+      },
+      "AceternityWorldMap": {
+        "replaces": []
+      },
+      "HeroAccordion": {
+        "replaces": []
+      },
+      "HeroAlert": {
+        "replaces": []
+      },
+      "HeroAutocomplete": {
+        "replaces": []
+      },
+      "HeroAvatar": {
+        "replaces": []
+      },
+      "HeroBadge": {
+        "replaces": []
+      },
+      "HeroBreadcrumbs": {
+        "replaces": []
+      },
+      "HeroButton": {
+        "replaces": []
+      },
+      "HeroButtonGroup": {
+        "replaces": []
+      },
+      "HeroCalendar": {
+        "replaces": []
+      },
+      "HeroCard": {
+        "replaces": []
+      },
+      "HeroCheckbox": {
+        "replaces": []
+      },
+      "HeroCheckboxGroup": {
+        "replaces": []
+      },
+      "HeroChip": {
+        "replaces": []
+      },
+      "HeroDatePicker": {
+        "replaces": []
+      },
+      "HeroDateRangePicker": {
+        "replaces": []
+      },
+      "HeroDrawer": {
+        "replaces": []
+      },
+      "HeroDropdown": {
+        "replaces": []
+      },
+      "HeroEmptyState": {
+        "replaces": []
+      },
+      "HeroForm": {
+        "replaces": []
+      },
+      "HeroInput": {
+        "replaces": []
+      },
+      "HeroKbd": {
+        "replaces": []
+      },
+      "HeroLink": {
+        "replaces": []
+      },
+      "HeroModal": {
+        "replaces": []
+      },
+      "HeroPagination": {
+        "replaces": []
+      },
+      "HeroPopover": {
+        "replaces": []
+      },
+      "HeroRadio": {
+        "replaces": []
+      },
+      "HeroRadioGroup": {
+        "replaces": []
+      },
+      "HeroRangeCalendar": {
+        "replaces": []
+      },
+      "HeroScrollShadow": {
+        "replaces": []
+      },
+      "HeroSelect": {
+        "replaces": []
+      },
+      "HeroSeparator": {
+        "replaces": []
+      },
+      "HeroSkeleton": {
+        "replaces": []
+      },
+      "HeroSlider": {
+        "replaces": []
+      },
+      "HeroSpinner": {
+        "replaces": []
+      },
+      "HeroSwitch": {
+        "replaces": []
+      },
+      "HeroTable": {
+        "replaces": []
+      },
+      "HeroTabs": {
+        "replaces": []
+      },
+      "HeroTooltip": {
+        "replaces": []
+      },
+      "MotionFadeIn": {
+        "replaces": []
+      },
+      "MotionHoverCard": {
+        "replaces": []
+      },
+      "MotionScaleIn": {
+        "replaces": []
+      },
+      "MotionSlideIn": {
+        "replaces": []
+      },
+      "MotionStaggerList": {
+        "replaces": []
+      },
+      "PinesAccordion": {
+        "replaces": []
+      },
+      "PinesModal": {
+        "replaces": []
+      },
+      "PinesRating": {
+        "replaces": []
+      },
+      "PinesSlideover": {
+        "replaces": []
+      },
+      "ShadcnAccordion": {
+        "replaces": []
+      },
+      "ShadcnAlert": {
+        "replaces": []
+      },
+      "ShadcnAlertDialog": {
+        "replaces": []
+      },
+      "ShadcnAspectRatio": {
+        "replaces": []
+      },
+      "ShadcnAttachment": {
+        "replaces": []
+      },
+      "ShadcnAvatar": {
+        "replaces": []
+      },
+      "ShadcnBadge": {
+        "replaces": []
+      },
+      "ShadcnBreadcrumb": {
+        "replaces": []
+      },
+      "ShadcnBubble": {
+        "replaces": []
+      },
+      "ShadcnButton": {
+        "replaces": []
+      },
+      "ShadcnButtonGroup": {
+        "replaces": []
+      },
+      "ShadcnCalendar": {
+        "replaces": []
+      },
+      "ShadcnCard": {
+        "replaces": []
+      },
+      "ShadcnCarousel": {
+        "replaces": []
+      },
+      "ShadcnChartContainer": {
+        "replaces": []
+      },
+      "ShadcnCheckbox": {
+        "replaces": []
+      },
+      "ShadcnCollapsible": {
+        "replaces": []
+      },
+      "ShadcnCombobox": {
+        "replaces": []
+      },
+      "ShadcnCommand": {
+        "replaces": []
+      },
+      "ShadcnContextMenu": {
+        "replaces": []
+      },
+      "ShadcnDialog": {
+        "replaces": []
+      },
+      "ShadcnDirectionProvider": {
+        "replaces": []
+      },
+      "ShadcnDrawer": {
+        "replaces": []
+      },
+      "ShadcnDropdownMenu": {
+        "replaces": []
+      },
+      "ShadcnEmpty": {
+        "replaces": []
+      },
+      "ShadcnField": {
+        "replaces": []
+      },
+      "ShadcnHoverCard": {
+        "replaces": []
+      },
+      "ShadcnInput": {
+        "replaces": []
+      },
+      "ShadcnInputGroup": {
+        "replaces": []
+      },
+      "ShadcnInputOTP": {
+        "replaces": []
+      },
+      "ShadcnItem": {
+        "replaces": []
+      },
+      "ShadcnKbd": {
+        "replaces": []
+      },
+      "ShadcnLabel": {
+        "replaces": []
+      },
+      "ShadcnMarker": {
+        "replaces": []
+      },
+      "ShadcnMenubar": {
+        "replaces": []
+      },
+      "ShadcnMessage": {
+        "replaces": []
+      },
+      "ShadcnMessageScroller": {
+        "replaces": []
+      },
+      "ShadcnNativeSelect": {
+        "replaces": []
+      },
+      "ShadcnNavigationMenu": {
+        "replaces": []
+      },
+      "ShadcnPagination": {
+        "replaces": []
+      },
+      "ShadcnPopover": {
+        "replaces": []
+      },
+      "ShadcnProgress": {
+        "replaces": []
+      },
+      "ShadcnRadioGroup": {
+        "replaces": []
+      },
+      "ShadcnResizablePanelGroup": {
+        "replaces": []
+      },
+      "ShadcnScrollArea": {
+        "replaces": []
+      },
+      "ShadcnSelect": {
+        "replaces": []
+      },
+      "ShadcnSeparator": {
+        "replaces": []
+      },
+      "ShadcnSheet": {
+        "replaces": []
+      },
+      "ShadcnSidebar": {
+        "replaces": []
+      },
+      "ShadcnSkeleton": {
+        "replaces": []
+      },
+      "ShadcnSlider": {
+        "replaces": []
+      },
+      "ShadcnSpinner": {
+        "replaces": []
+      },
+      "ShadcnSwitch": {
+        "replaces": []
+      },
+      "ShadcnTable": {
+        "replaces": []
+      },
+      "ShadcnTabs": {
+        "replaces": []
+      },
+      "ShadcnTextarea": {
+        "replaces": []
+      },
+      "ShadcnToaster": {
+        "replaces": []
+      },
+      "ShadcnToggle": {
+        "replaces": []
+      },
+      "ShadcnToggleGroup": {
+        "replaces": []
+      },
+      "ShadcnTooltip": {
+        "replaces": []
+      },
+      "Skiper16": {
+        "replaces": []
+      },
+      "Skiper17": {
+        "replaces": []
+      },
+      "Skiper19": {
+        "replaces": []
+      },
+      "Skiper25": {
+        "replaces": []
+      },
+      "Skiper26": {
+        "replaces": []
+      },
+      "Skiper28": {
+        "replaces": []
+      },
+      "Skiper3": {
+        "replaces": []
+      },
+      "Skiper30": {
+        "replaces": []
+      },
+      "Skiper31": {
+        "replaces": []
+      },
+      "Skiper34": {
+        "replaces": []
+      },
+      "Skiper37": {
+        "replaces": []
+      },
+      "Skiper39": {
+        "replaces": []
+      },
+      "Skiper4": {
+        "replaces": []
+      },
+      "Skiper40": {
+        "replaces": []
+      },
+      "Skiper41": {
+        "replaces": []
+      },
+      "Skiper47": {
+        "replaces": []
+      },
+      "Skiper48": {
+        "replaces": []
+      },
+      "Skiper49": {
+        "replaces": []
+      },
+      "Skiper50": {
+        "replaces": []
+      },
+      "Skiper51": {
+        "replaces": []
+      },
+      "Skiper52": {
+        "replaces": []
+      },
+      "Skiper53": {
+        "replaces": []
+      },
+      "Skiper54": {
+        "replaces": []
+      },
+      "Skiper58": {
+        "replaces": []
+      },
+      "Skiper61": {
+        "replaces": []
+      },
+      "Skiper62": {
+        "replaces": []
+      },
+      "Skiper63": {
+        "replaces": []
+      },
+      "Skiper64": {
+        "replaces": []
+      },
+      "Skiper65": {
+        "replaces": []
+      },
+      "Skiper66": {
+        "replaces": []
+      },
+      "Skiper67": {
+        "replaces": []
+      },
+      "Skiper87": {
+        "replaces": []
+      },
+      "Skiper89": {
+        "replaces": []
+      },
+      "Skiper99": {
+        "replaces": []
+      },
+      "SkiperAnimatedCard": {
+        "replaces": []
+      },
+      "SkiperGlassContainer": {
+        "replaces": []
+      },
+      "TwentyFirstGlowBorder": {
+        "replaces": []
+      },
+      "TwentyFirstGradientText": {
+        "replaces": []
+      },
+      "TwentyFirstInteractiveDock": {
+        "replaces": []
+      },
+      "TwentyFirstShimmerCard": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--accent",
+      "--accent-foreground",
+      "--background",
+      "--border",
+      "--card",
+      "--card-foreground",
+      "--chart-1",
+      "--chart-2",
+      "--chart-3",
+      "--chart-4",
+      "--chart-5",
+      "--destructive",
+      "--destructive-foreground",
+      "--font-heading",
+      "--font-sans",
+      "--foreground",
+      "--input",
+      "--muted",
+      "--muted-foreground",
+      "--popover",
+      "--popover-foreground",
+      "--primary",
+      "--primary-foreground",
+      "--radius",
+      "--radius-2xl",
+      "--radius-3xl",
+      "--radius-4xl",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-sm",
+      "--radius-xl",
+      "--ring",
+      "--secondary",
+      "--secondary-foreground",
+      "--sidebar",
+      "--sidebar-accent",
+      "--sidebar-accent-foreground",
+      "--sidebar-border",
+      "--sidebar-foreground",
+      "--sidebar-primary",
+      "--sidebar-primary-foreground",
+      "--sidebar-ring"
+    ],
+    "tokenKinds": {
+      "--background": "color",
+      "--foreground": "color",
+      "--card": "color",
+      "--card-foreground": "color",
+      "--popover": "color",
+      "--popover-foreground": "color",
+      "--primary": "color",
+      "--primary-foreground": "color",
+      "--secondary": "color",
+      "--secondary-foreground": "color",
+      "--muted": "color",
+      "--muted-foreground": "color",
+      "--accent": "color",
+      "--accent-foreground": "color",
+      "--destructive": "color",
+      "--destructive-foreground": "color",
+      "--border": "color",
+      "--input": "color",
+      "--ring": "color",
+      "--chart-1": "color",
+      "--chart-2": "color",
+      "--chart-3": "color",
+      "--chart-4": "color",
+      "--chart-5": "color",
+      "--sidebar": "color",
+      "--sidebar-foreground": "color",
+      "--sidebar-primary": "color",
+      "--sidebar-primary-foreground": "color",
+      "--sidebar-accent": "color",
+      "--sidebar-accent-foreground": "color",
+      "--sidebar-border": "color",
+      "--sidebar-ring": "color",
+      "--font-sans": "font",
+      "--font-heading": "font",
+      "--radius": "radius",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-xl": "radius",
+      "--radius-2xl": "radius",
+      "--radius-3xl": "radius",
+      "--radius-4xl": "radius"
+    },
+    "fontFamilies": [
+      "Geist Variable"
+    ]
+  }
+}

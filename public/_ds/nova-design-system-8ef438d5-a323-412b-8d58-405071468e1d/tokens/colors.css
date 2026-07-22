@@ -1,0 +1,72 @@
+/* Nova / MyDesignSystem — color tokens.
+   shadcn/ui "base-nova" neutral palette, values verbatim from the upstream repo (src/index.css).
+   Fully achromatic grayscale in oklch; the only hue is the destructive red. */
+:root {
+  --background: oklch(1 0 0); /* @kind color */
+  --foreground: oklch(0.145 0 0); /* @kind color */
+  --card: oklch(1 0 0); /* @kind color */
+  --card-foreground: oklch(0.145 0 0); /* @kind color */
+  --popover: oklch(1 0 0); /* @kind color */
+  --popover-foreground: oklch(0.145 0 0); /* @kind color */
+  --primary: oklch(0.205 0 0); /* @kind color */
+  --primary-foreground: oklch(0.985 0 0); /* @kind color */
+  --secondary: oklch(0.97 0 0); /* @kind color */
+  --secondary-foreground: oklch(0.205 0 0); /* @kind color */
+  --muted: oklch(0.97 0 0); /* @kind color */
+  --muted-foreground: oklch(0.556 0 0); /* @kind color */
+  --accent: oklch(0.97 0 0); /* @kind color */
+  --accent-foreground: oklch(0.205 0 0); /* @kind color */
+  --destructive: oklch(0.577 0.245 27.325); /* @kind color */
+  --destructive-foreground: oklch(0.985 0 0); /* @kind color */
+  --border: oklch(0.922 0 0); /* @kind color */
+  --input: oklch(0.922 0 0); /* @kind color */
+  --ring: oklch(0.708 0 0); /* @kind color */
+  --chart-1: oklch(0.87 0 0); /* @kind color */
+  --chart-2: oklch(0.556 0 0); /* @kind color */
+  --chart-3: oklch(0.439 0 0); /* @kind color */
+  --chart-4: oklch(0.371 0 0); /* @kind color */
+  --chart-5: oklch(0.269 0 0); /* @kind color */
+  --sidebar: oklch(0.985 0 0); /* @kind color */
+  --sidebar-foreground: oklch(0.145 0 0); /* @kind color */
+  --sidebar-primary: oklch(0.205 0 0); /* @kind color */
+  --sidebar-primary-foreground: oklch(0.985 0 0); /* @kind color */
+  --sidebar-accent: oklch(0.97 0 0); /* @kind color */
+  --sidebar-accent-foreground: oklch(0.205 0 0); /* @kind color */
+  --sidebar-border: oklch(0.922 0 0); /* @kind color */
+  --sidebar-ring: oklch(0.708 0 0); /* @kind color */
+}
+
+.dark {
+  --background: oklch(0.145 0 0); /* @kind color */
+  --foreground: oklch(0.985 0 0); /* @kind color */
+  --card: oklch(0.205 0 0); /* @kind color */
+  --card-foreground: oklch(0.985 0 0); /* @kind color */
+  --popover: oklch(0.205 0 0); /* @kind color */
+  --popover-foreground: oklch(0.985 0 0); /* @kind color */
+  --primary: oklch(0.922 0 0); /* @kind color */
+  --primary-foreground: oklch(0.205 0 0); /* @kind color */
+  --secondary: oklch(0.269 0 0); /* @kind color */
+  --secondary-foreground: oklch(0.985 0 0); /* @kind color */
+  --muted: oklch(0.269 0 0); /* @kind color */
+  --muted-foreground: oklch(0.708 0 0); /* @kind color */
+  --accent: oklch(0.269 0 0); /* @kind color */
+  --accent-foreground: oklch(0.985 0 0); /* @kind color */
+  --destructive: oklch(0.704 0.191 22.216); /* @kind color */
+  --destructive-foreground: oklch(0.985 0 0); /* @kind color */
+  --border: oklch(1 0 0 / 10%); /* @kind color */
+  --input: oklch(1 0 0 / 15%); /* @kind color */
+  --ring: oklch(0.556 0 0); /* @kind color */
+  --chart-1: oklch(0.87 0 0); /* @kind color */
+  --chart-2: oklch(0.556 0 0); /* @kind color */
+  --chart-3: oklch(0.439 0 0); /* @kind color */
+  --chart-4: oklch(0.371 0 0); /* @kind color */
+  --chart-5: oklch(0.269 0 0); /* @kind color */
+  --sidebar: oklch(0.205 0 0); /* @kind color */
+  --sidebar-foreground: oklch(0.985 0 0); /* @kind color */
+  --sidebar-primary: oklch(0.488 0.243 264.376); /* @kind color */
+  --sidebar-primary-foreground: oklch(0.985 0 0); /* @kind color */
+  --sidebar-accent: oklch(0.269 0 0); /* @kind color */
+  --sidebar-accent-foreground: oklch(0.985 0 0); /* @kind color */
+  --sidebar-border: oklch(1 0 0 / 10%); /* @kind color */
+  --sidebar-ring: oklch(0.556 0 0); /* @kind color */
+}

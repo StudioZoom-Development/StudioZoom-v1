@@ -1,0 +1,119 @@
+/* Studio Zoom theme — overrides Nova/shadcn tokens with the Studio Zoom palette */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+[data-theme] {
+  --font-inter: "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --text-xs: 0.694rem; --text-sm: 0.833rem; --text-base: 1rem; --text-lg: 1.2rem;
+  --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-3xl: 2.074rem; --text-4xl: 2.488rem; --text-5xl: 2.986rem;
+  font-family: var(--font-inter);
+}
+
+[data-theme="dark"] {
+  --color-background: #000000;
+  --color-surface: #181d19;
+  --color-surface-raised: #1e2420;
+  --color-surface-overlay: #242b25;
+  --color-foreground: #f3f2e7;
+  --color-foreground-muted: #9a9a8a;
+  --color-foreground-subtle: #5a5a50;
+  --color-border: #2a302b;
+  --color-border-strong: #3a4040;
+  --color-primary: #c6539f;
+  --color-primary-hover: #d966ad;
+  --color-primary-muted: #2a1220;
+  --color-secondary: #eca82f;
+  --color-secondary-muted: #2a1f08;
+  --color-accent: #5b73f0;
+  --color-accent-strong: #213bdb;
+  --color-accent-muted: #0a1040;
+  --color-success: #4caf50;
+  --color-success-muted: #0d2010;
+  --color-danger: #ef5350;
+  --color-danger-muted: #2a0a0a;
+  --color-warning: #eca82f;
+  --color-warning-muted: #2a1f08;
+  --color-purple: #a78bfa;
+  --color-purple-muted: #1e1233;
+  /* shadcn token remap so DS components pick up the theme */
+  --background: #000000; --foreground: #f3f2e7;
+  --card: #181d19; --card-foreground: #f3f2e7;
+  --popover: #242b25; --popover-foreground: #f3f2e7;
+  --primary: #c6539f; --primary-foreground: #ffffff;
+  --secondary: #1e2420; --secondary-foreground: #f3f2e7;
+  --muted: #1e2420; --muted-foreground: #9a9a8a;
+  --accent: #242b25; --accent-foreground: #f3f2e7;
+  --destructive: #ef5350; --destructive-foreground: #ffffff;
+  --border: #2a302b; --input: #3a4040; --ring: #213bdb;
+  --sidebar: #181d19; --sidebar-foreground: #f3f2e7;
+  --sidebar-primary: #c6539f; --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e2420; --sidebar-accent-foreground: #f3f2e7;
+  --sidebar-border: #2a302b; --sidebar-ring: #213bdb;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --color-background: #ffffff;
+  --color-surface: #efefeb;
+  --color-surface-raised: #e8e8e4;
+  --color-surface-overlay: #e0e0db;
+  --color-foreground: #151810;
+  --color-foreground-muted: #5a5a50;
+  --color-foreground-subtle: #9a9a8a;
+  --color-border: #d8d8d0;
+  --color-border-strong: #b8b8b0;
+  --color-primary: #c6539f;
+  --color-primary-hover: #b04590;
+  --color-primary-muted: #f5e0ef;
+  --color-secondary: #d18f1a;
+  --color-secondary-muted: #fdf3de;
+  --color-accent: #213bdb;
+  --color-accent-strong: #213bdb;
+  --color-accent-muted: #e0e4f8;
+  --color-success: #2e7d32;
+  --color-success-muted: #e8f5e9;
+  --color-danger: #c62828;
+  --color-danger-muted: #ffebee;
+  --color-warning: #d18f1a;
+  --color-warning-muted: #fdf3de;
+  --color-purple: #7c5cd6;
+  --color-purple-muted: #ede8fb;
+  --background: #ffffff; --foreground: #151810;
+  --card: #efefeb; --card-foreground: #151810;
+  --popover: #e0e0db; --popover-foreground: #151810;
+  --primary: #c6539f; --primary-foreground: #ffffff;
+  --secondary: #e8e8e4; --secondary-foreground: #151810;
+  --muted: #e8e8e4; --muted-foreground: #5a5a50;
+  --accent: #e8e8e4; --accent-foreground: #151810;
+  --destructive: #c62828; --destructive-foreground: #ffffff;
+  --border: #d8d8d0; --input: #b8b8b0; --ring: #213bdb;
+  --sidebar: #efefeb; --sidebar-foreground: #151810;
+  --sidebar-primary: #c6539f; --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8e8e4; --sidebar-accent-foreground: #151810;
+  --sidebar-border: #d8d8d0; --sidebar-ring: #213bdb;
+  color-scheme: light;
+}
+
+body { margin: 0; background: #000; }
+[data-theme] a { color: var(--color-accent); text-decoration: none; }
+[data-theme] a:hover { color: var(--color-primary-hover); }
+[data-theme] ::placeholder { color: var(--color-foreground-subtle); }
+[data-theme] *::-webkit-scrollbar { width: 7px; height: 7px; }
+[data-theme] *::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+[data-theme] *::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); background-clip: padding-box; }
+[data-theme] *::-webkit-scrollbar-track { background: transparent; }
+.ti { line-height: 1; }
+/* Aceternity timeline embed: strip its hardcoded intro + page background, tighten layout */
+.sz-timeline sc-host-x { display: block; }
+.sz-timeline .font-sans.w-full { background: transparent !important; padding-left: 0 !important; padding-right: 0 !important; min-width: 560px; }
+.sz-timeline { overflow-x: auto; }
+.sz-timeline .max-w-7xl { padding: 0 0 24px 0 !important; }
+.sz-timeline .max-w-7xl > h2, .sz-timeline .max-w-7xl > p { display: none !important; }
+.sz-timeline .justify-start { padding-top: 24px !important; gap: 16px !important; min-width: 0; }
+/* complete the vertical beam (its height is scroll-animated against window scroll, which never fires inside our pane) */
+.sz-timeline div[class*="w-[2px]"] > div { height: 100% !important; opacity: 1 !important; }
+.sz-timeline .justify-start > div:first-child { max-width: 140px !important; flex-shrink: 0; }
+.sz-timeline .justify-start h3 { font-size: 1.2rem !important; line-height: 1.2 !important; }
+.sz-timeline .justify-start > div:last-child { flex: 1; min-width: 0; padding-right: 8px !important; padding-left: 16px !important; }
+@keyframes szPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
+@keyframes szTick { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
