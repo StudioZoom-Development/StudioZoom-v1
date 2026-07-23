@@ -1,7 +1,7 @@
 import {
-  collection, query, where, orderBy,
+  collection, query, orderBy,
   onSnapshot, getDoc, doc, writeBatch,
-  serverTimestamp, QueryConstraint, Timestamp
+  serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { Client } from '@/types'
@@ -17,32 +17,38 @@ export function subscribeToClients(
   filters: ClientFilters,
   callback: (clients: Client[]) => void
 ): () => void {
-  const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')]
-
-  if (filters.eventType)     constraints.push(where('eventType',     '==', filters.eventType))
-  if (filters.paymentStatus) constraints.push(where('paymentStatus', '==', filters.paymentStatus))
-  if (filters.status)        constraints.push(where('status',        '==', filters.status))
-
-  const q = query(collection(db, 'clients'), ...constraints)
+  const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'))
 
   return onSnapshot(q, snap => {
-    callback(
-      snap.docs
-        .map(d => {
-          const data = d.data()
-          return {
-            ...data,
-            clientId:  d.id,
-            eventDate: data.eventDate instanceof Timestamp
-              ? data.eventDate.toDate()
-              : data.eventDate ? new Date(data.eventDate) : new Date(),
-            createdAt: data.createdAt instanceof Timestamp
-              ? data.createdAt.toDate()
-              : data.createdAt ? new Date(data.createdAt) : new Date(),
-          } as Client
-        })
-        .filter(c => !c.isDeleted)  // exclude soft-deleted
-    )
+    let clients = snap.docs
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          clientId:  d.id,
+          eventDate: data.eventDate instanceof Timestamp
+            ? data.eventDate.toDate()
+            : data.eventDate ? new Date(data.eventDate) : new Date(),
+          createdAt: data.createdAt instanceof Timestamp
+            ? data.createdAt.toDate()
+            : data.createdAt ? new Date(data.createdAt) : new Date(),
+        } as Client
+      })
+      .filter(c => !c.isDeleted)  // exclude soft-deleted
+
+    if (filters.eventType) {
+      clients = clients.filter(c => c.eventType === filters.eventType)
+    }
+    if (filters.paymentStatus) {
+      clients = clients.filter(c => c.paymentStatus === filters.paymentStatus)
+    }
+    if (filters.status) {
+      clients = clients.filter(c => c.status === filters.status)
+    }
+
+    callback(clients)
+  }, error => {
+    console.error('Error in subscribeToClients:', error)
   })
 }
 
