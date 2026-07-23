@@ -241,6 +241,11 @@ export default function ClientsPage() {
   )
 }
 
+function getInitials(name: string) {
+  if (!name) return ''
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
 // ── Client row (exact structure from design file) ─────────────────────────
 function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
   client:   Client
@@ -251,21 +256,26 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const isPaid = client.paymentStatus === 'paid' || client.balanceDue === 0
-  const isUnpaid = client.paymentStatus === 'unpaid'
-  const isPartial = client.paymentStatus === 'partial'
+  const isPastEvent = client.eventDate instanceof Date && client.eventDate < new Date()
+  const isPaid      = client.paymentStatus === 'paid' || client.balanceDue === 0
+  const isPartial   = client.paymentStatus === 'partial'
+  const isUnpaid    = client.paymentStatus === 'unpaid'
 
-  const balColor = isUnpaid
-    ? 'var(--color-danger)'
-    : isPartial
-    ? 'var(--color-secondary)'
-    : isPaid
-    ? 'var(--color-success)'
-    : 'var(--color-foreground)'
+  let balColor = 'var(--color-foreground)'
+  if (isPaid) {
+    balColor = 'var(--color-foreground-muted)'
+  } else if (isPartial) {
+    balColor = 'var(--color-foreground)'
+  } else if (isUnpaid && isPastEvent) {
+    balColor = 'var(--color-danger)'
+  } else {
+    balColor = 'var(--color-foreground)'
+  }
 
-  const balLabel = isPaid
-    ? '—'
-    : `₹${client.balanceDue.toLocaleString('en-IN')}`
+  const balLabel = isPaid ? '—' : `₹${client.balanceDue.toLocaleString('en-IN')}`
+
+  // Staff avatars
+  const staffList: string[] = (client.teamInitials || client.assignedStaff || client.staffUids || [])
 
   // TD shared style
   const td: React.CSSProperties = {
@@ -279,14 +289,18 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
     >
-      {/* # */}
-      <td style={{ ...td, color: 'var(--color-foreground-subtle)', width: '48px' }}>{rowNo}</td>
+      {/* # zero-padded */}
+      <td style={{ ...td, color: 'var(--color-foreground-subtle)', width: '48px' }}>
+        {String(rowNo).padStart(2, '0')}
+      </td>
 
-      {/* Client name */}
-      <td style={{ ...td, fontWeight: 600 }}>
-        <div>{client.name}</div>
+      {/* Client column: primary eventName, secondary name */}
+      <td style={{ ...td }}>
+        <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+          {client.eventName || client.name}
+        </div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-          {client.eventName}
+          {client.name}
         </div>
       </td>
 
@@ -310,18 +324,32 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
         {balLabel}
       </td>
 
-      {/* Assigned — avatar stack (exact from design) */}
+      {/* Assigned — avatar stack (empty if no staff assigned) */}
       <td style={td}>
-        <div style={{ display: 'flex' }}>
-          <div style={{
-            width: '26px', height: '26px', borderRadius: '50%',
-            background: 'var(--color-surface-overlay)',
-            border: '2px solid var(--color-surface)',
-            color: 'var(--color-foreground-muted)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '10px', fontWeight: 700,
-          }}>—</div>
-        </div>
+        {staffList.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {staffList.slice(0, 3).map((staff, i) => {
+              const initials = staff.length <= 2 ? staff.toUpperCase() : getInitials(staff)
+              return (
+                <div
+                  key={i}
+                  style={{
+                    width: '26px', height: '26px', borderRadius: '50%',
+                    background: 'var(--color-surface-overlay)',
+                    border: '2px solid var(--color-surface)',
+                    color: 'var(--color-foreground-muted)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '10px', fontWeight: 700,
+                    marginLeft: i === 0 ? '0' : '-8px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {initials}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </td>
 
       {/* Actions — ti-dots-vertical + dropdown */}

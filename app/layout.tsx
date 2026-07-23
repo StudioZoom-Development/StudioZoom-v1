@@ -14,12 +14,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <link rel="stylesheet" href="/_ds_bundle.css" />
         <script dangerouslySetInnerHTML={{ __html: 'window.module = { exports: {} };' }} />
       </head>
-      <body style={{ margin: 0 }}>
+      <body data-theme="dark" style={{ margin: 0 }}>
         <Providers>
           {children}
         </Providers>
