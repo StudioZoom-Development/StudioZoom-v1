@@ -1,100 +1,60 @@
-import type { ProjectStage, ProjectStatus, PaymentStatus, WorkItemStatus, CheckoutStatus, AttendanceStatus } from '@/types'
-
-type BadgeVariant = 'primary' | 'success' | 'warning' | 'danger' | 'accent' | 'purple' | 'muted'
-
 interface BadgeProps {
-  children: React.ReactNode
-  variant?: BadgeVariant
-  size?: 'sm' | 'md'
+  variant: string
+  label?:  string
 }
 
-const VARIANT_STYLES: Record<BadgeVariant, React.CSSProperties> = {
-  primary: { background: 'var(--color-primary-muted)', color: 'var(--color-primary)' },
-  success: { background: 'var(--color-success-muted)', color: 'var(--color-success)' },
-  warning: { background: 'var(--color-warning-muted)', color: 'var(--color-warning)' },
-  danger:  { background: 'var(--color-danger-muted)',  color: 'var(--color-danger)' },
-  accent:  { background: 'var(--color-accent-muted)',  color: 'var(--color-accent)' },
-  purple:  { background: 'var(--color-purple-muted)',  color: 'var(--color-purple)' },
-  muted:   { background: 'var(--color-surface-raised)',color: 'var(--color-foreground-muted)' },
+// Badge colours matching design file's badgeBg / badgeFg pattern
+const STYLES: Record<string, { bg: string; fg: string }> = {
+  // Project stages
+  booked:          { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
+  planning:        { bg: 'var(--color-primary-muted)',   fg: 'var(--color-primary)' },
+  preProduction:   { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  eventDay:        { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  postProduction:  { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
+  delivered:       { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  // Payment
+  paid:            { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  partial:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  unpaid:          { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  overdue:         { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  // Client status
+  inquiry:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  // Equipment
+  available:       { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  out:             { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  service:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  // Work board
+  free:            { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  occupied:        { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  overloaded:      { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
 }
 
-export function Badge({ children, variant = 'muted', size = 'md' }: BadgeProps) {
+const LABELS: Record<string, string> = {
+  preProduction:  'Pre-Prod',
+  postProduction: 'Post-Prod',
+  eventDay:       'Event Day',
+  inquiry:        'Inquiry',
+}
+
+export function Badge({ variant, label }: BadgeProps) {
+  const style = STYLES[variant] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
+  const text  = label ?? LABELS[variant] ?? variant
+
+  // Exact inline style from design file:
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: size === 'sm' ? '1px 6px' : '2px 8px',
-      borderRadius: '10px',
-      fontSize: size === 'sm' ? 'var(--text-xs)' : 'var(--text-xs)',
-      fontWeight: 600,
-      letterSpacing: '0.02em',
-      whiteSpace: 'nowrap',
-      ...VARIANT_STYLES[variant],
+      fontSize:       'var(--text-xs)',
+      fontWeight:     600,
+      height:         '20px',
+      display:        'inline-flex',
+      alignItems:     'center',
+      padding:        '0 8px',
+      borderRadius:   '10px',
+      background:     style.bg,
+      color:          style.fg,
+      whiteSpace:     'nowrap',
     }}>
-      {children}
+      {text}
     </span>
   )
-}
-
-// ── Domain-specific badge helpers ────────────────────────────────────────
-
-const STAGE_CONFIG: Record<ProjectStage, { label: string; variant: BadgeVariant }> = {
-  booked:         { label: 'Booked',          variant: 'accent'   },
-  planning:       { label: 'Planning',         variant: 'purple'   },
-  preProduction:  { label: 'Pre-Production',   variant: 'warning'  },
-  eventDay:       { label: 'Event Day',        variant: 'primary'  },
-  postProduction: { label: 'Post-Production',  variant: 'warning'  },
-  delivered:      { label: 'Delivered',        variant: 'success'  },
-}
-
-const PAYMENT_CONFIG: Record<PaymentStatus, { label: string; variant: BadgeVariant }> = {
-  unpaid:  { label: 'Unpaid',   variant: 'danger'  },
-  partial: { label: 'Partial',  variant: 'warning' },
-  paid:    { label: 'Paid',     variant: 'success' },
-}
-
-const WORK_STATUS_CONFIG: Record<WorkItemStatus, { label: string; variant: BadgeVariant }> = {
-  todo:       { label: 'To Do',      variant: 'muted'   },
-  inProgress: { label: 'In Progress',variant: 'accent'  },
-  review:     { label: 'Review',     variant: 'warning' },
-  done:       { label: 'Done',       variant: 'success' },
-}
-
-const CHECKOUT_CONFIG: Record<CheckoutStatus, { label: string; variant: BadgeVariant }> = {
-  out:      { label: 'Out',      variant: 'primary' },
-  returned: { label: 'Returned', variant: 'success' },
-  overdue:  { label: 'Overdue',  variant: 'danger'  },
-}
-
-const ATTENDANCE_CONFIG: Record<AttendanceStatus, { label: string; variant: BadgeVariant }> = {
-  P:          { label: 'Present',    variant: 'success' },
-  Late:       { label: 'Late',       variant: 'warning' },
-  HalfDay:    { label: 'Half Day',   variant: 'accent'  },
-  AB:         { label: 'Absent',     variant: 'danger'  },
-  WO:         { label: 'Week Off',   variant: 'muted'   },
-  Permission: { label: 'Permission', variant: 'purple'  },
-}
-
-export function StageBadge({ stage }: { stage: ProjectStage }) {
-  const { label, variant } = STAGE_CONFIG[stage]
-  return <Badge variant={variant}>{label}</Badge>
-}
-
-export function PaymentBadge({ status }: { status: PaymentStatus }) {
-  const { label, variant } = PAYMENT_CONFIG[status]
-  return <Badge variant={variant}>{label}</Badge>
-}
-
-export function WorkStatusBadge({ status }: { status: WorkItemStatus }) {
-  const { label, variant } = WORK_STATUS_CONFIG[status]
-  return <Badge variant={variant}>{label}</Badge>
-}
-
-export function CheckoutBadge({ status }: { status: CheckoutStatus }) {
-  const { label, variant } = CHECKOUT_CONFIG[status]
-  return <Badge variant={variant}>{label}</Badge>
-}
-
-export function AttendanceBadge({ status }: { status: AttendanceStatus }) {
-  const { label, variant } = ATTENDANCE_CONFIG[status]
-  return <Badge variant={variant} size="sm">{label}</Badge>
 }
