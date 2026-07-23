@@ -251,12 +251,20 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const isOverdue  = client.balanceDue > 0 &&
-    client.eventDate instanceof Date && client.eventDate < new Date()
-  const balColor   = isOverdue ? 'var(--color-danger)'
-    : client.balanceDue === 0 ? 'var(--color-success)'
+  const isPaid = client.paymentStatus === 'paid' || client.balanceDue === 0
+  const isUnpaid = client.paymentStatus === 'unpaid'
+  const isPartial = client.paymentStatus === 'partial'
+
+  const balColor = isUnpaid
+    ? 'var(--color-danger)'
+    : isPartial
+    ? 'var(--color-secondary)'
+    : isPaid
+    ? 'var(--color-success)'
     : 'var(--color-foreground)'
-  const balLabel   = client.balanceDue === 0 ? '—'
+
+  const balLabel = isPaid
+    ? '—'
     : `₹${client.balanceDue.toLocaleString('en-IN')}`
 
   // TD shared style

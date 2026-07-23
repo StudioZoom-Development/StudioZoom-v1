@@ -37,10 +37,10 @@ const LABELS: Record<string, string> = {
 }
 
 export function Badge({ variant, label }: BadgeProps) {
-  const style = STYLES[variant] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
-  const text  = label ?? LABELS[variant] ?? variant
+  const key   = (variant ?? '').trim()
+  const style = STYLES[key] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
+  const text  = label ?? LABELS[key] ?? (key ? key.charAt(0).toUpperCase() + key.slice(1) : '')
 
-  // Exact inline style from design file:
   return (
     <span style={{
       fontSize:       'var(--text-xs)',
