@@ -111,38 +111,39 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{
-        flex: 1, overflowY: 'auto', overflowX: 'hidden',
-        padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px',
-      }}>
-        {/* Dashboard — all roles */}
-        <NavLink
-          href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
-          active={isActive('/dashboard')} onClick={() => router.push('/dashboard')}
-        />
+      <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <div style={{
+          padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px',
+        }}>
+          {/* Dashboard — all roles */}
+          <NavLink
+            href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
+            active={isActive('/dashboard')} onClick={() => router.push('/dashboard')}
+          />
 
-        {NAV_GROUPS.map(group => {
-          const visible = group.items.filter(item => item.roles.includes(role))
-          if (!visible.length) return null
-          return (
-            <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <div style={{
-                fontSize: 'var(--text-xs)', fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-                color: 'var(--color-foreground-subtle)',
-                margin: '16px 0 4px', padding: '0 10px',
-              }}>{group.label}</div>
-              {visible.map(item => (
-                <NavLink
-                  key={item.id}
-                  href={item.href} icon={item.icon} label={item.label}
-                  active={isActive(item.href)}
-                  onClick={() => router.push(item.href)}
-                />
-              ))}
-            </div>
-          )
-        })}
+          {NAV_GROUPS.map(group => {
+            const visible = group.items.filter(item => item.roles.includes(role))
+            if (!visible.length) return null
+            return (
+              <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{
+                  fontSize: 'var(--text-xs)', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                  margin: '16px 0 4px', padding: '0 10px',
+                }}>{group.label}</div>
+                {visible.map(item => (
+                  <NavLink
+                    key={item.id}
+                    href={item.href} icon={item.icon} label={item.label}
+                    active={isActive(item.href)}
+                    onClick={() => router.push(item.href)}
+                  />
+                ))}
+              </div>
+            )
+          })}
+        </div>
       </nav>
 
       {/* Bottom: Settings + User card */}
