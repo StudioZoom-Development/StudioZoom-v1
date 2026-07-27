@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from '@/lib/firebase/auth'
 import { useAuthStore } from '@/store/authStore'
@@ -58,8 +59,22 @@ export function Sidebar() {
   const { theme, toggleTheme } = useUIStore()
   const role = appUser?.role ?? 'staff'
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + '/')
+  const ALL_NAV_HREFS = [
+    '/dashboard',
+    ...NAV_GROUPS.flatMap(g => g.items.map(i => i.href)),
+    ...(role === 'admin' ? ['/settings'] : []),
+  ]
+
+  const isActive = (href: string) => {
+    if (pathname === href) return true
+    if (pathname.startsWith(href + '/')) {
+      const hasMoreSpecificMatch = ALL_NAV_HREFS.some(
+        other => other !== href && other.startsWith(href) && (pathname === other || pathname.startsWith(other + '/'))
+      )
+      return !hasMoreSpecificMatch
+    }
+    return false
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -203,20 +218,27 @@ export function Sidebar() {
 function NavLink({ href: _href, icon, label, active, onClick }: {
   href: string; icon: string; label: string; active: boolean; onClick: () => void
 }) {
+  const [hovered, setHovered] = useState(false)
   return (
     <div
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         height: '40px', padding: '0 10px', borderRadius: '8px', cursor: 'pointer',
-        fontSize: 'var(--text-sm)', fontWeight: 500,
-        background: active ? 'var(--color-primary-muted)' : 'transparent',
+        fontSize: 'var(--text-sm)', fontWeight: 500, boxSizing: 'border-box',
+        background: active
+          ? 'var(--color-primary-muted)'
+          : hovered
+          ? 'var(--color-surface-raised)'
+          : 'transparent',
         color: active ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
         transition: 'background 0.15s, color 0.15s',
       }}
     >
-      <i className={`ti ${icon}`} style={{ fontSize: '20px' }} />
-      <span>{label}</span>
+      <i className={`ti ${icon}`} style={{ fontSize: '20px', flexShrink: 0 }} />
+      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </div>
   )
 }
