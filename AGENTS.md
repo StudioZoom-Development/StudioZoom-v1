@@ -116,3 +116,40 @@ serviceAccountKey.json
 - Components must be placed in `/components/shared/` (reusable) or inside the route folder (page-specific).
 - Use existing hooks (`useAuth`, `useRealtimeCollection`, `useRole`) — do not re-implement Firebase logic inline.
 - Follow the existing role gate pattern using `/lib/utils/gates.ts`.
+
+---
+
+## 7. Design System Components — Per Screen Reference
+
+> **Rule:** Only the components listed per screen may be used for that screen.
+> All tables, badges, avatars, kanban cards, calendars, and attendance grids use token-styled custom markup — NOT prebuilt component library equivalents.
+
+| Screen / File | Allowed DS Components |
+|---|---|
+| **Studio Zoom.dc.html** (shell + login) | `BackgroundBeams` (login bg), `ShadcnInput` (email/password), `ShadcnButton` (Sign in) |
+| **ScreenDashboards.dc.html** | `ShadcnButton` (New booking); hand-built buttons for staff check-in |
+| **ScreenClients.dc.html** | `ShadcnButton` (New client, Record payment, Save/Create booking), `ShadcnInput` (booking form fields) |
+| **ScreenEvents.dc.html** | `AceternityTimeline` (event lifecycle), `ShadcnButton` (Project detail / Edit event) |
+| **ScreenHRMS.dc.html** (attendance, time clock) | `ShadcnButton` (Export CSV), `ShadcnInput` (date field) |
+| **ScreenERP.dc.html** (equipment, quotations, invoices, cashflow) | `ShadcnButton` (checkout, new invoice, export, convert), `ShadcnInput` (quotation builder), `ShadcnSwitch` (GST toggle) |
+| **ScreenCRM2.dc.html** (project detail, work items, leads) | `ShadcnButton` (Client record, Save/Cancel, New lead, Convert), `ShadcnInput` (work-item and lead form fields) |
+| **ScreenHRMS2.dc.html** (staff, salary, payslips, freelancers) | `ShadcnButton` (Add staff, Save, Generate payslip, Bulk generate, Add/Assign freelancer), `ShadcnInput` (profile, salary, advance, freelancer, date fields), `ShadcnSwitch` (freelancer active toggle) |
+| **ScreenERP2.dc.html** (equipment detail, checkout, held, quotations, expenses, accounts) | `ShadcnButton` (Save, checkout/check-in, New quotation, Convert, Add expense, Export), `ShadcnInput` (equipment, checkout, expense, convert-modal fields) |
+| **ScreenSettings.dc.html** | `ShadcnButton` (Upload/Remove, Save changes, Add package, Create user), `ShadcnInput` (branding, GST, numbering fields), `ShadcnSwitch` (Charge GST toggle) |
+
+### Import paths
+```typescript
+import { Button } from '@/components/ui/button'           // ShadcnButton
+import { Input }  from '@/components/ui/input'            // ShadcnInput
+import { Switch } from '@/components/ui/switch'           // ShadcnSwitch
+import { BackgroundBeams } from '@/components/ui/background-beams'  // login only
+import { Timeline }        from '@/components/ui/timeline'           // events canvas only
+```
+
+### What is NEVER built from component libraries
+- Tables → plain `<table>` with inline CSS tokens
+- Badges / pills → `<Badge variant="..." />` from `/components/shared/Badge.tsx`
+- Avatars / initials → hand-built `<div>` circles with `var(--color-primary-muted)`
+- Kanban cards → plain `<div>` with `var(--color-surface)` and `var(--color-border)`
+- Calendar grid → hand-built with `var(--color-surface-raised)` cells
+- Attendance grid → hand-built table with token colours

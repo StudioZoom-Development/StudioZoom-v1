@@ -131,7 +131,7 @@ export default function LoginPage() {
               width: '56px',
               height: '56px',
               borderRadius: '16px',
-              background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
+              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

@@ -26,8 +26,18 @@ export function MobileNav() {
 
   const visible = MOBILE_NAV.filter(item => item.roles.includes(role))
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + '/')
+  const ALL_MOBILE_HREFS = MOBILE_NAV.map(i => i.href)
+
+  const isActive = (href: string) => {
+    if (pathname === href) return true
+    if (pathname.startsWith(href + '/')) {
+      const hasMoreSpecificMatch = ALL_MOBILE_HREFS.some(
+        other => other !== href && other.startsWith(href) && (pathname === other || pathname.startsWith(other + '/'))
+      )
+      return !hasMoreSpecificMatch
+    }
+    return false
+  }
 
   return (
     <nav style={{

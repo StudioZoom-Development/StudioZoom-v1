@@ -34,6 +34,7 @@ export function useRealtimeCollection<T extends DocumentData>(
   const [error,   setError]   = useState<Error | null>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     const q = query(collection(db, collectionPath), ...constraints)
 

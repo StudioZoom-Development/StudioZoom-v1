@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from '@/lib/firebase/auth'
 import { useAuthStore } from '@/store/authStore'
@@ -58,8 +59,22 @@ export function Sidebar() {
   const { theme, toggleTheme } = useUIStore()
   const role = appUser?.role ?? 'staff'
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + '/')
+  const ALL_NAV_HREFS = [
+    '/dashboard',
+    ...NAV_GROUPS.flatMap(g => g.items.map(i => i.href)),
+    ...(role === 'admin' ? ['/settings'] : []),
+  ]
+
+  const isActive = (href: string) => {
+    if (pathname === href) return true
+    if (pathname.startsWith(href + '/')) {
+      const hasMoreSpecificMatch = ALL_NAV_HREFS.some(
+        other => other !== href && other.startsWith(href) && (pathname === other || pathname.startsWith(other + '/'))
+      )
+      return !hasMoreSpecificMatch
+    }
+    return false
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -82,7 +97,7 @@ export function Sidebar() {
       }}>
         <div style={{
           width: '28px', height: '28px', borderRadius: '8px',
-          background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
+          background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
@@ -96,38 +111,39 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{
-        flex: 1, overflowY: 'auto', overflowX: 'hidden',
-        padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px',
-      }}>
-        {/* Dashboard — all roles */}
-        <NavLink
-          href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
-          active={isActive('/dashboard')} onClick={() => router.push('/dashboard')}
-        />
+      <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <div style={{
+          padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px',
+        }}>
+          {/* Dashboard — all roles */}
+          <NavLink
+            href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
+            active={isActive('/dashboard')} onClick={() => router.push('/dashboard')}
+          />
 
-        {NAV_GROUPS.map(group => {
-          const visible = group.items.filter(item => item.roles.includes(role))
-          if (!visible.length) return null
-          return (
-            <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <div style={{
-                fontSize: 'var(--text-xs)', fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-                color: 'var(--color-foreground-subtle)',
-                margin: '16px 0 4px', padding: '0 10px',
-              }}>{group.label}</div>
-              {visible.map(item => (
-                <NavLink
-                  key={item.id}
-                  href={item.href} icon={item.icon} label={item.label}
-                  active={isActive(item.href)}
-                  onClick={() => router.push(item.href)}
-                />
-              ))}
-            </div>
-          )
-        })}
+          {NAV_GROUPS.map(group => {
+            const visible = group.items.filter(item => item.roles.includes(role))
+            if (!visible.length) return null
+            return (
+              <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{
+                  fontSize: 'var(--text-xs)', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                  margin: '16px 0 4px', padding: '0 10px',
+                }}>{group.label}</div>
+                {visible.map(item => (
+                  <NavLink
+                    key={item.id}
+                    href={item.href} icon={item.icon} label={item.label}
+                    active={isActive(item.href)}
+                    onClick={() => router.push(item.href)}
+                  />
+                ))}
+              </div>
+            )
+          })}
+        </div>
       </nav>
 
       {/* Bottom: Settings + User card */}
@@ -200,23 +216,30 @@ export function Sidebar() {
 }
 
 // ── Reusable nav item ─────────────────────────────────────────────────────
-function NavLink({ href: _href, icon, label, active, onClick }: {
+function NavLink({ icon, label, active, onClick }: {
   href: string; icon: string; label: string; active: boolean; onClick: () => void
 }) {
+  const [hovered, setHovered] = useState(false)
   return (
     <div
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         height: '40px', padding: '0 10px', borderRadius: '8px', cursor: 'pointer',
-        fontSize: 'var(--text-sm)', fontWeight: 500,
-        background: active ? 'var(--color-primary-muted)' : 'transparent',
+        fontSize: 'var(--text-sm)', fontWeight: 500, boxSizing: 'border-box',
+        background: active
+          ? 'var(--color-primary-muted)'
+          : hovered
+          ? 'var(--color-surface-raised)'
+          : 'transparent',
         color: active ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
         transition: 'background 0.15s, color 0.15s',
       }}
     >
-      <i className={`ti ${icon}`} style={{ fontSize: '20px' }} />
-      <span>{label}</span>
+      <i className={`ti ${icon}`} style={{ fontSize: '20px', flexShrink: 0 }} />
+      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </div>
   )
 }

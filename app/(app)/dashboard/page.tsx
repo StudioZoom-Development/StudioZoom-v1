@@ -13,7 +13,7 @@ export default function DashboardPage() {
         gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
         gap: '16px', marginBottom: '24px',
       }}>
-        {['Events This Month', 'Active Projects', 'Staff On Duty', 'Revenue MTD'].map((label, i) => (
+        {['Events This Month', 'Active Projects', 'Staff On Duty', 'Revenue MTD'].map((label) => (
           <div key={label} style={{
             background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
             borderRadius: '12px', padding: '20px',

@@ -151,15 +151,15 @@ function CanvasFallbackBeams() {
 
 // ─── CORE WRAPPER ────────────────────────────────────────────────────────────
 export function BackgroundBeams() {
-  const [DesignSystemComponent, setDesignSystemComponent] = useState<any>(null)
+  const [DesignSystemComponent, setDesignSystemComponent] = useState<React.ElementType | null>(null)
 
   useEffect(() => {
-    let intervalId: any
+    let intervalId: ReturnType<typeof setInterval> | null = null
 
     const checkBundle = () => {
-      const ds = (window as any).MyDesignSystem
+      const ds = (window as unknown as { MyDesignSystem?: { AceternityBackgroundBeams?: React.ElementType } }).MyDesignSystem
       if (ds && ds.AceternityBackgroundBeams) {
-        setDesignSystemComponent(() => ds.AceternityBackgroundBeams)
+        setDesignSystemComponent(ds.AceternityBackgroundBeams)
         if (intervalId) clearInterval(intervalId)
       }
     }

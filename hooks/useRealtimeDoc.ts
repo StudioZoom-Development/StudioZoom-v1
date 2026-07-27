@@ -23,6 +23,7 @@ export function useRealtimeDoc<T extends DocumentData>(
 
   useEffect(() => {
     if (!docId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setData(null)
       setLoading(false)
       return
