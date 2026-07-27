@@ -216,7 +216,7 @@ export function Sidebar() {
 }
 
 // ── Reusable nav item ─────────────────────────────────────────────────────
-function NavLink({ href: _href, icon, label, active, onClick }: {
+function NavLink({ icon, label, active, onClick }: {
   href: string; icon: string; label: string; active: boolean; onClick: () => void
 }) {
   const [hovered, setHovered] = useState(false)

@@ -48,6 +48,7 @@ export default function ClientsPage() {
   const PAGE_SIZE = 9
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     const unsub = subscribeToClients(
       { eventType: filterType || undefined, paymentStatus: filterPmt || undefined },

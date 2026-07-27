@@ -6,8 +6,8 @@ import { useState } from 'react'
 import { useAuthListener } from '@/hooks/useAuth'
 
 if (typeof window !== 'undefined') {
-  (window as any).React = React;
-  (window as any).ReactDOM = ReactDOM;
+  (window as unknown as { React: typeof React; ReactDOM: typeof ReactDOM }).React = React;
+  (window as unknown as { React: typeof React; ReactDOM: typeof ReactDOM }).ReactDOM = ReactDOM;
 }
 
 function AuthListenerMount() {
