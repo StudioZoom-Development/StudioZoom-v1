@@ -82,7 +82,7 @@ export function Sidebar() {
       }}>
         <div style={{
           width: '28px', height: '28px', borderRadius: '8px',
-          background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
+          background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>

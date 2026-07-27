@@ -27,6 +27,11 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   free:            { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
   occupied:        { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   overloaded:      { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  // Work items
+  todo:            { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  inProgress:      { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
+  review:          { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  done:            { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
 }
 
 const LABELS: Record<string, string> = {
@@ -34,6 +39,10 @@ const LABELS: Record<string, string> = {
   postProduction: 'Post-Prod',
   eventDay:       'Event Day',
   inquiry:        'Inquiry',
+  inProgress:     'In Progress',
+  todo:           'To Do',
+  review:         'In Review',
+  done:           'Done',
 }
 
 export function Badge({ variant, label }: BadgeProps) {

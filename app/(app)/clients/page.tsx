@@ -26,7 +26,7 @@ const SELECT_STYLE: React.CSSProperties = {
   borderRadius: '8px',
   padding:      '0 10px',
   fontSize:     'var(--text-sm)',
-  color:        'var(--color-foreground-muted)',
+  color:        'var(--color-foreground)',
   outline:      'none',
   cursor:       'pointer',
 }
