@@ -49,6 +49,18 @@
       "fields": [{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"eventDate","order":"ASCENDING"}]
     },
     {
+      "collectionGroup": "clients",
+      "fields": [{"fieldPath":"paymentStatus","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]
+    },
+    {
+      "collectionGroup": "clients",
+      "fields": [{"fieldPath":"eventType","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]
+    },
+    {
+      "collectionGroup": "clients",
+      "fields": [{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]
+    },
+    {
       "collectionGroup": "leads",
       "fields": [{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]
     }

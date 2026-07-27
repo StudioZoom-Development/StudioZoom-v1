@@ -36,6 +36,9 @@ export interface Client {
   status:         ClientStatus
   notes?:         string
   isDeleted?:     boolean
+  staffUids?:     string[]
+  assignedStaff?: string[]
+  teamInitials?:  string[]
   createdBy:      string
   createdAt:      Date
   updatedAt:      Date

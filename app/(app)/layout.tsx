@@ -12,6 +12,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { theme }            = useUIStore()
   const router               = useRouter()
 
+  // Sync theme attribute to document element and body for global CSS variables
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    document.body.setAttribute('data-theme', theme)
+  }, [theme])
+
   // Redirect unauthenticated users
   useEffect(() => {
     if (!loading && !appUser) router.replace('/login')
