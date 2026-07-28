@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from '@/lib/firebase/auth'
 import { useAuthStore } from '@/store/authStore'
@@ -118,7 +119,7 @@ export function Sidebar() {
           {/* Dashboard — all roles */}
           <NavLink
             href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
-            active={isActive('/dashboard')} onClick={() => router.push('/dashboard')}
+            active={isActive('/dashboard')}
           />
 
           {NAV_GROUPS.map(group => {
@@ -137,7 +138,6 @@ export function Sidebar() {
                     key={item.id}
                     href={item.href} icon={item.icon} label={item.label}
                     active={isActive(item.href)}
-                    onClick={() => router.push(item.href)}
                   />
                 ))}
               </div>
@@ -155,7 +155,7 @@ export function Sidebar() {
         {role === 'admin' && (
           <NavLink
             href="/settings" icon="ti-settings" label="Settings"
-            active={isActive('/settings')} onClick={() => router.push('/settings')}
+            active={isActive('/settings')}
           />
         )}
         {/* User card */}
@@ -216,19 +216,20 @@ export function Sidebar() {
 }
 
 // ── Reusable nav item ─────────────────────────────────────────────────────
-function NavLink({ icon, label, active, onClick }: {
-  href: string; icon: string; label: string; active: boolean; onClick: () => void
+function NavLink({ href, icon, label, active }: {
+  href: string; icon: string; label: string; active: boolean
 }) {
   const [hovered, setHovered] = useState(false)
   return (
-    <div
-      onClick={onClick}
+    <Link
+      href={href}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         height: '40px', padding: '0 10px', borderRadius: '8px', cursor: 'pointer',
         fontSize: 'var(--text-sm)', fontWeight: 500, boxSizing: 'border-box',
+        textDecoration: 'none',
         background: active
           ? 'var(--color-primary-muted)'
           : hovered
@@ -240,6 +241,6 @@ function NavLink({ icon, label, active, onClick }: {
     >
       <i className={`ti ${icon}`} style={{ fontSize: '20px', flexShrink: 0 }} />
       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-    </div>
+    </Link>
   )
 }
