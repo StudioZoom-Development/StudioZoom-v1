@@ -348,24 +348,26 @@ export interface Invoice {
 }
 
 // ─── LEADS ────────────────────────────────────────────────────────────────
-export type LeadStatus = 'new' | 'contacted' | 'quoted' | 'won' | 'lost'
+export type LeadStatus = 'new' | 'contacted' | 'quoted' | 'won' | 'lost' | 'inquiry'
 
 export interface Lead {
-  leadId:      string
-  name:        string
-  contact:     string
-  email?:      string
-  eventType:   EventType
-  eventDate?:  Date
-  location?:   string
-  budget?:     number
-  source?:     string
-  status:      LeadStatus
-  notes?:      string
-  isDeleted?:  boolean
-  createdBy:   string
-  createdAt:   Date
-  updatedAt:   Date
+  leadId:         string
+  name:           string
+  contact?:       string
+  email?:         string
+  eventType:      EventType | string
+  eventDate?:     Date
+  tentativeDate?: string
+  location?:      string
+  budget?:        number
+  interestedPackage?: string
+  source?:        string
+  status:         LeadStatus | string
+  notes?:         string
+  isDeleted?:     boolean
+  createdBy?:     string
+  createdAt?:     Date
+  updatedAt?:     Date
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────
