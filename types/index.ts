@@ -361,6 +361,7 @@ export interface Lead {
   location?:      string
   budget?:        number
   interestedPackage?: string
+  packageAmount?: number
   source?:        string
   status:         LeadStatus | string
   notes?:         string

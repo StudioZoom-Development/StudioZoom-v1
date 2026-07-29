@@ -11,11 +11,17 @@ export interface LeadFilters {
   status?: string
 }
 
-export const PACKAGE_OPTIONS = [
-  { id: 'gold', name: 'Gold · ₹2,80,000' },
-  { id: 'silver', name: 'Silver · ₹1,60,000' },
-  { id: 'platinum', name: 'Platinum · ₹4,50,000' },
-  { id: 'undecided', name: 'Undecided' },
+export interface PackageOption {
+  id: string
+  name: string
+  defaultPrice: number
+}
+
+export const PACKAGE_OPTIONS: PackageOption[] = [
+  { id: 'gold', name: 'Gold', defaultPrice: 280000 },
+  { id: 'silver', name: 'Silver', defaultPrice: 160000 },
+  { id: 'platinum', name: 'Platinum', defaultPrice: 450000 },
+  { id: 'other', name: 'Other', defaultPrice: 0 },
 ]
 
 export const MOCK_LEADS: Lead[] = [
@@ -198,7 +204,7 @@ export async function createLead(leadData: Partial<Lead>, userId?: string): Prom
     name:              leadData.name || 'New Lead',
     eventType:         leadData.eventType || 'Wedding',
     status:            leadData.status || 'inquiry',
-    interestedPackage: leadData.interestedPackage || 'Undecided',
+    interestedPackage: leadData.interestedPackage || '',
     isDeleted:         false,
     createdBy:         userId || 'system',
     createdAt:         new Date(),
@@ -241,7 +247,7 @@ export async function updateLead(leadId: string, leadData: Partial<Lead>): Promi
       name: leadData.name || 'Lead',
       eventType: leadData.eventType || 'Wedding',
       status: leadData.status || 'inquiry',
-      interestedPackage: leadData.interestedPackage || 'Undecided',
+      interestedPackage: leadData.interestedPackage || '',
       isDeleted: false,
       createdAt: new Date(),
       updatedAt: new Date(),

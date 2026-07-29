@@ -5,6 +5,7 @@ import {
   isTomorrow,
   isYesterday,
   parseISO,
+  isValid,
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
@@ -16,6 +17,17 @@ import {
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
   return format(d, 'd MMM yyyy')
+}
+
+/** Format ISO date string "YYYY-MM-DD" to "DD-MM-YYYY" for table displays */
+export function formatDisplayDate(dateStr?: string, pattern = 'dd-MM-yyyy'): string {
+  if (!dateStr) return '—'
+  try {
+    const d = parseISO(dateStr)
+    return isValid(d) ? format(d, pattern) : dateStr
+  } catch {
+    return dateStr
+  }
 }
 
 /** Format to month-year string e.g. "July 2026" */

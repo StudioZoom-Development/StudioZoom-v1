@@ -7,6 +7,7 @@ import { Badge } from '@/components/shared/Badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { subscribeToLeads } from '@/lib/firebase/queries/leads'
+import { formatDisplayDate } from '@/lib/utils/dates'
 import { Lead } from '@/types'
 
 // Select styling matching design components
@@ -43,7 +44,6 @@ export default function LeadsPage() {
 
   // Real-time Firestore subscription
   useEffect(() => {
-    setLoading(true)
     const unsub = subscribeToLeads({ source: sourceFilter }, data => {
       setLeads(data)
       setLoading(false)
@@ -72,7 +72,8 @@ export default function LeadsPage() {
 
       const nameMatch      = lead.name.toLowerCase().includes(query)
       const typeMatch      = (lead.eventType || '').toLowerCase().includes(query)
-      const dateMatch      = (lead.tentativeDate || '').toLowerCase().includes(query)
+      const formattedDate  = formatDisplayDate(lead.tentativeDate)
+      const dateMatch      = (lead.tentativeDate || '').toLowerCase().includes(query) || formattedDate.toLowerCase().includes(query)
       const sourceMatch    = (lead.source || '').toLowerCase().includes(query)
       const statusMatch    = (lead.status || '').toLowerCase().includes(query)
       const contactMatch   = (lead.contact || '').toLowerCase().includes(query)
@@ -130,7 +131,10 @@ export default function LeadsPage() {
         {/* Source filter dropdown */}
         <select
           value={sourceFilter}
-          onChange={e => setSourceFilter(e.target.value)}
+          onChange={e => {
+            setLoading(true)
+            setSourceFilter(e.target.value)
+          }}
           style={SELECT_STYLE}
         >
           <option value="All">Source · All</option>
@@ -250,7 +254,7 @@ export default function LeadsPage() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {lead.tentativeDate || '—'}
+                    {formatDisplayDate(lead.tentativeDate)}
                   </td>
 
                   {/* SOURCE */}

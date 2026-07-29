@@ -6,22 +6,25 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/shared/Badge'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
-import { getLeadById, createLead, updateLead, softDeleteLead, PACKAGE_OPTIONS } from '@/lib/firebase/queries/leads'
+import { getLeadById, createLead, updateLead, softDeleteLead } from '@/lib/firebase/queries/leads'
 import { useAuthStore } from '@/store/authStore'
 import { Lead } from '@/types'
+import { PhoneNumberInput, parsePhoneNumber } from './PhoneNumberInput'
+import { DateField } from './DateField'
+import { PackageSelector, parsePackageName, getDefaultPrice } from './PackageSelector'
 
 const SELECT_STYLE: React.CSSProperties = {
-  fontFamily:   'var(--font-inter)',
-  height:       '36px',
-  width:        '100%',
-  background:   'var(--color-surface-raised)',
-  border:       '0.5px solid var(--color-border)',
+  fontFamily: 'var(--font-inter)',
+  height: '36px',
+  width: '100%',
+  background: 'var(--color-surface-raised)',
+  border: '0.5px solid var(--color-border)',
   borderRadius: '8px',
-  padding:      '0 10px',
-  fontSize:     'var(--text-sm)',
-  color:        'var(--color-foreground)',
-  outline:      'none',
-  cursor:       'pointer',
+  padding: '0 10px',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--color-foreground)',
+  outline: 'none',
+  cursor: 'pointer',
 }
 
 interface LeadFormProps {
@@ -46,20 +49,31 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
   const [source, setSource] = useState('Walk-in')
   const [sourceDetail, setSourceDetail] = useState('')
   const [tentativeDate, setTentativeDate] = useState('')
-  const [interestedPackage, setInterestedPackage] = useState('Gold · ₹2,80,000')
+  const [interestedPackage, setInterestedPackage] = useState('Gold')
+  const [packageAmount, setPackageAmount] = useState<number>(280000)
   const [notes, setNotes] = useState('')
+
+  // Validation Error states
+  const [phoneError, setPhoneError] = useState<string | undefined>()
+  const [packageError, setPackageError] = useState<string | undefined>()
 
   // Load existing lead data in edit mode
   useEffect(() => {
     if (mode === 'edit' && leadId) {
-      setLoading(true)
       getLeadById(leadId).then(lead => {
         if (lead) {
           setName(lead.name || '')
           setContact(lead.contact || '')
           setNotes(lead.notes || '')
           setTentativeDate(lead.tentativeDate || '')
-          setInterestedPackage(lead.interestedPackage || 'Gold · ₹2,80,000')
+          const rawPkg = lead.interestedPackage || ''
+          const normPkg = parsePackageName(rawPkg)
+          setInterestedPackage(normPkg)
+          setPackageAmount(
+            lead.packageAmount !== undefined && lead.packageAmount !== null
+              ? lead.packageAmount
+              : (lead.budget || getDefaultPrice(normPkg))
+          )
 
           // Parse Event Type without prefix duplication
           const rawEventType = lead.eventType || 'Wedding'
@@ -112,6 +126,27 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
     if (e) e.preventDefault()
     if (saving || !name.trim()) return
 
+    // Contact validation check
+    let hasError = false
+    if (contact) {
+      const parsed = parsePhoneNumber(contact)
+      if (parsed.number.length > 0 && parsed.number.length < 10) {
+        setPhoneError('Enter a valid 10-digit mobile number')
+        hasError = true
+      } else {
+        setPhoneError(undefined)
+      }
+    }
+
+    if (interestedPackage === 'Other' && (!packageAmount || Number(packageAmount) <= 0)) {
+      setPackageError('Enter a valid package amount for Other')
+      hasError = true
+    } else {
+      setPackageError(undefined)
+    }
+
+    if (hasError) return
+
     setSaving(true)
 
     // Build clean values without accumulating duplicate prefixes
@@ -130,7 +165,9 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
       eventType: finalEventType,
       source: finalSource,
       tentativeDate: tentativeDate.trim(),
-      interestedPackage,
+      interestedPackage: interestedPackage.trim(),
+      packageAmount: Number(packageAmount) || 0,
+      budget: Number(packageAmount) || 0,
       notes: notes.trim(),
       status: 'inquiry',
     }
@@ -223,10 +260,13 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
           {/* Contact */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Contact</label>
-            <Input
+            <PhoneNumberInput
               value={contact}
-              onChange={e => setContact(e.target.value)}
-              placeholder="+91 98844 32109"
+              onChange={val => {
+                setContact(val)
+                setPhoneError(undefined)
+              }}
+              error={phoneError}
             />
           </div>
 
@@ -279,50 +319,29 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
             )}
           </div>
 
-          {/* BUG 1 FIX: Tentative date with aligned Tabler calendar icon wrapper */}
+          {/* Tentative date */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Tentative date</label>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
-              <Input
-                type="date"
-                value={tentativeDate}
-                onChange={e => setTentativeDate(e.target.value)}
-                style={{
-                  colorScheme: 'dark',
-                  paddingRight: '36px',
-                  width: '100%',
-                  cursor: 'pointer',
-                }}
-              />
-              <i
-                className="ti ti-calendar"
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  pointerEvents: 'none',
-                  fontSize: '16px',
-                  color: 'var(--color-foreground-subtle)',
-                }}
-              />
-            </div>
+            <DateField
+              value={tentativeDate}
+              onChange={setTentativeDate}
+
+            />
           </div>
 
-          {/* Interested Package dropdown */}
+          {/* Interested Package selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Interested package</label>
-            <select
-              value={interestedPackage}
-              onChange={e => setInterestedPackage(e.target.value)}
-              style={SELECT_STYLE}
-            >
-              {PACKAGE_OPTIONS.map(pkg => (
-                <option key={pkg.id} value={pkg.name}>
-                  {pkg.name}
-                </option>
-              ))}
-            </select>
+            <PackageSelector
+              packageName={interestedPackage}
+              packageAmount={packageAmount}
+              onChange={(pkgName, amount) => {
+                setInterestedPackage(pkgName)
+                setPackageAmount(amount)
+                setPackageError(undefined)
+              }}
+              error={packageError}
+            />
           </div>
         </div>
 
