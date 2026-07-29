@@ -18,7 +18,7 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   unpaid:          { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
   overdue:         { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
   // Client status
-  inquiry:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  inquiry:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   // Equipment
   available:       { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
   out:             { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
