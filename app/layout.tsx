@@ -16,6 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+        {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link rel="stylesheet" href="/_ds_bundle.css" />
         <script dangerouslySetInnerHTML={{ __html: 'window.module = { exports: {} };' }} />
       </head>
