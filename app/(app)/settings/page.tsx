@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input }  from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { useUIStore } from '@/store/uiStore'
 import { useRole } from '@/hooks/useAuth'
@@ -25,12 +24,12 @@ import {
 // Constants
 // ─────────────────────────────────────────────
 
-type Page = 'Studio branding' | 'Packages' | 'GST & numbering' | 'User management'
+type Page = 'Studio branding' | 'Packages' | 'Numbering' | 'User management'
 
 const NAV_ITEMS: Array<{ label: Page; icon: string }> = [
   { label: 'Studio branding', icon: 'ti-aperture'   },
   { label: 'Packages',        icon: 'ti-package'    },
-  { label: 'GST & numbering', icon: 'ti-percentage' },
+  { label: 'Numbering',       icon: 'ti-percentage' },
   { label: 'User management', icon: 'ti-users'      },
 ]
 
@@ -343,7 +342,8 @@ export default function SettingsPage() {
   useUIStore() // keep store subscribed for sidebar theme sync
 
   const [page,     setPage]     = useState<Page>('Studio branding')
-  const [settings, setSettings] = useState<StudioSettings | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_settings, setSettings] = useState<StudioSettings | null>(null)
   const [users,    setUsers]    = useState<UserRow[]>([])
 
   // Studio selector
@@ -518,33 +518,6 @@ export default function SettingsPage() {
             display: 'flex', flexDirection: 'column', gap: '20px',
           }}>
 
-            {/* ── Logo section */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '16px',
-              borderBottom: '0.5px solid var(--color-border)', paddingBottom: '20px',
-            }}>
-              <div style={{
-                width: '64px', height: '64px', borderRadius: '16px', flexShrink: 0,
-                background: 'linear-gradient(135deg,var(--color-primary) 0%,#8b3a72 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {settings?.logoUrl
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', borderRadius: '16px', objectFit: 'contain' }} />
-                  : <i className="ti ti-aperture" style={{ fontSize: '36px', color: '#ffffff' }} />
-                }
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Studio logo</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                  Used on quotations, invoices and payslips · PNG or SVG, min 240px
-                </div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                  <Button variant="outline" className="h-8 text-xs">Upload</Button>
-                  <Button variant="ghost"   className="h-8 text-xs">Remove</Button>
-                </div>
-              </div>
-            </div>
 
             {/* ── Studio identity selector */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px',
@@ -603,8 +576,8 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* ── 6 branding fields — 2-col grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            {/* ── 6 branding fields — 3-col grid (Phone/Address/City · Email/UPI/GSTIN) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
               {BRAND_FIELDS.map(f => (
                 <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{f.label}</label>
@@ -702,29 +675,15 @@ export default function SettingsPage() {
         )}
 
         {/* ═══════════════════════════════════════
-            C — GST & NUMBERING
+            C — NUMBERING
         ═══════════════════════════════════════ */}
-        {page === 'GST & numbering' && (
+        {page === 'Numbering' && (
           <div style={{
             background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
             borderRadius: '12px', padding: '24px',
             display: 'flex', flexDirection: 'column', gap: '18px',
           }}>
-            {/* GST toggle row */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              borderBottom: '0.5px solid var(--color-border)', paddingBottom: '16px',
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>Charge GST on documents</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                  CGST 9% + SGST 9% added to quotations and invoices
-                </div>
-              </div>
-              <Switch checked={gstEnabled} onCheckedChange={setGstEnabled} />
-            </div>
-
-            {/* 3-col grid */}
+            {/* 3-col grid — Invoice prefix / Quotation prefix / Next number */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Invoice prefix</label>
