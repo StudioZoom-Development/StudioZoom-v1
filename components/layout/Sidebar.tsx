@@ -96,14 +96,12 @@ export function Sidebar() {
         borderBottom: '0.5px solid var(--color-border)',
         flexShrink: 0,
       }}>
-        <div style={{
-          width: '28px', height: '28px', borderRadius: '8px',
-          background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <i className="ti ti-aperture" style={{ fontSize: '18px', color: '#ffffff' }} />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.png"
+          alt="Studio Zoom Logo"
+          style={{ height: '30px', width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+        />
         <div style={{
           fontSize: 'var(--text-base)', fontWeight: 700,
           letterSpacing: '-0.01em', whiteSpace: 'nowrap',
