@@ -42,6 +42,7 @@ export interface StudioSettings {
   invoicePrefix:       string
   quotationPrefix:     string
   invoiceStartNumber:  number
+  activeStudioId?:     string   // 'studio-zoom' | 'studio-zoom-productions'
   packages?:           PackageTemplate[]
 }
 
@@ -66,8 +67,16 @@ export function subscribeToSettings(
   })
 }
 
-/** Save branding fields */
-export async function saveBranding(updates: Partial<StudioSettings>): Promise<void> {
+/** Save branding fields (no bankIfsc / defaultTerms) */
+export async function saveBranding(updates: {
+  phone?:          string
+  address?:        string
+  city?:           string
+  email?:          string
+  gstin?:          string
+  upiId?:          string
+  activeStudioId?: string
+}): Promise<void> {
   await updateDoc(doc(db, 'studioSettings', 'config'), {
     ...updates,
     updatedAt: serverTimestamp(),

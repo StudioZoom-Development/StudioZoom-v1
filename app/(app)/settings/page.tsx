@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input }  from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -25,25 +25,38 @@ import {
 // Constants
 // ─────────────────────────────────────────────
 
-type Page = 'Studio branding' | 'Packages' | 'GST & numbering' | 'User management' | 'Theme'
+type Page = 'Studio branding' | 'Packages' | 'GST & numbering' | 'User management'
 
 const NAV_ITEMS: Array<{ label: Page; icon: string }> = [
   { label: 'Studio branding', icon: 'ti-aperture'   },
   { label: 'Packages',        icon: 'ti-package'    },
   { label: 'GST & numbering', icon: 'ti-percentage' },
   { label: 'User management', icon: 'ti-users'      },
-  { label: 'Theme',           icon: 'ti-palette'    },
+]
+
+// Hardcoded studio entities — not from Firestore
+const STUDIOS = [
+  {
+    id:      'studio-zoom',
+    name:    'Studio Zoom',
+    tagline: 'Weddings & events',
+    gstin:   '33ABCDE1234F1Z5',
+  },
+  {
+    id:      'studio-zoom-productions',
+    name:    'Studio Zoom Productions',
+    tagline: 'Films & corporate AV',
+    gstin:   '33ABCDE1234F2Z4',
+  },
 ]
 
 const BRAND_FIELDS: Array<{ key: keyof BrandForm; label: string }> = [
-  { key: 'studioName', label: 'Studio name' },
-  { key: 'phone',      label: 'Phone'       },
-  { key: 'address',    label: 'Address'     },
-  { key: 'city',       label: 'City'        },
-  { key: 'email',      label: 'Email'       },
-  { key: 'gstin',      label: 'GSTIN'       },
-  { key: 'upiId',      label: 'UPI ID'      },
-  { key: 'bankIfsc',   label: 'Bank · IFSC' },
+  { key: 'phone',   label: 'Phone'   },
+  { key: 'address', label: 'Address' },
+  { key: 'city',    label: 'City'    },
+  { key: 'email',   label: 'Email'   },
+  { key: 'gstin',   label: 'GSTIN'   },
+  { key: 'upiId',   label: 'UPI ID'  },
 ]
 
 const PKG_COLOURS: Record<string, { bg: string; fg: string }> = {
@@ -58,22 +71,17 @@ const ROLE_STYLE: Record<string, { bg: string; fg: string }> = {
   staff:   { bg: 'var(--color-surface-overlay)',fg: 'var(--color-foreground-muted)' },
 }
 
-const SWATCHES = ['#c6539f', '#eca82f', '#213bdb', '#4caf50', '#ef5350', '#181d19']
-
 // ─────────────────────────────────────────────
 // Sub-types
 // ─────────────────────────────────────────────
 
 interface BrandForm {
-  studioName:   string
-  phone:        string
-  address:      string
-  city:         string
-  email:        string
-  gstin:        string
-  upiId:        string
-  bankIfsc:     string
-  defaultTerms: string
+  phone:   string
+  address: string
+  city:    string
+  email:   string
+  gstin:   string
+  upiId:   string
 }
 
 function getInitials(name: string): string {
@@ -332,16 +340,18 @@ function CreateUserModal({ onClose }: CreateUserModalProps) {
 export default function SettingsPage() {
   const router = useRouter()
   const { isAdmin } = useRole()
-  const { theme, toggleTheme } = useUIStore()
+  useUIStore() // keep store subscribed for sidebar theme sync
 
   const [page,     setPage]     = useState<Page>('Studio branding')
   const [settings, setSettings] = useState<StudioSettings | null>(null)
   const [users,    setUsers]    = useState<UserRow[]>([])
 
+  // Studio selector
+  const [selectedStudio, setSelectedStudio] = useState('studio-zoom')
+
   // Branding form
   const [brandForm, setBrandForm] = useState<BrandForm>({
-    studioName: '', phone: '', address: '', city: '',
-    email: '', gstin: '', upiId: '', bankIfsc: '', defaultTerms: '',
+    phone: '', address: '', city: '', email: '', gstin: '', upiId: '',
   })
   const [brandSaving, setBrandSaving] = useState(false)
   const [brandSaved,  setBrandSaved]  = useState(false)
@@ -376,16 +386,16 @@ export default function SettingsPage() {
       if (!s) return
       setSettings(s)
       setBrandForm({
-        studioName:   s.studioName   ?? '',
-        phone:        s.phone        ?? '',
-        address:      s.address      ?? '',
-        city:         s.city         ?? '',
-        email:        s.email        ?? '',
-        gstin:        s.gstin        ?? '',
-        upiId:        s.upiId        ?? '',
-        bankIfsc:     s.bankIfsc     ?? '',
-        defaultTerms: s.defaultTerms ?? '',
+        phone:   s.phone   ?? '',
+        address: s.address ?? '',
+        city:    s.city    ?? '',
+        email:   s.email   ?? '',
+        gstin:   s.gstin   ?? '',
+        upiId:   s.upiId   ?? '',
       })
+      if ((s as unknown as Record<string, string>).activeStudioId) {
+        setSelectedStudio((s as unknown as Record<string, string>).activeStudioId)
+      }
       setPackages(s.packages ?? [])
       setGstEnabled(s.gstEnabled ?? false)
       setInvoicePrefix(s.invoicePrefix ?? 'ZS-INV-')
@@ -405,7 +415,7 @@ export default function SettingsPage() {
   const handleSaveBranding = async () => {
     setBrandSaving(true)
     try {
-      await saveBranding({ ...brandForm })
+      await saveBranding({ ...brandForm, activeStudioId: selectedStudio })
       setBrandSaved(true)
       setTimeout(() => setBrandSaved(false), 2000)
     } catch (err) {
@@ -465,11 +475,6 @@ export default function SettingsPage() {
     }
   }
 
-  // ── Theme toggle (only if switching)
-  const handleThemeCard = useCallback((t: 'dark' | 'light') => {
-    if (t !== theme) toggleTheme()
-  }, [theme, toggleTheme])
-
   const deactivatingUser = users.find(u => u.uid === deactivateUid)
 
   return (
@@ -512,7 +517,8 @@ export default function SettingsPage() {
             borderRadius: '12px', padding: '24px',
             display: 'flex', flexDirection: 'column', gap: '20px',
           }}>
-            {/* Logo section */}
+
+            {/* ── Logo section */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: '16px',
               borderBottom: '0.5px solid var(--color-border)', paddingBottom: '20px',
@@ -523,6 +529,7 @@ export default function SettingsPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {settings?.logoUrl
+                  // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', borderRadius: '16px', objectFit: 'contain' }} />
                   : <i className="ti ti-aperture" style={{ fontSize: '36px', color: '#ffffff' }} />
                 }
@@ -539,7 +546,64 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 8 branding fields — 2-col grid */}
+            {/* ── Studio identity selector */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px',
+              borderBottom: '0.5px solid var(--color-border)', paddingBottom: '20px' }}>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Studio identity</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                Select which studio this document set belongs to · appears on quotations, invoices and payslips
+              </div>
+              <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
+                {STUDIOS.map(studio => (
+                  <div
+                    key={studio.id}
+                    onClick={() => setSelectedStudio(studio.id)}
+                    style={{
+                      width: '192px', flexShrink: 0,
+                      border: selectedStudio === studio.id
+                        ? '1.5px solid var(--color-primary)'
+                        : '0.5px solid var(--color-border)',
+                      borderRadius: '10px', padding: '14px', cursor: 'pointer',
+                      background: selectedStudio === studio.id
+                        ? 'var(--color-primary-muted)'
+                        : 'var(--color-surface-raised)',
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      position: 'relative', transition: 'border-color 0.15s, background 0.15s',
+                    }}
+                  >
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+                      background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <i className="ti ti-aperture" style={{ fontSize: '20px', color: '#ffffff' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {studio.name}
+                      </div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {studio.tagline} · GSTIN {studio.gstin}
+                      </div>
+                    </div>
+                    {selectedStudio === studio.id && (
+                      <div style={{
+                        position: 'absolute', top: '10px', right: '10px',
+                        width: '18px', height: '18px', borderRadius: '50%',
+                        background: 'var(--color-primary)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <i className="ti ti-check" style={{ fontSize: '11px', color: '#ffffff' }} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── 6 branding fields — 2-col grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               {BRAND_FIELDS.map(f => (
                 <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -553,26 +617,7 @@ export default function SettingsPage() {
               ))}
             </div>
 
-            {/* Default T&C */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Default terms &amp; conditions</label>
-              <textarea
-                rows={3}
-                value={brandForm.defaultTerms}
-                onChange={e => setBrandForm(prev => ({ ...prev, defaultTerms: e.target.value }))}
-                style={{
-                  fontFamily: 'var(--font-inter)',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '8px', padding: '10px 12px',
-                  fontSize: 'var(--text-sm)', color: 'var(--color-foreground)',
-                  outline: 'none', resize: 'vertical', lineHeight: 1.5,
-                  width: '100%', boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Save */}
+            {/* ── Save */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
               <Button className="h-9 font-medium" onClick={handleSaveBranding} disabled={brandSaving}>
                 {brandSaving ? 'Saving…' : brandSaved ? 'Saved ✓' : 'Save changes'}
@@ -811,101 +856,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════
-            E — THEME
-        ═══════════════════════════════════════ */}
-        {page === 'Theme' && (
-          <div style={{
-            background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
-            borderRadius: '12px', padding: '24px',
-            display: 'flex', flexDirection: 'column', gap: '18px',
-          }}>
-            {/* Header */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>Appearance</div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                Dark is the studio default — built for editing rooms. Toggle from the sidebar anytime.
-              </div>
-            </div>
 
-            {/* Theme cards — 2-col grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-
-              {/* DARK card — intentional #000000 hardcode: it's a preview of the dark bg */}
-              <div
-                onClick={() => handleThemeCard('dark')}
-                style={{
-                  border: theme === 'dark' ? '2px solid var(--color-primary)' : '0.5px solid var(--color-border)',
-                  borderRadius: '12px', padding: '14px',
-                  display: 'flex', flexDirection: 'column', gap: '10px',
-                  cursor: 'pointer', background: '#000000',
-                  transition: 'border-color 0.15s',
-                }}
-              >
-                <div style={{
-                  height: '52px', borderRadius: '8px', background: '#181d19',
-                  border: '0.5px solid #2a302b',
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '0 10px',
-                }}>
-                  <span style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#c6539f', flexShrink: 0 }} />
-                  <span style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#2a302b' }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="ti ti-moon" style={{ fontSize: '15px', color: '#c6539f' }} />
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: '#f3f2e7' }}>Dark · default</span>
-                </div>
-              </div>
-
-              {/* LIGHT card — intentional #ffffff hardcode: preview of light bg */}
-              <div
-                onClick={() => handleThemeCard('light')}
-                style={{
-                  border: theme === 'light' ? '2px solid var(--color-primary)' : '0.5px solid var(--color-border)',
-                  borderRadius: '12px', padding: '14px',
-                  display: 'flex', flexDirection: 'column', gap: '10px',
-                  cursor: 'pointer', background: '#ffffff',
-                  transition: 'border-color 0.15s',
-                }}
-              >
-                <div style={{
-                  height: '52px', borderRadius: '8px', background: '#efefeb',
-                  border: '0.5px solid #d8d8d0',
-                  display: 'flex', alignItems: 'center', gap: '6px', padding: '0 10px',
-                }}>
-                  <span style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#c6539f', flexShrink: 0 }} />
-                  <span style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#d8d8d0' }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="ti ti-sun" style={{ fontSize: '15px', color: '#c6539f' }} />
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: '#151810' }}>Light</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Brand palette swatches */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-              <div style={{
-                fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase',
-                letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)',
-              }}>
-                Brand palette
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {SWATCHES.map(s => (
-                  <div key={s} style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                    <div style={{
-                      width: '44px', height: '44px', borderRadius: '10px',
-                      background: s, border: '0.5px solid var(--color-border)',
-                    }} />
-                    <span style={{ fontSize: '9px', color: 'var(--color-foreground-subtle)', fontVariantNumeric: 'tabular-nums' }}>
-                      {s}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Modals */}
