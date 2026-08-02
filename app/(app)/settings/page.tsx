@@ -18,6 +18,7 @@ import {
   saveGstSettings,
   savePackages,
   deactivateUser,
+  updateUser,
 } from '@/lib/firebase/queries/settings'
 
 // ─────────────────────────────────────────────
@@ -232,68 +233,80 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
 }
 
 // ─────────────────────────────────────────────
-// Create User Modal
+// Create User Modal — calls /api/admin/create-user
 // ─────────────────────────────────────────────
 
-interface CreateUserModalProps {
-  onClose: () => void
-}
+interface CreateUserModalProps { onClose: () => void }
 
 function CreateUserModal({ onClose }: CreateUserModalProps) {
-  const [name,  setName]  = useState('')
-  const [email, setEmail] = useState('')
-  const [role,  setRole]  = useState<'admin' | 'manager' | 'staff'>('staff')
-  const [saving, setSaving] = useState(false)
+  const [name,     setName]     = useState('')
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [role,     setRole]     = useState<'admin' | 'manager' | 'staff'>('staff')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
 
   const handleCreate = async () => {
-    if (!name || !email) return
-    setSaving(true)
+    if (!name || !email || !password) { setError('All fields are required'); return }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+    setSaving(true); setError('')
     try {
-      const { setDoc, doc, serverTimestamp: sT } = await import('firebase/firestore')
-      const { db: dbInst } = await import('@/lib/firebase/config')
-      const tempUid = 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
-      await setDoc(doc(dbInst, 'users', tempUid), {
-        uid: tempUid, name, email, role,
-        isActive: true, jobTitle: role === 'manager' ? 'Manager' : 'Staff',
-        createdAt: sT(), updatedAt: sT(),
+      const res  = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, role }),
       })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) { setError(data.error ?? 'Failed to create user'); return }
       onClose()
-    } catch (err) {
-      console.error('Failed to create user:', err)
-    } finally {
-      setSaving(false)
-    }
+    } catch { setError('Network error. Please try again.') }
+    finally { setSaving(false) }
   }
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 50,
-        background: 'rgba(0,0,0,0.7)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--font-inter)',
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '400px', background: 'var(--color-surface-overlay)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '16px', padding: '24px',
-          display: 'flex', flexDirection: 'column', gap: '16px',
-        }}
-      >
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'var(--font-inter)',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '420px', background: 'var(--color-surface-overlay)',
+        border: '0.5px solid var(--color-border)',
+        borderRadius: '16px', padding: '24px',
+        display: 'flex', flexDirection: 'column', gap: '14px',
+      }}>
         <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Create user</div>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+          Creates a Firebase Auth account so the user can log in immediately.
+        </div>
 
+        {error && (
+          <div style={{
+            fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
+            background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
+          }}>{error}</div>
+        )}
+
+        {/* Full name */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Full name</label>
           <Input value={name} onChange={e => setName(e.target.value)} className="h-9" placeholder="e.g. Sathish Kumar" />
         </div>
+
+        {/* Email */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Email</label>
           <Input value={email} onChange={e => setEmail(e.target.value)} className="h-9" placeholder="user@studiozoom.in" type="email" />
         </div>
+
+        {/* Password */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Password</label>
+          <Input value={password} onChange={e => setPassword(e.target.value)} className="h-9" placeholder="Min. 8 characters" type="password" />
+        </div>
+
+        {/* Role */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Role</label>
           <select
@@ -313,19 +326,206 @@ function CreateUserModal({ onClose }: CreateUserModalProps) {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-          <button
-            onClick={onClose}
-            style={{
-              height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
-              background: 'transparent', border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-            }}
-          >
-            Cancel
-          </button>
+          <button onClick={onClose} style={{
+            height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
+            background: 'transparent', border: '0.5px solid var(--color-border)',
+            color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
+          }}>Cancel</button>
           <Button className="h-9 font-medium" onClick={handleCreate} disabled={saving}>
             {saving ? 'Creating…' : 'Create user'}
           </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Edit User Modal — updates /users/{uid} in Firestore
+// ─────────────────────────────────────────────
+
+interface EditUserModalProps { user: UserRow; onClose: () => void }
+
+function EditUserModal({ user, onClose }: EditUserModalProps) {
+  const [name,     setName]     = useState(user.name)
+  const [role,     setRole]     = useState<'admin' | 'manager' | 'staff'>(user.role as 'admin' | 'manager' | 'staff')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+
+  const handleSave = async () => {
+    if (!name) { setError('Name is required'); return }
+    setSaving(true); setError('')
+    try {
+      await updateUser(user.uid, { name, role })
+      onClose()
+    } catch { setError('Failed to save. Please try again.') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'var(--font-inter)',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '420px', background: 'var(--color-surface-overlay)',
+        border: '0.5px solid var(--color-border)',
+        borderRadius: '16px', padding: '24px',
+        display: 'flex', flexDirection: 'column', gap: '14px',
+      }}>
+        <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Edit user</div>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{user.email}</div>
+
+        {error && (
+          <div style={{
+            fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
+            background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
+          }}>{error}</div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Full name</label>
+          <Input value={name} onChange={e => setName(e.target.value)} className="h-9" />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Role</label>
+          <select
+            value={role}
+            onChange={e => setRole(e.target.value as 'admin' | 'manager' | 'staff')}
+            style={{
+              height: '36px', padding: '0 12px', borderRadius: '8px',
+              background: 'var(--color-surface-raised)', border: '0.5px solid var(--color-border)',
+              color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
+              outline: 'none', width: '100%',
+            }}
+          >
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+            <option value="staff">Staff</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+          <button onClick={onClose} style={{
+            height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
+            background: 'transparent', border: '0.5px solid var(--color-border)',
+            color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
+          }}>Cancel</button>
+          <Button className="h-9 font-medium" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Reset Password Modal — calls /api/admin/reset-password
+// ─────────────────────────────────────────────
+
+interface ResetPasswordModalProps { user: UserRow; onClose: () => void }
+
+function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
+  const [loading, setLoading] = useState(false)
+  const [link,    setLink]    = useState('')
+  const [copied,  setCopied]  = useState(false)
+  const [error,   setError]   = useState('')
+
+  const handleGenerate = async () => {
+    setLoading(true); setError('')
+    try {
+      const res  = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      })
+      const data = await res.json() as { link?: string; error?: string }
+      if (!res.ok) { setError(data.error ?? 'Failed to generate link'); return }
+      setLink(data.link ?? '')
+    } catch { setError('Network error. Please try again.') }
+    finally { setLoading(false) }
+  }
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(link)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'var(--font-inter)',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '460px', background: 'var(--color-surface-overlay)',
+        border: '0.5px solid var(--color-border)',
+        borderRadius: '16px', padding: '24px',
+        display: 'flex', flexDirection: 'column', gap: '16px',
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Reset password</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+            Generate a secure reset link for <strong>{user.name}</strong> ({user.email})
+          </div>
+        </div>
+
+        {error && (
+          <div style={{
+            fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
+            background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
+          }}>{error}</div>
+        )}
+
+        {!link ? (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+            Click below to generate a one-time password reset link.
+            Copy it and share it with the user via WhatsApp or email.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Reset link (one-time use)</label>
+            <div style={{
+              background: 'var(--color-surface-raised)', border: '0.5px solid var(--color-border)',
+              borderRadius: '8px', padding: '10px 12px',
+              fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)',
+              wordBreak: 'break-all', lineHeight: 1.6,
+            }}>{link}</div>
+            <button
+              onClick={handleCopy}
+              style={{
+                height: '34px', padding: '0 14px', borderRadius: '8px', cursor: 'pointer',
+                background: copied ? 'var(--color-success-muted)' : 'var(--color-accent-muted)',
+                border: 'none',
+                color: copied ? 'var(--color-success)' : 'var(--color-accent)',
+                fontSize: 'var(--text-xs)', fontWeight: 600, fontFamily: 'var(--font-inter)',
+                display: 'flex', alignItems: 'center', gap: '6px', width: 'fit-content',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <i className={`ti ${copied ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: '14px' }} />
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+          <button onClick={onClose} style={{
+            height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
+            background: 'transparent', border: '0.5px solid var(--color-border)',
+            color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
+          }}>Close</button>
+          {!link && (
+            <Button className="h-9 font-medium" onClick={handleGenerate} disabled={loading}>
+              {loading ? 'Generating…' : 'Generate reset link'}
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -371,8 +571,10 @@ export default function SettingsPage() {
   const [gstSaved,         setGstSaved]         = useState(false)
 
   // User management
-  const [showCreateUser,  setShowCreateUser]  = useState(false)
-  const [deactivateUid,   setDeactivateUid]   = useState<string | null>(null)
+  const [showCreateUser,    setShowCreateUser]    = useState(false)
+  const [editUser,          setEditUser]          = useState<UserRow | null>(null)
+  const [resetUser,         setResetUser]         = useState<UserRow | null>(null)
+  const [deactivateUid,     setDeactivateUid]     = useState<string | null>(null)
   const [deactivateLoading, setDeactivateLoading] = useState(false)
 
   // Guard: admin only
@@ -807,16 +1009,30 @@ export default function SettingsPage() {
                         </span>
                       </td>
 
-                      {/* DEACTIVATE */}
+                      {/* ACTIONS */}
                       <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)', textAlign: 'right' }}>
-                        {u.isActive && (
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center' }}>
                           <span
-                            onClick={() => setDeactivateUid(u.uid)}
-                            style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 500 }}
+                            onClick={() => setEditUser(u)}
+                            style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500 }}
                           >
-                            Deactivate
+                            Edit
                           </span>
-                        )}
+                          <span
+                            onClick={() => setResetUser(u)}
+                            style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', cursor: 'pointer', fontWeight: 500 }}
+                          >
+                            Reset password
+                          </span>
+                          {u.isActive && (
+                            <span
+                              onClick={() => setDeactivateUid(u.uid)}
+                              style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 500 }}
+                            >
+                              Deactivate
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -840,6 +1056,14 @@ export default function SettingsPage() {
 
       {showCreateUser && (
         <CreateUserModal onClose={() => setShowCreateUser(false)} />
+      )}
+
+      {editUser && (
+        <EditUserModal user={editUser} onClose={() => setEditUser(null)} />
+      )}
+
+      {resetUser && (
+        <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} />
       )}
 
       <ConfirmModal

@@ -144,3 +144,14 @@ export async function changeUserRole(
     updatedAt: serverTimestamp(),
   })
 }
+
+/** Update editable user profile fields */
+export async function updateUser(
+  uid: string,
+  updates: { name?: string; role?: 'admin' | 'manager' | 'staff'; jobTitle?: string; contact?: string }
+): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  })
+}
