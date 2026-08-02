@@ -1,5 +1,5 @@
 import {
-  doc, updateDoc, onSnapshot,
+  doc, updateDoc, setDoc, onSnapshot,
   collection, query, orderBy,
   serverTimestamp
 } from 'firebase/firestore'
@@ -67,7 +67,7 @@ export function subscribeToSettings(
   })
 }
 
-/** Save branding fields (no bankIfsc / defaultTerms) */
+/** Save branding fields — creates doc if it doesn't exist yet */
 export async function saveBranding(updates: {
   phone?:          string
   address?:        string
@@ -77,31 +77,31 @@ export async function saveBranding(updates: {
   upiId?:          string
   activeStudioId?: string
 }): Promise<void> {
-  await updateDoc(doc(db, 'studioSettings', 'config'), {
+  await setDoc(doc(db, 'studioSettings', 'config'), {
     ...updates,
     updatedAt: serverTimestamp(),
-  })
+  }, { merge: true })
 }
 
-/** Save GST & numbering settings */
+/** Save numbering settings — creates doc if it doesn't exist yet */
 export async function saveGstSettings(data: {
   gstEnabled:          boolean
   invoicePrefix:       string
   quotationPrefix:     string
   invoiceStartNumber:  number
 }): Promise<void> {
-  await updateDoc(doc(db, 'studioSettings', 'config'), {
+  await setDoc(doc(db, 'studioSettings', 'config'), {
     ...data,
     updatedAt: serverTimestamp(),
-  })
+  }, { merge: true })
 }
 
-/** Save full packages array */
+/** Save full packages array — creates doc if it doesn't exist yet */
 export async function savePackages(packages: PackageTemplate[]): Promise<void> {
-  await updateDoc(doc(db, 'studioSettings', 'config'), {
+  await setDoc(doc(db, 'studioSettings', 'config'), {
     packages,
     updatedAt: serverTimestamp(),
-  })
+  }, { merge: true })
 }
 
 // ─────────────────────────────────────────────
