@@ -54,8 +54,8 @@ const BRAND_FIELDS: Array<{ key: keyof BrandForm; label: string }> = [
   { key: 'address', label: 'Address' },
   { key: 'city',    label: 'City'    },
   { key: 'email',   label: 'Email'   },
-  { key: 'gstin',   label: 'GSTIN'   },
   { key: 'upiId',   label: 'UPI ID'  },
+  { key: 'gstin',   label: 'GSTIN'   },
 ]
 
 const PKG_COLOURS: Record<string, { bg: string; fg: string }> = {
@@ -526,53 +526,64 @@ export default function SettingsPage() {
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
                 Select which studio this document set belongs to · appears on quotations, invoices and payslips
               </div>
-              <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
-                {STUDIOS.map(studio => (
-                  <div
-                    key={studio.id}
-                    onClick={() => setSelectedStudio(studio.id)}
-                    style={{
-                      width: '192px', flexShrink: 0,
-                      border: selectedStudio === studio.id
-                        ? '1.5px solid var(--color-primary)'
-                        : '0.5px solid var(--color-border)',
-                      borderRadius: '10px', padding: '14px', cursor: 'pointer',
-                      background: selectedStudio === studio.id
-                        ? 'var(--color-primary-muted)'
-                        : 'var(--color-surface-raised)',
-                      display: 'flex', alignItems: 'center', gap: '12px',
-                      position: 'relative', transition: 'border-color 0.15s, background 0.15s',
-                    }}
-                  >
-                    <div style={{
-                      width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
-                      background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <i className="ti ti-aperture" style={{ fontSize: '20px', color: '#ffffff' }} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {studio.name}
-                      </div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {studio.tagline} · GSTIN {studio.gstin}
-                      </div>
-                    </div>
-                    {selectedStudio === studio.id && (
+              <div style={{ display: 'flex', gap: '12px', paddingBottom: '4px' }}>
+                {STUDIOS.map(studio => {
+                  const isSelected = selectedStudio === studio.id
+                  return (
+                    <div
+                      key={studio.id}
+                      onClick={() => setSelectedStudio(studio.id)}
+                      style={{
+                        flex: 1,
+                        border: isSelected
+                          ? '1.5px solid var(--color-primary)'
+                          : '0.5px solid var(--color-border)',
+                        borderRadius: '12px',
+                        padding: '16px 18px',
+                        cursor: 'pointer',
+                        background: isSelected
+                          ? 'var(--color-primary-muted)'
+                          : 'var(--color-surface-raised)',
+                        display: 'flex', alignItems: 'center', gap: '14px',
+                        transition: 'border-color 0.15s, background 0.15s',
+                      }}
+                    >
+                      {/* Studio logo */}
                       <div style={{
-                        position: 'absolute', top: '10px', right: '10px',
-                        width: '18px', height: '18px', borderRadius: '50%',
-                        background: 'var(--color-primary)',
+                        width: '52px', height: '40px', borderRadius: '8px', flexShrink: 0,
+                        background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        overflow: 'hidden',
                       }}>
-                        <i className="ti ti-check" style={{ fontSize: '11px', color: '#ffffff' }} />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/logo.png" alt={studio.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* Studio name + tagline */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>
+                          {studio.name}
+                        </div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                          {studio.tagline}
+                        </div>
+                      </div>
+
+                      {/* Radio indicator */}
+                      <div style={{
+                        width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                        background:  isSelected ? 'var(--color-primary)' : 'transparent',
+                        border:      isSelected ? 'none' : '1.5px solid var(--color-foreground-subtle)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'background 0.15s, border 0.15s',
+                      }}>
+                        {isSelected && (
+                          <i className="ti ti-check" style={{ fontSize: '12px', color: '#ffffff' }} />
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
