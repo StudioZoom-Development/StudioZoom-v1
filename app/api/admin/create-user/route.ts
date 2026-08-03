@@ -55,6 +55,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Firebase Auth error codes come as FirebaseError
     const code    = (err as { code?: string }).code ?? 'unknown'
     console.error('[create-user]', code, message)
-    return NextResponse.json({ error: message, code }, { status: 500 })
+    return NextResponse.json({ error: message, code }, { status: 400 })
   }
 }

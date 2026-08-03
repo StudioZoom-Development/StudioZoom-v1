@@ -17,8 +17,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'uid is required' }, { status: 400 })
     }
 
-    // Hard-delete Firebase Auth account — permanent, cannot be undone
-    await getAdminAuth().deleteUser(uid)
+    // Hard-delete Firebase Auth account — try catch if user doesn't exist in Auth
+    try {
+      await getAdminAuth().deleteUser(uid)
+    } catch (err: unknown) {
+      console.warn('[delete-user] Auth delete skipped:', (err as { message?: string }).message)
+    }
 
     // Hard-delete Firestore /users/{uid}
     await getAdminFirestore().collection('users').doc(uid).delete()
@@ -28,6 +32,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const message = err instanceof Error ? err.message : 'Unknown error'
     const code    = (err as { code?: string }).code ?? 'unknown'
     console.error('[delete-user]', code, message)
-    return NextResponse.json({ error: message, code }, { status: 500 })
+    return NextResponse.json({ error: message, code }, { status: 400 })
   }
 }
