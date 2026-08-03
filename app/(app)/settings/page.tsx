@@ -9,6 +9,7 @@ import { useRole } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import {
   StudioSettings,
+  StudioBranding,
   PackageTemplate,
   PackageLineItem,
   UserRow,
@@ -82,6 +83,8 @@ interface BrandForm {
   gstin:   string
   upiId:   string
 }
+
+const EMPTY_BRAND: BrandForm = { phone: '', address: '', city: '', email: '', gstin: '', upiId: '' }
 
 function getInitials(name: string): string {
   if (!name) return '??'
@@ -546,14 +549,17 @@ export default function SettingsPage() {
   const [users,    setUsers]    = useState<UserRow[]>([])
 
   // Studio selector
-  const [selectedStudio, setSelectedStudio] = useState('studio-zoom')
+  const [selectedStudio, setSelectedStudio] = useState<'studio-zoom' | 'studio-zoom-productions'>('studio-zoom')
 
-  // Branding form
-  const [brandForm, setBrandForm] = useState<BrandForm>({
-    phone: '', address: '', city: '', email: '', gstin: '', upiId: '',
+  // Per-studio branding data — one entry per studio
+  const [brandData, setBrandData] = useState<Record<string, BrandForm>>({
+    'studio-zoom':             { ...EMPTY_BRAND },
+    'studio-zoom-productions': { ...EMPTY_BRAND },
   })
-  const [brandSaving, setBrandSaving] = useState(false)
-  const [brandSaved,  setBrandSaved]  = useState(false)
+  // Edit mode toggle
+  const [brandEditMode, setBrandEditMode] = useState(false)
+  const [brandSaving,   setBrandSaving]   = useState(false)
+  const [brandSaved,    setBrandSaved]    = useState(false)
 
   // Packages
   const [packages,     setPackages]     = useState<PackageTemplate[]>([])
@@ -586,17 +592,27 @@ export default function SettingsPage() {
     return subscribeToSettings(s => {
       if (!s) return
       setSettings(s)
-      setBrandForm({
-        phone:   s.phone   ?? '',
-        address: s.address ?? '',
-        city:    s.city    ?? '',
-        email:   s.email   ?? '',
-        gstin:   s.gstin   ?? '',
-        upiId:   s.upiId   ?? '',
-      })
-      if ((s as unknown as Record<string, string>).activeStudioId) {
-        setSelectedStudio((s as unknown as Record<string, string>).activeStudioId)
-      }
+      // Load per-studio branding into the map
+      setBrandData(prev => ({
+        ...prev,
+        'studio-zoom': {
+          phone:   s.studioZoom?.phone   ?? '',
+          address: s.studioZoom?.address ?? '',
+          city:    s.studioZoom?.city    ?? '',
+          email:   s.studioZoom?.email   ?? '',
+          gstin:   s.studioZoom?.gstin   ?? '',
+          upiId:   s.studioZoom?.upiId   ?? '',
+        },
+        'studio-zoom-productions': {
+          phone:   s.studioZoomProds?.phone   ?? '',
+          address: s.studioZoomProds?.address ?? '',
+          city:    s.studioZoomProds?.city    ?? '',
+          email:   s.studioZoomProds?.email   ?? '',
+          gstin:   s.studioZoomProds?.gstin   ?? '',
+          upiId:   s.studioZoomProds?.upiId   ?? '',
+        },
+      }))
+      if (s.activeStudioId) setSelectedStudio(s.activeStudioId as 'studio-zoom' | 'studio-zoom-productions')
       setPackages(s.packages ?? [])
       setGstEnabled(s.gstEnabled ?? false)
       setInvoicePrefix(s.invoicePrefix ?? 'ZS-INV-')
@@ -616,8 +632,10 @@ export default function SettingsPage() {
   const handleSaveBranding = async () => {
     setBrandSaving(true)
     try {
-      await saveBranding({ ...brandForm, activeStudioId: selectedStudio })
+      const current = brandData[selectedStudio] ?? EMPTY_BRAND
+      await saveBranding(selectedStudio, current as StudioBranding)
       setBrandSaved(true)
+      setBrandEditMode(false)
       setTimeout(() => setBrandSaved(false), 2000)
     } catch (err) {
       console.error('Failed to save branding:', err)
@@ -728,7 +746,7 @@ export default function SettingsPage() {
           }}>
 
 
-            {/* ── Studio identity selector */}
+                      {/* ── Studio identity selector */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px',
               borderBottom: '0.5px solid var(--color-border)', paddingBottom: '20px' }}>
               <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Studio identity</div>
@@ -741,7 +759,10 @@ export default function SettingsPage() {
                   return (
                     <div
                       key={studio.id}
-                      onClick={() => setSelectedStudio(studio.id)}
+                      onClick={() => {
+                        setSelectedStudio(studio.id as 'studio-zoom' | 'studio-zoom-productions')
+                        setBrandEditMode(false) // exit edit mode when switching studio
+                      }}
                       style={{
                         flex: 1,
                         border: isSelected
@@ -796,26 +817,87 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* ── 6 branding fields — 3-col grid (Phone/Address/City · Email/UPI/GSTIN) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-              {BRAND_FIELDS.map(f => (
-                <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{f.label}</label>
-                  <Input
-                    value={brandForm[f.key]}
-                    onChange={e => setBrandForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                    className="h-9"
-                  />
-                </div>
-              ))}
+            {/* ── Branding fields header with edit toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
+                {STUDIOS.find(s => s.id === selectedStudio)?.name} details
+              </div>
+              {!brandEditMode ? (
+                <span
+                  onClick={() => setBrandEditMode(true)}
+                  title="Edit details"
+                  style={{
+                    width: '30px', height: '30px', borderRadius: '8px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: 'var(--color-accent)',
+                    background: 'transparent', transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-accent-muted)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <i className="ti ti-pencil" style={{ fontSize: '16px' }} />
+                </span>
+              ) : (
+                <span
+                  onClick={() => setBrandEditMode(false)}
+                  title="Cancel editing"
+                  style={{
+                    width: '30px', height: '30px', borderRadius: '8px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: 'var(--color-foreground-muted)',
+                    background: 'transparent', transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <i className="ti ti-x" style={{ fontSize: '16px' }} />
+                </span>
+              )}
             </div>
 
-            {/* ── Save */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-              <Button className="h-9 font-medium" onClick={handleSaveBranding} disabled={brandSaving}>
-                {brandSaving ? 'Saving…' : brandSaved ? 'Saved ✓' : 'Save changes'}
-              </Button>
+            {/* ── 6 branding fields — 3-col grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+              {BRAND_FIELDS.map(f => {
+                const val = (brandData[selectedStudio] ?? EMPTY_BRAND)[f.key]
+                return (
+                  <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{f.label}</label>
+                    {brandEditMode ? (
+                      <Input
+                        value={val}
+                        onChange={e => setBrandData(prev => ({
+                          ...prev,
+                          [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), [f.key]: e.target.value },
+                        }))}
+                        className="h-9"
+                      />
+                    ) : (
+                      <div style={{
+                        height: '36px', padding: '0 12px',
+                        display: 'flex', alignItems: 'center',
+                        background: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '8px',
+                        fontSize: 'var(--text-sm)',
+                        color: val ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {val || '—'}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
+
+            {/* ── Save — only in edit mode */}
+            {brandEditMode && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+                <Button className="h-9 font-medium" onClick={handleSaveBranding} disabled={brandSaving}>
+                  {brandSaving ? 'Saving…' : brandSaved ? 'Saved ✓' : 'Save changes'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

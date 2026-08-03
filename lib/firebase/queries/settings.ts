@@ -26,23 +26,25 @@ export interface PackageTemplate {
   lineItems: PackageLineItem[]
 }
 
+export interface StudioBranding {
+  phone:   string
+  address: string
+  city:    string
+  email:   string
+  gstin:   string
+  upiId:   string
+}
+
 export interface StudioSettings {
-  studioName:          string
-  phone:               string
-  address:             string
-  city:                string
-  email:               string
-  gstin:               string
-  upiId:               string
-  bankIfsc:            string
-  logoUrl?:            string
-  signatureUrl?:       string
-  defaultTerms:        string
+  /** Per-studio branding — keyed by studio ID (camelCase) */
+  studioZoom?:      StudioBranding
+  studioZoomProds?: StudioBranding
+  /** Which studio is the active default for new documents */
+  activeStudioId?:  string
   gstEnabled:          boolean
   invoicePrefix:       string
   quotationPrefix:     string
   invoiceStartNumber:  number
-  activeStudioId?:     string   // 'studio-zoom' | 'studio-zoom-productions'
   packages?:           PackageTemplate[]
 }
 
@@ -67,19 +69,17 @@ export function subscribeToSettings(
   })
 }
 
-/** Save branding fields — creates doc if it doesn't exist yet */
-export async function saveBranding(updates: {
-  phone?:          string
-  address?:        string
-  city?:           string
-  email?:          string
-  gstin?:          string
-  upiId?:          string
-  activeStudioId?: string
-}): Promise<void> {
+/** Save branding for a specific studio — creates doc if needed */
+export async function saveBranding(
+  studioId: 'studio-zoom' | 'studio-zoom-productions',
+  data: StudioBranding
+): Promise<void> {
+  // Map studio ID to the Firestore field key
+  const fieldKey = studioId === 'studio-zoom' ? 'studioZoom' : 'studioZoomProds'
   await setDoc(doc(db, 'studioSettings', 'config'), {
-    ...updates,
-    updatedAt: serverTimestamp(),
+    [fieldKey]:      data,
+    activeStudioId:  studioId,
+    updatedAt:       serverTimestamp(),
   }, { merge: true })
 }
 
