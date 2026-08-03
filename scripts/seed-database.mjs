@@ -12,6 +12,7 @@ import {
   getFirestore,
   doc,
   setDoc,
+  deleteDoc,
   collection,
   Timestamp,
   serverTimestamp
@@ -69,6 +70,17 @@ async function runSeed() {
     const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD)
     adminUser = cred.user
     console.log(`✓ Admin Auth user created (${adminUser.uid})`)
+  }
+
+  // ── Clean up old studioSettings documents before seeding fresh ones
+  console.log('\n--- Cleaning up old studioSettings ---')
+  for (const docId of ['config', 'brandConfig', 'numberingConfig', 'packageConfig']) {
+    try {
+      await deleteDoc(doc(db, 'studioSettings', docId))
+      console.log(`  ✓ Deleted studioSettings/${docId}`)
+    } catch {
+      console.log(`  ℹ  studioSettings/${docId} did not exist — skipping`)
+    }
   }
 
   // 1. /users
