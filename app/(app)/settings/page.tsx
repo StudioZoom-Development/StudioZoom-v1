@@ -237,113 +237,7 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
   )
 }
 
-// ─────────────────────────────────────────────
-// Create User Modal — calls /api/admin/create-user
-// ─────────────────────────────────────────────
 
-interface CreateUserModalProps { onClose: () => void }
-
-function CreateUserModal({ onClose }: CreateUserModalProps) {
-  const [name,     setName]     = useState('')
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [role,     setRole]     = useState<'admin' | 'manager' | 'staff'>('staff')
-  const [saving,   setSaving]   = useState(false)
-  const [error,    setError]    = useState('')
-
-  const handleCreate = async () => {
-    if (!name || !email || !password) { setError('All fields are required'); return }
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
-    setSaving(true); setError('')
-    try {
-      const res  = await fetch('/api/admin/create-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role }),
-      })
-      const data = await res.json() as { error?: string }
-      if (!res.ok) { setError(data.error ?? 'Failed to create user'); return }
-      onClose()
-    } catch { setError('Network error. Please try again.') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 50,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'var(--font-inter)',
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: '420px', background: 'var(--color-surface-overlay)',
-        border: '0.5px solid var(--color-border)',
-        borderRadius: '16px', padding: '24px',
-        display: 'flex', flexDirection: 'column', gap: '14px',
-      }}>
-        <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Create user</div>
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-          Creates a Firebase Auth account so the user can log in immediately.
-        </div>
-
-        {error && (
-          <div style={{
-            fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
-            background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
-          }}>{error}</div>
-        )}
-
-        {/* Full name */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Full name</label>
-          <Input value={name} onChange={e => setName(e.target.value)} className="h-9" placeholder="e.g. Sathish Kumar" />
-        </div>
-
-        {/* Email */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Email</label>
-          <Input value={email} onChange={e => setEmail(e.target.value)} className="h-9" placeholder="user@studiozoom.in" type="email" />
-        </div>
-
-        {/* Password */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Password</label>
-          <Input value={password} onChange={e => setPassword(e.target.value)} className="h-9" placeholder="Min. 8 characters" type="password" />
-        </div>
-
-        {/* Role */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Role</label>
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value as 'admin' | 'manager' | 'staff')}
-            style={{
-              height: '36px', padding: '0 12px', borderRadius: '8px',
-              background: 'var(--color-surface-raised)', border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-              outline: 'none', width: '100%',
-            }}
-          >
-            <option value="admin">Admin</option>
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-          <button onClick={onClose} style={{
-            height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
-            background: 'transparent', border: '0.5px solid var(--color-border)',
-            color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-          }}>Cancel</button>
-          <Button className="h-9 font-medium" onClick={handleCreate} disabled={saving}>
-            {saving ? 'Creating…' : 'Create user'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─────────────────────────────────────────────
 // Edit User Modal — updates /users/{uid} in Firestore
@@ -577,8 +471,7 @@ export default function SettingsPage() {
   const [gstSaved,         setGstSaved]         = useState(false)
 
   // User management
-  const [showCreateUser,    setShowCreateUser]    = useState(false)
-  const [editUser,          setEditUser]          = useState<UserRow | null>(null)
+  const [editUser,       setEditUser]       = useState<UserRow | null>(null)
   const [resetUser,         setResetUser]         = useState<UserRow | null>(null)
   const [deleteUid,        setDeleteUid]        = useState<string | null>(null)
   const [deleteLoading,    setDeleteLoading]    = useState(false)
@@ -1040,8 +933,8 @@ export default function SettingsPage() {
         {page === 'User management' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button className="h-9 font-medium" onClick={() => setShowCreateUser(true)}>
-                + Create user
+              <Button className="h-9 font-medium" onClick={() => router.push('/settings/users/new')}>
+                + Add user
               </Button>
             </div>
 
@@ -1194,9 +1087,7 @@ export default function SettingsPage() {
         />
       )}
 
-      {showCreateUser && (
-        <CreateUserModal onClose={() => setShowCreateUser(false)} />
-      )}
+
 
       {editUser && (
         <EditUserModal user={editUser} onClose={() => setEditUser(null)} />

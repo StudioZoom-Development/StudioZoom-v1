@@ -6,7 +6,7 @@ import { format, parseISO, isValid } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
-import { ConfirmModal }   from '@/components/shared/ConfirmModal'
+
 import {
   StaffMember,
   getStaffMember,
@@ -107,10 +107,6 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   const [loadingPay,  setLoadingPay]  = useState(false)
   const [loadingWork, setLoadingWork] = useState(false)
 
-  // Deactivate state
-  const [showDeactivate,    setShowDeactivate]    = useState(false)
-  const [deactivateLoading, setDeactivateLoading] = useState(false)
-
   useEffect(() => {
     getStaffMember(uid).then(data => {
       if (data) {
@@ -174,28 +170,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-  const handleDeactivateConfirm = async () => {
-    setDeactivateLoading(true)
-    try {
-      // Calls Admin SDK — disables Firebase Auth login + sets isActive: false
-      const res = await fetch('/api/admin/deactivate-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid }),
-      })
-      if (!res.ok) {
-        const d = await res.json() as { error?: string }
-        console.error('Failed to deactivate staff:', d.error)
-        return
-      }
-      router.push('/hrms/staff')
-    } catch (err) {
-      console.error('Failed to deactivate staff:', err)
-    } finally {
-      setDeactivateLoading(false)
-      setShowDeactivate(false)
-    }
-  }
+
 
   if (loading) {
     return (
@@ -367,27 +342,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
             {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save profile'}
           </Button>
 
-          {/* Deactivate Button — only if active */}
-          {staff.isActive && (
-            <button
-              onClick={() => setShowDeactivate(true)}
-              style={{
-                height: '36px', width: '100%', borderRadius: '8px', cursor: 'pointer',
-                background: 'transparent',
-                border: '0.5px solid var(--color-danger)',
-                color: 'var(--color-danger)',
-                fontSize: 'var(--text-sm)', fontWeight: 500,
-                fontFamily: 'var(--font-inter)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                transition: 'background 0.12s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-danger-muted)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <i className="ti ti-user-off" style={{ fontSize: '15px' }} />
-              Deactivate staff
-            </button>
-          )}
+
         </div>
 
         {/* Right Card — Tabs Container */}
@@ -631,16 +586,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Deactivate confirm modal */}
-      <ConfirmModal
-        open={showDeactivate}
-        title="Deactivate staff member?"
-        description={`${staff.name} will be marked inactive and will no longer appear in active staff lists. You can reactivate them later from Settings → User management.`}
-        confirmLabel="Deactivate"
-        onConfirm={handleDeactivateConfirm}
-        onCancel={() => setShowDeactivate(false)}
-        loading={deactivateLoading}
-      />
+
     </div>
   )
 }

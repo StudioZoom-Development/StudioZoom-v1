@@ -54,19 +54,6 @@ export default function StaffListPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Add staff modal state
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState<NewStaffInput>({
-    name: '',
-    email: '',
-    contact: '',
-    jobTitle: 'Photographer',
-    role: 'staff',
-    joinDate: new Date().toISOString().split('T')[0],
-    baseSalary: 28000
-  })
-
   // Deactivate modal state
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
   const [deactivating, setDeactivating] = useState(false)
@@ -86,29 +73,6 @@ export default function StaffListPage() {
     const emailMatch = member.email?.toLowerCase().includes(q)
     return nameMatch || titleMatch || emailMatch
   })
-
-  const handleAddSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.name.trim() || !formData.email.trim()) return
-    setSaving(true)
-    try {
-      await addStaffMember(formData)
-      setShowAddModal(false)
-      setFormData({
-        name: '',
-        email: '',
-        contact: '',
-        jobTitle: 'Photographer',
-        role: 'staff',
-        joinDate: new Date().toISOString().split('T')[0],
-        baseSalary: 28000
-      })
-    } catch (err) {
-      console.error('Failed to add staff:', err)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDeactivateConfirm = async () => {
     if (!selectedStaff) return
@@ -162,7 +126,7 @@ export default function StaffListPage() {
           />
         </div>
         <div style={{ flex: 1 }} />
-        <Button className="h-9 font-medium" onClick={() => setShowAddModal(true)}>
+        <Button className="h-9 font-medium" onClick={() => router.push('/settings/users/new')}>
           ＋ Add staff
         </Button>
       </div>
@@ -253,7 +217,7 @@ export default function StaffListPage() {
                     icon="ti-id-badge-2"
                     title={searchQuery ? 'No matching staff members' : 'No staff members found'}
                     description={searchQuery ? 'Try adjusting your search query.' : 'Get started by adding your first staff member.'}
-                    action={!searchQuery ? { label: '＋ Add staff', onClick: () => setShowAddModal(true) } : undefined}
+                    action={!searchQuery ? { label: '＋ Add staff', onClick: () => router.push('/settings/users/new') } : undefined}
                   />
                 </td>
               </tr>
@@ -355,201 +319,6 @@ export default function StaffListPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Add Staff Modal */}
-      {showAddModal && (
-        <div
-          onClick={() => setShowAddModal(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            background: 'rgba(0,0,0,0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: '520px',
-              background: 'var(--color-surface-overlay)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '16px',
-              padding: '28px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '20px'
-            }}
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                Add staff member
-              </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                Creates a new team member record
-              </div>
-            </div>
-
-            {/* Form Fields */}
-            <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
-              {/* Full Name */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                  Full name
-                </label>
-                <Input
-                  required
-                  placeholder="e.g. Siva Prakash"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="h-9"
-                />
-              </div>
-
-              {/* Email + Contact (2-col grid) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Email
-                  </label>
-                  <Input
-                    required
-                    type="email"
-                    placeholder="siva@studiozoom.in"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="h-9"
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Contact
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{
-                      height: '36px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0 10px',
-                      background: 'var(--color-surface-overlay)',
-                      border: '0.5px solid var(--color-border)',
-                      borderRight: 'none',
-                      borderRadius: '8px 0 0 8px',
-                      fontSize: 'var(--text-sm)',
-                      color: 'var(--color-foreground-muted)',
-                      boxSizing: 'border-box'
-                    }}>
-                      +91
-                    </span>
-                    <input
-                      placeholder="98400 11223"
-                      value={formData.contact}
-                      onChange={e => setFormData({ ...formData, contact: e.target.value })}
-                      style={{
-                        fontFamily: 'var(--font-inter)',
-                        flex: 1,
-                        height: '36px',
-                        background: 'var(--color-surface-raised)',
-                        border: '0.5px solid var(--color-border)',
-                        borderRadius: '0 8px 8px 0',
-                        padding: '0 12px',
-                        fontSize: 'var(--text-sm)',
-                        color: 'var(--color-foreground)',
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Job title + App role (2-col grid) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Job title
-                  </label>
-                  <select
-                    value={formData.jobTitle}
-                    onChange={e => setFormData({ ...formData, jobTitle: e.target.value })}
-                    style={SELECT_STYLE}
-                  >
-                    {JOB_TITLE_OPTIONS.map(opt => (
-                      <option key={opt} value={opt} style={{ background: 'var(--color-surface-raised)', color: 'var(--color-foreground)' }}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    App role
-                  </label>
-                  <select
-                    value={formData.role}
-                    onChange={e => setFormData({ ...formData, role: e.target.value as 'staff' | 'manager' })}
-                    style={SELECT_STYLE}
-                  >
-                    <option value="staff" style={{ background: 'var(--color-surface-raised)', color: 'var(--color-foreground)' }}>Staff</option>
-                    <option value="manager" style={{ background: 'var(--color-surface-raised)', color: 'var(--color-foreground)' }}>Manager</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Join date + Base salary (2-col grid) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Join date
-                  </label>
-                  <Input
-                    type="date"
-                    value={formData.joinDate}
-                    onChange={e => setFormData({ ...formData, joinDate: e.target.value })}
-                    className="h-9"
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Base salary
-                  </label>
-                  <Input
-                    type="number"
-                    placeholder="28000"
-                    value={formData.baseSalary || ''}
-                    onChange={e => setFormData({ ...formData, baseSalary: Number(e.target.value) })}
-                    className="h-9"
-                  />
-                </div>
-              </div>
-
-              {/* Footer Actions */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '10px',
-                borderTop: '0.5px solid var(--color-border)',
-                paddingTop: '16px',
-                marginTop: '4px'
-              }}>
-                <Button type="button" variant="outline" className="h-9" onClick={() => setShowAddModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="h-9 font-medium" disabled={saving}>
-                  {saving ? 'Adding…' : 'Add staff →'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Deactivate/Reactivate Confirmation Modal */}
       <ConfirmModal

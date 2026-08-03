@@ -17,7 +17,7 @@ function getAdminApp(): App {
   if (_app) return _app
   if (getApps().length > 0) { _app = getApps()[0]; return _app }
 
-  const raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
+  let raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
   if (!raw) {
     throw new Error(
       'FIREBASE_ADMIN_SERVICE_ACCOUNT env var is missing. ' +
@@ -25,20 +25,45 @@ function getAdminApp(): App {
     )
   }
 
-  const serviceAccount = JSON.parse(raw) as {
-    project_id:   string
-    client_email: string
-    private_key:  string
+  raw = raw.trim()
+  // Strip outer quotes if wrapped in single or double quotes
+  if ((raw.startsWith("'") && raw.endsWith("'")) || (raw.startsWith('"') && raw.endsWith('"'))) {
+    raw = raw.slice(1, -1)
   }
 
-  _app = initializeApp({
-    credential: cert({
-      projectId:   serviceAccount.project_id,
-      clientEmail: serviceAccount.client_email,
-      privateKey:  serviceAccount.private_key.replace(/\\n/g, '\n'),
-    }),
-  })
-  return _app
+  try {
+    const serviceAccount = JSON.parse(raw) as {
+      project_id?:   string
+      projectId?:    string
+      client_email?: string
+      clientEmail?:  string
+      private_key?:  string
+      privateKey?:   string
+    }
+
+    const projectId   = serviceAccount.project_id   || serviceAccount.projectId
+    const clientEmail = serviceAccount.client_email || serviceAccount.clientEmail
+    let   privateKey  = serviceAccount.private_key  || serviceAccount.privateKey
+
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error('Missing projectId, clientEmail, or privateKey in FIREBASE_ADMIN_SERVICE_ACCOUNT JSON.')
+    }
+
+    // Format multiline private key correctly
+    privateKey = privateKey.replace(/\\n/g, '\n')
+
+    _app = initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    })
+    return _app
+  } catch (err) {
+    console.error('[Admin SDK Init Error]:', err)
+    throw err
+  }
 }
 
 export function getAdminAuth(): Auth {
