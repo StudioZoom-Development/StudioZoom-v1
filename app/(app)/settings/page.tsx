@@ -8,16 +8,19 @@ import { useUIStore } from '@/store/uiStore'
 import { useRole } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import {
-  StudioSettings,
   StudioBranding,
   PackageTemplate,
   PackageLineItem,
   UserRow,
-  subscribeToSettings,
+  subscribeToBrandConfig,
+  subscribeToNumberingConfig,
+  subscribeToPackageConfig,
+  subscribeToActiveConfig,
   subscribeToAllUsers,
   saveBranding,
-  saveGstSettings,
+  saveNumberingConfig,
   savePackages,
+  saveActiveConfig,
   updateUser,
 } from '@/lib/firebase/queries/settings'
 
@@ -543,10 +546,8 @@ export default function SettingsPage() {
   const { isAdmin } = useRole()
   useUIStore() // keep store subscribed for sidebar theme sync
 
-  const [page,     setPage]     = useState<Page>('Studio branding')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_settings, setSettings] = useState<StudioSettings | null>(null)
-  const [users,    setUsers]    = useState<UserRow[]>([])
+  const [page,  setPage]  = useState<Page>('Studio branding')
+  const [users, setUsers] = useState<UserRow[]>([])
 
   // Studio selector
   const [selectedStudio, setSelectedStudio] = useState<'studio-zoom' | 'studio-zoom-productions'>('studio-zoom')
@@ -587,37 +588,57 @@ export default function SettingsPage() {
     if (isAdmin === false) router.replace('/dashboard')
   }, [isAdmin, router])
 
-  // Real-time settings subscription
+  // Real-time subscriptions — one per Firestore document
+
+  // brandConfig
   useEffect(() => {
-    return subscribeToSettings(s => {
-      if (!s) return
-      setSettings(s)
-      // Load per-studio branding into the map
+    return subscribeToBrandConfig(b => {
+      if (!b) return
       setBrandData(prev => ({
         ...prev,
         'studio-zoom': {
-          phone:   s.studioZoom?.phone   ?? '',
-          address: s.studioZoom?.address ?? '',
-          city:    s.studioZoom?.city    ?? '',
-          email:   s.studioZoom?.email   ?? '',
-          gstin:   s.studioZoom?.gstin   ?? '',
-          upiId:   s.studioZoom?.upiId   ?? '',
+          phone:   b.studioZoom?.phone   ?? '',
+          address: b.studioZoom?.address ?? '',
+          city:    b.studioZoom?.city    ?? '',
+          email:   b.studioZoom?.email   ?? '',
+          gstin:   b.studioZoom?.gstin   ?? '',
+          upiId:   b.studioZoom?.upiId   ?? '',
         },
         'studio-zoom-productions': {
-          phone:   s.studioZoomProds?.phone   ?? '',
-          address: s.studioZoomProds?.address ?? '',
-          city:    s.studioZoomProds?.city    ?? '',
-          email:   s.studioZoomProds?.email   ?? '',
-          gstin:   s.studioZoomProds?.gstin   ?? '',
-          upiId:   s.studioZoomProds?.upiId   ?? '',
+          phone:   b.studioZoomProds?.phone   ?? '',
+          address: b.studioZoomProds?.address ?? '',
+          city:    b.studioZoomProds?.city    ?? '',
+          email:   b.studioZoomProds?.email   ?? '',
+          gstin:   b.studioZoomProds?.gstin   ?? '',
+          upiId:   b.studioZoomProds?.upiId   ?? '',
         },
       }))
-      if (s.activeStudioId) setSelectedStudio(s.activeStudioId as 'studio-zoom' | 'studio-zoom-productions')
-      setPackages(s.packages ?? [])
-      setGstEnabled(s.gstEnabled ?? false)
-      setInvoicePrefix(s.invoicePrefix ?? 'ZS-INV-')
-      setQuotationPrefix(s.quotationPrefix ?? 'ZS-Q-')
-      setNextNumber(String(s.invoiceStartNumber ?? 1).padStart(4, '0'))
+    })
+  }, [])
+
+  // numberingConfig
+  useEffect(() => {
+    return subscribeToNumberingConfig(n => {
+      if (!n) return
+      setGstEnabled(n.gstEnabled ?? false)
+      setInvoicePrefix(n.invoicePrefix ?? 'ZS-INV-')
+      setQuotationPrefix(n.quotationPrefix ?? 'ZS-Q-')
+      setNextNumber(String(n.invoiceStartNumber ?? 1).padStart(4, '0'))
+    })
+  }, [])
+
+  // packageConfig
+  useEffect(() => {
+    return subscribeToPackageConfig(p => {
+      setPackages(p?.packages ?? [])
+    })
+  }, [])
+
+  // config (active state)
+  useEffect(() => {
+    return subscribeToActiveConfig(a => {
+      if (!a) return
+      if (a.activeStudioId) setSelectedStudio(a.activeStudioId as 'studio-zoom' | 'studio-zoom-productions')
     })
   }, [])
 
@@ -634,6 +655,8 @@ export default function SettingsPage() {
     try {
       const current = brandData[selectedStudio] ?? EMPTY_BRAND
       await saveBranding(selectedStudio, current as StudioBranding)
+      // Also update activeStudioId in /config
+      await saveActiveConfig({ activeStudioId: selectedStudio })
       setBrandSaved(true)
       setBrandEditMode(false)
       setTimeout(() => setBrandSaved(false), 2000)
@@ -661,20 +684,21 @@ export default function SettingsPage() {
     }
   }
 
-  // ── GST save
+  // ── Numbering save
   const handleSaveGst = async () => {
     setGstSaving(true)
     try {
-      await saveGstSettings({
+      await saveNumberingConfig({
         gstEnabled,
         invoicePrefix,
         quotationPrefix,
-        invoiceStartNumber: Number(nextNumber.replace(/^0+/, '') || '1'),
+        invoiceStartNumber:   Number(nextNumber.replace(/^0+/, '') || '1'),
+        quotationStartNumber: 1,
       })
       setGstSaved(true)
       setTimeout(() => setGstSaved(false), 2000)
     } catch (err) {
-      console.error('Failed to save GST settings:', err)
+      console.error('Failed to save numbering settings:', err)
     } finally {
       setGstSaving(false)
     }

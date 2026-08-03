@@ -143,22 +143,47 @@ async function runSeed() {
     console.log(`  ✓ Equipment written: ${item.name} (${item.itemCode})`)
   }
 
-  // 3. /studioSettings -> config
+  // 3. /studioSettings — 4 focused documents
   console.log('\n--- Seeding Studio Settings ---')
-  const configRef = doc(db, 'studioSettings', 'config')
-  await setDoc(configRef, {
-    studioName: 'Studio Zoom',
-    address: 'Avadi, Tamil Nadu',
-    city: 'Avadi',
-    phone: '+91 XXXXX XXXXX',
-    email: 'info@studiozoom.in',
-    defaultTerms: '50% advance required. Balance due on delivery.',
-    gstEnabled: false,
-    gstRate: 18,
-    invoicePrefix: 'ZS-INV-',
-    quotationPrefix: 'ZS-Q-',
-    invoiceStartNumber: 1,
+
+  // brandConfig — per-studio contact details
+  const brandConfigRef = doc(db, 'studioSettings', 'brandConfig')
+  await setDoc(brandConfigRef, {
+    studioZoom: {
+      phone:   '+91 XXXXX XXXXX',
+      address: 'Avadi, Tamil Nadu',
+      city:    'Avadi',
+      email:   'info@studiozoom.in',
+      gstin:   '',
+      upiId:   '',
+    },
+    studioZoomProds: {
+      phone:   '+91 XXXXX XXXXX',
+      address: 'Avadi, Tamil Nadu',
+      city:    'Avadi',
+      email:   'productions@studiozoom.in',
+      gstin:   '',
+      upiId:   '',
+    },
+    updatedAt: serverTimestamp(),
+  }, { merge: true })
+  console.log('  ✓ brandConfig written')
+
+  // numberingConfig — invoice/quotation numbering & GST
+  const numberingRef = doc(db, 'studioSettings', 'numberingConfig')
+  await setDoc(numberingRef, {
+    gstEnabled:           false,
+    invoicePrefix:        'ZS-INV-',
+    quotationPrefix:      'ZS-Q-',
+    invoiceStartNumber:   1,
     quotationStartNumber: 1,
+    updatedAt: serverTimestamp(),
+  }, { merge: true })
+  console.log('  ✓ numberingConfig written')
+
+  // packageConfig — service package templates
+  const packageRef = doc(db, 'studioSettings', 'packageConfig')
+  await setDoc(packageRef, {
     packages: [
       {
         id: 'silver',
@@ -189,9 +214,20 @@ async function runSeed() {
           { description: 'Premium album 30 sheets', qty: 1, rate: 30000, amount: 30000 }
         ]
       }
-    ]
+    ],
+    updatedAt: serverTimestamp(),
   }, { merge: true })
-  console.log('  ✓ Studio Settings config document written!')
+  console.log('  ✓ packageConfig written')
+
+  // config — active runtime state
+  const configRef = doc(db, 'studioSettings', 'config')
+  await setDoc(configRef, {
+    activeStudioId:         'studio-zoom',
+    currentInvoiceNumber:   0,
+    currentQuotationNumber: 0,
+    updatedAt: serverTimestamp(),
+  }, { merge: true })
+  console.log('  ✓ config (active state) written')
 
   // 4. /clients
   console.log('\n--- Seeding Clients ---')
