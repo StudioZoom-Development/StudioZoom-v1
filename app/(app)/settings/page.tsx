@@ -17,7 +17,6 @@ import {
   saveBranding,
   saveGstSettings,
   savePackages,
-  deactivateUser,
   updateUser,
 } from '@/lib/firebase/queries/settings'
 
@@ -574,8 +573,8 @@ export default function SettingsPage() {
   const [showCreateUser,    setShowCreateUser]    = useState(false)
   const [editUser,          setEditUser]          = useState<UserRow | null>(null)
   const [resetUser,         setResetUser]         = useState<UserRow | null>(null)
-  const [deactivateUid,     setDeactivateUid]     = useState<string | null>(null)
-  const [deactivateLoading, setDeactivateLoading] = useState(false)
+  const [deleteUid,        setDeleteUid]        = useState<string | null>(null)
+  const [deleteLoading,    setDeleteLoading]    = useState(false)
 
   // Guard: admin only
   useEffect(() => {
@@ -664,20 +663,28 @@ export default function SettingsPage() {
   }
 
   // ── Deactivate user
-  const handleDeactivateConfirm = async () => {
-    if (!deactivateUid) return
-    setDeactivateLoading(true)
+  const handleDeleteConfirm = async () => {
+    if (!deleteUid) return
+    setDeleteLoading(true)
     try {
-      await deactivateUser(deactivateUid)
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: deleteUid }),
+      })
+      if (!res.ok) {
+        const d = await res.json() as { error?: string }
+        console.error('Failed to delete user:', d.error)
+      }
     } catch (err) {
-      console.error('Failed to deactivate user:', err)
+      console.error('Failed to delete user:', err)
     } finally {
-      setDeactivateLoading(false)
-      setDeactivateUid(null)
+      setDeleteLoading(false)
+      setDeleteUid(null)
     }
   }
 
-  const deactivatingUser = users.find(u => u.uid === deactivateUid)
+  const deletingUser = users.find(u => u.uid === deleteUid)
 
   return (
     <div style={{
@@ -1011,27 +1018,54 @@ export default function SettingsPage() {
 
                       {/* ACTIONS */}
                       <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {/* Edit */}
                           <span
                             onClick={() => setEditUser(u)}
-                            style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500 }}
+                            title="Edit profile"
+                            style={{
+                              width: '30px', height: '30px', borderRadius: '8px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', color: 'var(--color-accent)',
+                              background: 'transparent', transition: 'background 0.12s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-accent-muted)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                           >
-                            Edit
+                            <i className="ti ti-pencil" style={{ fontSize: '16px' }} />
                           </span>
+
+                          {/* Reset password */}
                           <span
                             onClick={() => setResetUser(u)}
-                            style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', cursor: 'pointer', fontWeight: 500 }}
+                            title="Reset password"
+                            style={{
+                              width: '30px', height: '30px', borderRadius: '8px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', color: 'var(--color-foreground-muted)',
+                              background: 'transparent', transition: 'background 0.12s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                           >
-                            Reset password
+                            <i className="ti ti-key" style={{ fontSize: '16px' }} />
                           </span>
-                          {u.isActive && (
-                            <span
-                              onClick={() => setDeactivateUid(u.uid)}
-                              style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 500 }}
-                            >
-                              Deactivate
-                            </span>
-                          )}
+
+                          {/* Delete */}
+                          <span
+                            onClick={() => setDeleteUid(u.uid)}
+                            title="Delete user"
+                            style={{
+                              width: '30px', height: '30px', borderRadius: '8px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', color: 'var(--color-danger)',
+                              background: 'transparent', transition: 'background 0.12s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-danger-muted)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <i className="ti ti-trash" style={{ fontSize: '16px' }} />
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -1067,13 +1101,13 @@ export default function SettingsPage() {
       )}
 
       <ConfirmModal
-        open={!!deactivateUid}
-        title="Deactivate user?"
-        description={`${deactivatingUser?.name ?? 'This user'} will lose access to Studio Zoom. You can reactivate them later from the Staff page.`}
-        confirmLabel="Deactivate"
-        onConfirm={handleDeactivateConfirm}
-        onCancel={() => setDeactivateUid(null)}
-        loading={deactivateLoading}
+        open={!!deleteUid}
+        title="Delete user?"
+        description={`${deletingUser?.name ?? 'This user'} will be permanently disabled and removed from Studio Zoom. This cannot be undone from the app.`}
+        confirmLabel="Delete"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteUid(null)}
+        loading={deleteLoading}
       />
     </div>
   )
