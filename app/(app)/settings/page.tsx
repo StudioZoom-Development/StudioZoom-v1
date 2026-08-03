@@ -342,11 +342,20 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: user.email }),
       })
-      const data = await res.json() as { link?: string; error?: string }
+      const text = await res.text()
+      let data: { link?: string; error?: string } = {}
+      try {
+        data = JSON.parse(text)
+      } catch {
+        setError(`Server returned status ${res.status}. Check Vercel environment variables or service account configuration.`)
+        return
+      }
       if (!res.ok) { setError(data.error ?? 'Failed to generate link'); return }
       setLink(data.link ?? '')
-    } catch { setError('Network error. Please try again.') }
-    finally { setLoading(false) }
+    } catch (err) {
+      console.error('Reset password error:', err)
+      setError('Network error. Please check your connection and try again.')
+    } finally { setLoading(false) }
   }
 
   const handleCopy = async () => {

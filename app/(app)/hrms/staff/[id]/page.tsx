@@ -285,15 +285,16 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
             />
           </div>
 
-          {/* Email */}
+          {/* Email — uneditable */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Email
+              Email (uneditable)
             </label>
             <Input
               value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              className="h-9"
+              readOnly
+              disabled
+              className="h-9 opacity-60 cursor-not-allowed"
             />
           </div>
 
