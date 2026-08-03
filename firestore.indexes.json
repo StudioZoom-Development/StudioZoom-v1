@@ -63,6 +63,18 @@
     {
       "collectionGroup": "leads",
       "fields": [{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]
+    },
+    {
+      "collectionGroup": "users",
+      "fields": [{"fieldPath":"role","order":"ASCENDING"},{"fieldPath":"name","order":"ASCENDING"}]
+    },
+    {
+      "collectionGroup": "payslips",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"year","order":"DESCENDING"}]
+    },
+    {
+      "collectionGroup": "staffAssignments",
+      "fields": [{"fieldPath":"staffUid","order":"ASCENDING"},{"fieldPath":"eventDate","order":"DESCENDING"}]
     }
   ]
 }

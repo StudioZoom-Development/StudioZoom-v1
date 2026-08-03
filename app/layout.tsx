@@ -6,6 +6,11 @@ import { Providers } from './providers'
 export const metadata: Metadata = {
   title:       'Studio Zoom',
   description: 'Photography & Video Studio Management — CRM, HRMS, ERP',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.png',
+    apple: '/icon.png',
+  },
 }
 
 export default function RootLayout({
@@ -16,6 +21,8 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+        <link rel="icon" type="image/png" href="/icon.png" />
+        <link rel="shortcut icon" href="/favicon.png" />
         {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link rel="stylesheet" href="/_ds_bundle.css" />
         <script dangerouslySetInnerHTML={{ __html: 'window.module = { exports: {} };' }} />
