@@ -1,13 +1,14 @@
 /**
- * POST /api/admin/delete-user
+ * POST /api/admin/deactivate-user
  *
- * PERMANENTLY deletes the Firebase Auth account and hard-deletes
- * the /users/{uid} Firestore document. This cannot be undone.
+ * Disables the Firebase Auth account (user cannot log in)
+ * and sets isActive: false on /users/{uid} in Firestore.
  *
  * Body: { uid }
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
+import { FieldValue }                       from 'firebase-admin/firestore'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -17,17 +18,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'uid is required' }, { status: 400 })
     }
 
-    // Hard-delete Firebase Auth account — permanent, cannot be undone
-    await getAdminAuth().deleteUser(uid)
+    // Disable Firebase Auth account — user cannot log in
+    await getAdminAuth().updateUser(uid, { disabled: true })
 
-    // Hard-delete Firestore /users/{uid}
-    await getAdminFirestore().collection('users').doc(uid).delete()
+    // Mark inactive in Firestore
+    await getAdminFirestore().collection('users').doc(uid).update({
+      isActive:  false,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
 
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     const code    = (err as { code?: string }).code ?? 'unknown'
-    console.error('[delete-user]', code, message)
+    console.error('[deactivate-user]', code, message)
     return NextResponse.json({ error: message, code }, { status: 500 })
   }
 }

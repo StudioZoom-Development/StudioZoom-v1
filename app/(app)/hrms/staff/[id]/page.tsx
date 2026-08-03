@@ -15,7 +15,6 @@ import {
   getPayslipHistory,
   getWorkHistory
 } from '@/lib/firebase/queries/staff'
-import { deactivateUser } from '@/lib/firebase/queries/settings'
 
 const ROLE_ICONS: Record<string, string> = {
   photographer: 'ti-camera',
@@ -178,7 +177,17 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   const handleDeactivateConfirm = async () => {
     setDeactivateLoading(true)
     try {
-      await deactivateUser(uid)
+      // Calls Admin SDK — disables Firebase Auth login + sets isActive: false
+      const res = await fetch('/api/admin/deactivate-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid }),
+      })
+      if (!res.ok) {
+        const d = await res.json() as { error?: string }
+        console.error('Failed to deactivate staff:', d.error)
+        return
+      }
       router.push('/hrms/staff')
     } catch (err) {
       console.error('Failed to deactivate staff:', err)
