@@ -10,6 +10,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
 import { FieldValue }                       from 'firebase-admin/firestore'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const { uid } = await req.json() as { uid: string }

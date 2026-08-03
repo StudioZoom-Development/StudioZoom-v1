@@ -31,6 +31,18 @@ function getAdminApp(): App {
     raw = raw.slice(1, -1)
   }
 
+  // Support base64 encoded JSON string
+  if (!raw.startsWith('{')) {
+    try {
+      const decoded = Buffer.from(raw, 'base64').toString('utf8').trim()
+      if (decoded.startsWith('{')) {
+        raw = decoded
+      }
+    } catch {
+      // Continue with raw if not base64
+    }
+  }
+
   try {
     const serviceAccount = JSON.parse(raw) as {
       project_id?:   string
@@ -41,9 +53,9 @@ function getAdminApp(): App {
       privateKey?:   string
     }
 
-    const projectId   = serviceAccount.project_id   || serviceAccount.projectId
-    const clientEmail = serviceAccount.client_email || serviceAccount.clientEmail
-    let   privateKey  = serviceAccount.private_key  || serviceAccount.privateKey
+    const projectId   = serviceAccount.project_id   || serviceAccount.projectId   || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    const clientEmail = serviceAccount.client_email || serviceAccount.clientEmail || process.env.FIREBASE_CLIENT_EMAIL
+    let   privateKey  = serviceAccount.private_key  || serviceAccount.privateKey  || process.env.FIREBASE_PRIVATE_KEY
 
     if (!projectId || !clientEmail || !privateKey) {
       throw new Error('Missing projectId, clientEmail, or privateKey in FIREBASE_ADMIN_SERVICE_ACCOUNT JSON.')

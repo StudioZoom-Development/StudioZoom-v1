@@ -9,6 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth }               from '@/lib/firebase/admin'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const { email } = await req.json() as { email: string }
