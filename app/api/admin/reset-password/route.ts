@@ -16,8 +16,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       success: true,
+      sent: true,
+      email: result.email,
       message: `Password reset email sent to ${result.email}`,
-      link: `Password reset link sent to ${result.email}`,
     }, { status: 200 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'

@@ -331,6 +331,7 @@ interface ResetPasswordModalProps { user: UserRow; onClose: () => void }
 function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
   const [loading, setLoading] = useState(false)
   const [link,    setLink]    = useState('')
+  const [sent,    setSent]    = useState(false)
   const [copied,  setCopied]  = useState(false)
   const [error,   setError]   = useState('')
 
@@ -343,14 +344,19 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
         credentials: 'same-origin',
         body: JSON.stringify({ email: user.email }),
       })
-      const data = await res.json() as { link?: string; error?: string }
-      if (!res.ok) { setError(data.error ?? 'Failed to generate link'); return }
-      setLink(data.link ?? '')
+      const data = await res.json() as { link?: string; sent?: boolean; error?: string }
+      if (!res.ok) { setError(data.error ?? 'Failed to send reset link'); return }
+      if (data.link && (data.link.startsWith('http://') || data.link.startsWith('https://'))) {
+        setLink(data.link)
+      } else {
+        setSent(true)
+      }
     } catch { setError('Network error. Please try again.') }
     finally { setLoading(false) }
   }
 
   const handleCopy = async () => {
+    if (!link) return
     await navigator.clipboard.writeText(link)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -372,7 +378,7 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Reset password</div>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            Generate a secure reset link for <strong>{user.name}</strong> ({user.email})
+            Send a password reset email to <strong>{user.name}</strong> ({user.email})
           </div>
         </div>
 
@@ -383,12 +389,21 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
           }}>{error}</div>
         )}
 
-        {!link ? (
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
-            Click below to generate a one-time password reset link.
-            Copy it and share it with the user via WhatsApp or email.
+        {sent ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: '10px',
+            background: 'var(--color-success-muted)', border: '0.5px solid var(--color-success)',
+            borderRadius: '12px', padding: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', fontWeight: 600, fontSize: 'var(--text-sm)' }}>
+              <i className="ti ti-circle-check" style={{ fontSize: '18px' }} />
+              Password Reset Email Sent!
+            </div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', lineHeight: 1.5 }}>
+              An official password reset email has been sent directly to <strong>{user.email}</strong>. The user can click the link in their inbox to set a new password.
+            </div>
           </div>
-        ) : (
+        ) : link ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Reset link (one-time use)</label>
             <div style={{
@@ -410,8 +425,12 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
               }}
             >
               <i className={`ti ${copied ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: '14px' }} />
-              {copied ? 'Copied!' : 'Copy link'}
+              {copied ? 'Copied to clipboard' : 'Copy link'}
             </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+            Click below to send an official password reset email to the user's inbox.
           </div>
         )}
 
@@ -420,10 +439,10 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
             height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
             background: 'transparent', border: '0.5px solid var(--color-border)',
             color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-          }}>Close</button>
-          {!link && (
+          }}>{sent || link ? 'Done' : 'Close'}</button>
+          {!sent && !link && (
             <Button className="h-9 font-medium" onClick={handleGenerate} disabled={loading}>
-              {loading ? 'Generating…' : 'Generate reset link'}
+              {loading ? 'Sending…' : 'Send reset email'}
             </Button>
           )}
         </div>
