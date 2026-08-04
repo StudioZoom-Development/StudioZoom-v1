@@ -61,6 +61,7 @@ export default function NewUserPage() {
       const res = await fetch('/api/admin/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({
           name:       form.name.trim(),
           email:      form.email.trim(),
