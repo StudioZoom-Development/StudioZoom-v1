@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
-import { FieldValue }                      from 'firebase-admin/firestore'
+import { adminCreateUser }            from '@/lib/firebase/admin-rest'
+import { getAdminFirestore }          from '@/lib/firebase/admin'
+import { FieldValue }                 from 'firebase-admin/firestore'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -35,21 +36,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
     }
 
-    const auth = await getAdminAuth()
-    const db   = await getAdminFirestore()
+    // 1. Create user via Firebase Auth REST API
+    const userRecord = await adminCreateUser({ name, email, password })
 
-    // 1. Create Firebase Auth user
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: name,
-      disabled: false,
-    })
-
-    // 2. Set Custom Claims for Role
-    await auth.setCustomUserClaims(userRecord.uid, { role, studioId })
-
-    // 3. Write User Document to Firestore
+    // 2. Write User Document to Firestore
+    const db = await getAdminFirestore()
     await db.collection('users').doc(userRecord.uid).set({
       id:          userRecord.uid,
       name,
@@ -76,8 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const code    = (err as { code?: string }).code ?? 'unknown'
-    console.error('[create-user error]', code, message)
-    return NextResponse.json({ error: message, code }, { status: 400 })
+    console.error('[create-user error]', message)
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 }

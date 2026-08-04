@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
+import { adminDeleteUser }            from '@/lib/firebase/admin-rest'
+import { getAdminFirestore }          from '@/lib/firebase/admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,17 +13,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'uid is required' }, { status: 400 })
     }
 
-    const auth = await getAdminAuth()
-    const db   = await getAdminFirestore()
+    await adminDeleteUser(uid)
 
-    // Hard-delete Firebase Auth account — try catch if user doesn't exist in Auth
-    try {
-      await auth.deleteUser(uid)
-    } catch (err: unknown) {
-      console.warn('[delete-user] Auth delete skipped:', (err as { message?: string }).message)
-    }
-
-    // Hard-delete Firestore /users/{uid}
+    const db = await getAdminFirestore()
     await db.collection('users').doc(uid).delete()
 
     return NextResponse.json({ success: true, uid }, { status: 200 })
