@@ -430,7 +430,7 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
           </div>
         ) : (
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
-            Click below to send an official password reset email to the user's inbox.
+            Click below to send an official password reset email to the user&apos;s inbox.
           </div>
         )}
 

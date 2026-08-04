@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
@@ -13,39 +12,13 @@ import {
   subscribeToStaff,
   deactivateStaff,
   reactivateStaff,
-  addStaffMember,
-  NewStaffInput
 } from '@/lib/firebase/queries/staff'
-
-const JOB_TITLE_OPTIONS = [
-  'Photographer',
-  'Videographer',
-  'Editor',
-  'Designer',
-  'Drone Operator',
-  'Assistant',
-  'Other'
-]
 
 function getInitials(name: string): string {
   if (!name) return 'SP'
   const parts = name.trim().split(/\s+/)
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
-const SELECT_STYLE: React.CSSProperties = {
-  fontFamily: 'var(--font-inter)',
-  height: '36px',
-  width: '100%',
-  background: 'var(--color-surface-raised)',
-  border: '0.5px solid var(--color-border)',
-  borderRadius: '8px',
-  padding: '0 10px',
-  fontSize: 'var(--text-sm)',
-  color: 'var(--color-foreground)',
-  outline: 'none',
-  cursor: 'pointer',
 }
 
 export default function StaffListPage() {
