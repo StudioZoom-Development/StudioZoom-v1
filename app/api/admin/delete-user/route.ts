@@ -1,13 +1,8 @@
-/**
- * POST /api/admin/delete-user
- *
- * PERMANENTLY deletes the Firebase Auth account and hard-deletes
- * the /users/{uid} Firestore document. This cannot be undone.
- *
- * Body: { uid }
- */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -17,21 +12,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'uid is required' }, { status: 400 })
     }
 
+    const auth = await getAdminAuth()
+    const db   = await getAdminFirestore()
+
     // Hard-delete Firebase Auth account — try catch if user doesn't exist in Auth
     try {
-      await getAdminAuth().deleteUser(uid)
+      await auth.deleteUser(uid)
     } catch (err: unknown) {
       console.warn('[delete-user] Auth delete skipped:', (err as { message?: string }).message)
     }
 
     // Hard-delete Firestore /users/{uid}
-    await getAdminFirestore().collection('users').doc(uid).delete()
+    await db.collection('users').doc(uid).delete()
 
-    return NextResponse.json({ ok: true }, { status: 200 })
+    return NextResponse.json({ success: true, uid }, { status: 200 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const code    = (err as { code?: string }).code ?? 'unknown'
-    console.error('[delete-user]', code, message)
-    return NextResponse.json({ error: message, code }, { status: 400 })
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 }
