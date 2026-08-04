@@ -1,14 +1,9 @@
-/**
- * POST /api/admin/deactivate-user
- *
- * Disables the Firebase Auth account (user cannot log in)
- * and sets isActive: false on /users/{uid} in Firestore.
- *
- * Body: { uid }
- */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
 import { FieldValue }                       from 'firebase-admin/firestore'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -18,24 +13,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'uid is required' }, { status: 400 })
     }
 
-    // Disable Firebase Auth account — try catch if user doesn't exist in Auth
+    const auth = await getAdminAuth()
+    const db   = await getAdminFirestore()
+
+    // 1. Disable user in Firebase Auth so login token cannot be issued
     try {
-      await getAdminAuth().updateUser(uid, { disabled: true })
+      await auth.updateUser(uid, { disabled: true })
     } catch (err: unknown) {
-      console.warn('[deactivate-user] Auth update skipped:', (err as { message?: string }).message)
+      console.warn('[deactivate-user] Auth disable skipped:', (err as { message?: string }).message)
     }
 
-    // Mark inactive in Firestore
-    await getAdminFirestore().collection('users').doc(uid).update({
-      isActive:  false,
+    // 2. Soft-delete user in Firestore (/users/{uid})
+    await db.collection('users').doc(uid).update({
+      isDeleted: true,
+      status: 'inactive',
       updatedAt: FieldValue.serverTimestamp(),
     })
 
-    return NextResponse.json({ ok: true }, { status: 200 })
+    return NextResponse.json({ success: true, uid }, { status: 200 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const code    = (err as { code?: string }).code ?? 'unknown'
-    console.error('[deactivate-user]', code, message)
-    return NextResponse.json({ error: message, code }, { status: 400 })
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 }

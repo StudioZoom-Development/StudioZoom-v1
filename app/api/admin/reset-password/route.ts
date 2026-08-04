@@ -1,13 +1,8 @@
-/**
- * POST /api/admin/reset-password
- *
- * Generates a Firebase password reset link for a given email
- * and returns it so the admin can share it with the user.
- *
- * Body: { email }
- */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth }               from '@/lib/firebase/admin'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
@@ -18,7 +13,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const trimmedEmail = email.trim()
-    const auth = getAdminAuth()
+    const auth = await getAdminAuth()
 
     // 1. Verify user exists in Firebase Auth first
     try {
@@ -46,4 +41,3 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: message, code }, { status: 400 })
   }
 }
-

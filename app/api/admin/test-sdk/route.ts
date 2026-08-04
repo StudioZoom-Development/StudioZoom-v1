@@ -11,7 +11,7 @@ export async function GET(): Promise<NextResponse> {
       return NextResponse.json({ ok: false, error: 'FIREBASE_ADMIN_SERVICE_ACCOUNT env var is missing' }, { status: 500 })
     }
 
-    const auth = getAdminAuth()
+    const auth = await getAdminAuth()
     return NextResponse.json({
       ok: true,
       message: 'Firebase Admin SDK initialized successfully!',

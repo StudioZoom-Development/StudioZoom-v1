@@ -1,21 +1,24 @@
 /**
  * Firebase Admin SDK singleton — server-side only.
- * Lazy-initialised on first API call so build doesn't require the env var.
- *
- * Required env var (set in .env.local, NOT committed):
- *   FIREBASE_ADMIN_SERVICE_ACCOUNT = the full service-account JSON as a single-line string
+ * Lazy-initialised on first API call using dynamic import so Next.js build
+ * and serverless evaluation do not fail statically.
  */
-import { initializeApp, getApps, cert, type App } from 'firebase-admin/app'
-import { getAuth, type Auth }                       from 'firebase-admin/auth'
-import { getFirestore, type Firestore }             from 'firebase-admin/firestore'
+import type { App }       from 'firebase-admin/app'
+import type { Auth }      from 'firebase-admin/auth'
+import type { Firestore } from 'firebase-admin/firestore'
 
 let _app:       App       | null = null
 let _auth:      Auth      | null = null
 let _firestore: Firestore | null = null
 
-function getAdminApp(): App {
+export async function getAdminApp(): Promise<App> {
   if (_app) return _app
-  if (getApps().length > 0) { _app = getApps()[0]; return _app }
+
+  const { initializeApp, getApps, cert } = await import('firebase-admin/app')
+  if (getApps().length > 0) {
+    _app = getApps()[0]
+    return _app
+  }
 
   let raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT
   if (!raw) {
@@ -78,12 +81,20 @@ function getAdminApp(): App {
   }
 }
 
-export function getAdminAuth(): Auth {
-  if (!_auth) _auth = getAuth(getAdminApp())
+export async function getAdminAuth(): Promise<Auth> {
+  if (!_auth) {
+    const app = await getAdminApp()
+    const { getAuth } = await import('firebase-admin/auth')
+    _auth = getAuth(app)
+  }
   return _auth
 }
 
-export function getAdminFirestore(): Firestore {
-  if (!_firestore) _firestore = getFirestore(getAdminApp())
+export async function getAdminFirestore(): Promise<Firestore> {
+  if (!_firestore) {
+    const app = await getAdminApp()
+    const { getFirestore } = await import('firebase-admin/firestore')
+    _firestore = getFirestore(app)
+  }
   return _firestore
 }
