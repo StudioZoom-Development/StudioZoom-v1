@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin'
-import { FieldValue }                       from 'firebase-admin/firestore'
+import { adminDisableUser }           from '@/lib/firebase/admin-rest'
+import { getAdminFirestore }          from '@/lib/firebase/admin'
+import { FieldValue }                 from 'firebase-admin/firestore'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,17 +14,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'uid is required' }, { status: 400 })
     }
 
-    const auth = await getAdminAuth()
-    const db   = await getAdminFirestore()
+    await adminDisableUser(uid)
 
-    // 1. Disable user in Firebase Auth so login token cannot be issued
-    try {
-      await auth.updateUser(uid, { disabled: true })
-    } catch (err: unknown) {
-      console.warn('[deactivate-user] Auth disable skipped:', (err as { message?: string }).message)
-    }
-
-    // 2. Soft-delete user in Firestore (/users/{uid})
+    const db = await getAdminFirestore()
     await db.collection('users').doc(uid).update({
       isDeleted: true,
       status: 'inactive',
