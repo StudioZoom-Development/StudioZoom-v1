@@ -340,6 +340,7 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
       const res  = await fetch('/api/admin/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email: user.email }),
       })
       const data = await res.json() as { link?: string; error?: string }
