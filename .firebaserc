@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "studio-zoom",
+    "production": "studio-zoom-production"
+  }
+}

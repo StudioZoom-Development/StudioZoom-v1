@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input }  from '@/components/ui/input'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
+import { PhoneNumberInput } from '@/components/shared/PhoneNumberInput'
 import { useUIStore } from '@/store/uiStore'
 import { useRole } from '@/hooks/useAuth'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   StudioBranding,
   PackageTemplate,
@@ -22,6 +23,7 @@ import {
   savePackages,
   saveActiveConfig,
   updateUser,
+  deleteUserDoc,
 } from '@/lib/firebase/queries/settings'
 
 // ─────────────────────────────────────────────
@@ -114,6 +116,8 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
     pkg?.lineItems ?? [{ description: '', qty: 1, rate: 0, amount: 0 }]
   )
 
+  const calcTotal = (lis: PackageLineItem[]) => lis.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+
   const updateLine = (i: number, field: keyof PackageLineItem, val: string | number) => {
     const updated = lineItems.map((li, idx) => {
       if (idx !== i) return li
@@ -124,17 +128,34 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
       return next
     })
     setLineItems(updated)
+    if (updated.length > 0) {
+      setPrice(String(calcTotal(updated)))
+    }
   }
 
-  const addLine = () => setLineItems(prev => [...prev, { description: '', qty: 1, rate: 0, amount: 0 }])
-  const removeLine = (i: number) => setLineItems(prev => prev.filter((_, idx) => idx !== i))
+  const addLine = () => {
+    const updated = [...lineItems, { description: '', qty: 1, rate: 0, amount: 0 }]
+    setLineItems(updated)
+    if (updated.length > 0) {
+      setPrice(String(calcTotal(updated)))
+    }
+  }
+
+  const removeLine = (i: number) => {
+    const updated = lineItems.filter((_, idx) => idx !== i)
+    setLineItems(updated)
+    if (updated.length > 0) {
+      setPrice(String(calcTotal(updated)))
+    }
+  }
 
   const handleSave = () => {
     const colours = PKG_COLOURS[name] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
+    const calculatedPrice = lineItems.length > 0 ? calcTotal(lineItems) : Number(price.replace(/[^0-9]/g, ''))
     onSave({
       id:       pkg?.id ?? 'pkg_' + Date.now(),
       name,
-      price:    Number(price.replace(/[^0-9]/g, '')),
+      price:    calculatedPrice,
       iconBg:   colours.bg,
       iconFg:   colours.fg,
       items,
@@ -457,10 +478,28 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
 
 export default function SettingsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
   const { isAdmin } = useRole()
   useUIStore() // keep store subscribed for sidebar theme sync
 
-  const [page,  setPage]  = useState<Page>('Studio branding')
+  const [prevTabParam, setPrevTabParam] = useState<string | null>(tabParam)
+  const [page, setPage] = useState<Page>(() => {
+    if (tabParam === 'users' || tabParam === 'user-management') return 'User management'
+    if (tabParam === 'packages') return 'Packages'
+    if (tabParam === 'numbering') return 'Numbering'
+    if (tabParam === 'branding') return 'Studio branding'
+    return 'Studio branding'
+  })
+
+  // Synchronize state during render pass if URL tab parameter changes
+  if (tabParam !== prevTabParam) {
+    setPrevTabParam(tabParam)
+    if (tabParam === 'users' || tabParam === 'user-management') setPage('User management')
+    else if (tabParam === 'packages') setPage('Packages')
+    else if (tabParam === 'numbering') setPage('Numbering')
+    else if (tabParam === 'branding') setPage('Studio branding')
+  }
   const [users, setUsers] = useState<UserRow[]>([])
 
   // Studio selector
@@ -475,12 +514,15 @@ export default function SettingsPage() {
   const [brandEditMode, setBrandEditMode] = useState(false)
   const [brandSaving,   setBrandSaving]   = useState(false)
   const [brandSaved,    setBrandSaved]    = useState(false)
+  const [brandError,    setBrandError]    = useState('')
 
   // Packages
-  const [packages,     setPackages]     = useState<PackageTemplate[]>([])
-  const [editPkg,      setEditPkg]      = useState<PackageTemplate | null | 'new'>('new')
-  const [showPkgModal, setShowPkgModal] = useState(false)
-  const [pkgSaving,    setPkgSaving]    = useState(false)
+  const [packages,      setPackages]      = useState<PackageTemplate[]>([])
+  const [editPkg,       setEditPkg]       = useState<PackageTemplate | null | 'new'>('new')
+  const [showPkgModal,  setShowPkgModal]  = useState(false)
+  const [pkgSaving,     setPkgSaving]     = useState(false)
+  const [draggedIndex,  setDraggedIndex]  = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   // GST
   const [gstEnabled,       setGstEnabled]       = useState(false)
@@ -564,9 +606,17 @@ export default function SettingsPage() {
 
   // ── Branding save
   const handleSaveBranding = async () => {
+    const current = brandData[selectedStudio] ?? EMPTY_BRAND
+    const phoneVal = (current.phone || '').trim()
+
+    if (phoneVal.length !== 10 || !/^\d{10}$/.test(phoneVal)) {
+      setBrandError('Phone number must be exactly 10 digits')
+      return
+    }
+
+    setBrandError('')
     setBrandSaving(true)
     try {
-      const current = brandData[selectedStudio] ?? EMPTY_BRAND
       await saveBranding(selectedStudio, current as StudioBranding)
       // Also update activeStudioId in /config
       await saveActiveConfig({ activeStudioId: selectedStudio })
@@ -575,8 +625,45 @@ export default function SettingsPage() {
       setTimeout(() => setBrandSaved(false), 2000)
     } catch (err) {
       console.error('Failed to save branding:', err)
+      setBrandError('Failed to save branding settings. Please try again.')
     } finally {
       setBrandSaving(false)
+    }
+  }
+
+  // ── Package drag & drop reorder
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index)
+    }
+  }
+
+  const handleDrop = async (dropIndex: number) => {
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    const updated = [...packages]
+    const [movedItem] = updated.splice(draggedIndex, 1)
+    updated.splice(dropIndex, 0, movedItem)
+
+    setPackages(updated)
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+    setPkgSaving(true)
+    try {
+      await savePackages(updated)
+    } catch (err) {
+      console.error('Failed to save reordered packages:', err)
+    } finally {
+      setPkgSaving(false)
     }
   }
 
@@ -617,7 +704,7 @@ export default function SettingsPage() {
     }
   }
 
-  // ── Deactivate user
+  // ── Deactivate / Soft delete user
   const handleDeleteConfirm = async () => {
     if (!deleteUid) return
     setDeleteLoading(true)
@@ -629,10 +716,16 @@ export default function SettingsPage() {
       })
       if (!res.ok) {
         const d = await res.json() as { error?: string }
-        console.error('Failed to delete user:', d.error)
+        console.warn('API delete-user returned error, attempting client-side fallback:', d.error)
+        await deleteUserDoc(deleteUid)
       }
     } catch (err) {
-      console.error('Failed to delete user:', err)
+      console.warn('API delete-user error, attempting client-side soft delete:', err)
+      try {
+        await deleteUserDoc(deleteUid)
+      } catch (clientErr) {
+        console.error('Failed to delete user via client fallback:', clientErr)
+      }
     } finally {
       setDeleteLoading(false)
       setDeleteUid(null)
@@ -761,7 +854,7 @@ export default function SettingsPage() {
               </div>
               {!brandEditMode ? (
                 <span
-                  onClick={() => setBrandEditMode(true)}
+                  onClick={() => { setBrandEditMode(true); setBrandError('') }}
                   title="Edit details"
                   style={{
                     width: '30px', height: '30px', borderRadius: '8px',
@@ -776,7 +869,7 @@ export default function SettingsPage() {
                 </span>
               ) : (
                 <span
-                  onClick={() => setBrandEditMode(false)}
+                  onClick={() => { setBrandEditMode(false); setBrandError('') }}
                   title="Cancel editing"
                   style={{
                     width: '30px', height: '30px', borderRadius: '8px',
@@ -792,6 +885,15 @@ export default function SettingsPage() {
               )}
             </div>
 
+            {brandError && (
+              <div style={{
+                fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
+                background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
+              }}>
+                {brandError}
+              </div>
+            )}
+
             {/* ── 6 branding fields — 3-col grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
               {BRAND_FIELDS.map(f => {
@@ -800,14 +902,28 @@ export default function SettingsPage() {
                   <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{f.label}</label>
                     {brandEditMode ? (
-                      <Input
-                        value={val}
-                        onChange={e => setBrandData(prev => ({
-                          ...prev,
-                          [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), [f.key]: e.target.value },
-                        }))}
-                        className="h-9"
-                      />
+                      f.key === 'phone' ? (
+                        <PhoneNumberInput
+                          value={val}
+                          onChange={nextVal => {
+                            if (brandError) setBrandError('')
+                            setBrandData(prev => ({
+                              ...prev,
+                              [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), phone: nextVal },
+                            }))
+                          }}
+                          error={brandError}
+                        />
+                      ) : (
+                        <Input
+                          value={val}
+                          onChange={e => setBrandData(prev => ({
+                            ...prev,
+                            [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), [f.key]: e.target.value },
+                          }))}
+                          className="h-9"
+                        />
+                      )
                     ) : (
                       <div style={{
                         height: '36px', padding: '0 12px',
@@ -853,19 +969,40 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            {packages.map(p => {
+            {packages.map((p, index) => {
               const colour = PKG_COLOURS[p.name] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
+              const displayPrice = p.lineItems && p.lineItems.length > 0
+                ? p.lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+                : p.price
+
+              const isDragging = draggedIndex === index
+              const isDragOver = dragOverIndex === index
+
               return (
                 <div
                   key={p.id}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={e => handleDragOver(e, index)}
+                  onDrop={() => handleDrop(index)}
+                  onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null) }}
                   style={{
-                    background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    border: isDragOver
+                      ? '1.5px solid var(--color-primary)'
+                      : '0.5px solid var(--color-border)',
+                    opacity: isDragging ? 0.4 : 1,
                     borderRadius: '12px', padding: '16px 20px',
                     display: 'flex', alignItems: 'center', gap: '16px',
-                    transition: 'border-color 0.15s',
+                    transition: 'border-color 0.15s, opacity 0.15s',
+                    cursor: 'grab',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-border-strong)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+                  onMouseEnter={e => {
+                    if (!isDragOver) e.currentTarget.style.borderColor = 'var(--color-border-strong)'
+                  }}
+                  onMouseLeave={e => {
+                    if (!isDragOver) e.currentTarget.style.borderColor = 'var(--color-border)'
+                  }}
                 >
                   {/* Drag handle */}
                   <i className="ti ti-grip-vertical" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} />
@@ -887,12 +1024,16 @@ export default function SettingsPage() {
 
                   {/* Price */}
                   <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>
-                    ₹{p.price.toLocaleString('en-IN')}
+                    ₹{displayPrice.toLocaleString('en-IN')}
                   </div>
 
                   {/* Edit */}
                   <span
-                    onClick={() => { setEditPkg(p); setShowPkgModal(true) }}
+                    onClick={e => {
+                      e.stopPropagation()
+                      setEditPkg(p)
+                      setShowPkgModal(true)
+                    }}
                     style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500 }}
                   >
                     Edit

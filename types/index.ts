@@ -211,8 +211,24 @@ export interface TimeLog {
   standardMinutes:   540            // 9 hours — constant
   variance?:         number         // positive = overtime, negative = shortfall
   status:            'open' | 'closed' | 'flagged'
+  overrideStatus?:   'In' | 'Late' | 'Not in'
   correctedBy?:      string
   correctionReason?: string
+}
+
+// ─── LEAVE REQUESTS ───────────────────────────────────────────────────────────
+export type LeaveRequestType   = 'leave' | 'permission'
+export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export interface LeaveRequest {
+  requestId:   string
+  staffUid:    string
+  date:        string               // "YYYY-MM-DD"
+  type:        LeaveRequestType
+  status:      LeaveRequestStatus
+  createdAt:   Date
+  reviewedBy?: string
+  reviewedAt?: Date
 }
 
 // ─── SALARY ───────────────────────────────────────────────────────────────

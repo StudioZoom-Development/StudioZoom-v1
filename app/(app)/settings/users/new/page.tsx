@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input }  from '@/components/ui/input'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
+import { PhoneNumberInput } from '@/components/shared/PhoneNumberInput'
+import { DateField } from '@/components/shared/DateField'
 import { useRole } from '@/hooks/useAuth'
 
 const JOB_TITLE_OPTIONS = [
@@ -15,7 +18,7 @@ const JOB_TITLE_OPTIONS = [
   'Assistant',
   'Manager',
   'Studio Admin',
-  'Other'
+  'Others',
 ]
 
 export default function NewUserPage() {
@@ -24,6 +27,8 @@ export default function NewUserPage() {
 
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
   const [form, setForm] = useState({
     name:       '',
@@ -36,13 +41,18 @@ export default function NewUserPage() {
     baseSalary: '28000',
   })
 
+  const [customJobTitle, setCustomJobTitle] = useState('')
+
   // Guard: admin only
   if (isAdmin === false) {
     router.replace('/dashboard')
     return null
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const isOthersSelected = form.jobTitle === 'Others' || form.jobTitle === 'Other'
+
+  // Triggered when clicking "Create user & staff member"
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
@@ -56,7 +66,23 @@ export default function NewUserPage() {
       return
     }
 
+    if (isOthersSelected && !customJobTitle.trim()) {
+      setError('Please specify the custom job title.')
+      return
+    }
+
+    // Show confirmation popup before actual creation
+    setShowCreateConfirm(true)
+  }
+
+  // Executed after user confirms creation in the modal
+  const executeCreateUser = async () => {
+    setShowCreateConfirm(false)
+    setError('')
     setSaving(true)
+
+    const finalJobTitle = isOthersSelected ? customJobTitle.trim() : form.jobTitle
+
     try {
       const res = await fetch('/api/admin/create-user', {
         method: 'POST',
@@ -67,7 +93,7 @@ export default function NewUserPage() {
           email:      form.email.trim(),
           password:   form.password,
           role:       form.role,
-          jobTitle:   form.jobTitle,
+          jobTitle:   finalJobTitle,
           contact:    form.contact.trim() || undefined,
           joinDate:   form.joinDate || undefined,
           baseSalary: form.baseSalary ? Number(form.baseSalary.replace(/[^0-9]/g, '')) : undefined,
@@ -80,8 +106,8 @@ export default function NewUserPage() {
         return
       }
 
-      // Success -> navigate back to settings user management
-      router.push('/settings')
+      // Success -> navigate back to settings user management tab
+      router.push('/settings?tab=users')
     } catch (err) {
       console.error('Failed to create user:', err)
       setError('Network error. Please try again.')
@@ -105,7 +131,7 @@ export default function NewUserPage() {
       {/* Header */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <span
-          onClick={() => router.push('/settings')}
+          onClick={() => setShowCancelConfirm(true)}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -117,7 +143,7 @@ export default function NewUserPage() {
           }}
         >
           <i className="ti ti-arrow-left" style={{ fontSize: '16px' }} />
-          Back to Settings
+          Back to User Management
         </span>
         <div style={{
           fontSize: 'var(--text-2xl)',
@@ -145,7 +171,7 @@ export default function NewUserPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
         {/* CARD 1: LOGIN & SYSTEM ACCESS */}
         <div style={{
@@ -273,7 +299,13 @@ export default function NewUserPage() {
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Job Title</label>
               <select
                 value={form.jobTitle}
-                onChange={e => setForm({ ...form, jobTitle: e.target.value })}
+                onChange={e => {
+                  const val = e.target.value
+                  setForm({ ...form, jobTitle: val })
+                  if (val !== 'Others' && val !== 'Other') {
+                    setCustomJobTitle('')
+                  }
+                }}
                 style={{
                   height: '36px',
                   width: '100%',
@@ -284,34 +316,45 @@ export default function NewUserPage() {
                   fontSize: 'var(--text-sm)',
                   color: 'var(--color-foreground)',
                   outline: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 {JOB_TITLE_OPTIONS.map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
+
+              {/* Custom Job Title text input when "Others" is selected */}
+              {isOthersSelected && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                  <Input
+                    placeholder="Specify custom job title *"
+                    value={customJobTitle}
+                    onChange={e => setCustomJobTitle(e.target.value)}
+                    className="h-9"
+                    required
+                  />
+                </div>
+              )}
             </div>
 
+            {/* Common Contact Phone Component */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Contact Phone</label>
-              <Input
-                placeholder="+91 98400 11223"
+              <PhoneNumberInput
                 value={form.contact}
-                onChange={e => setForm({ ...form, contact: e.target.value })}
-                className="h-9"
+                onChange={val => setForm({ ...form, contact: val })}
               />
             </div>
           </div>
 
-          {/* Join Date & Base Salary */}
+          {/* Join Date Picker & Base Salary */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Join Date</label>
-              <Input
-                type="date"
+              <DateField
                 value={form.joinDate}
-                onChange={e => setForm({ ...form, joinDate: e.target.value })}
-                className="h-9"
+                onChange={val => setForm({ ...form, joinDate: val })}
               />
             </div>
 
@@ -332,7 +375,7 @@ export default function NewUserPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
           <button
             type="button"
-            onClick={() => router.push('/settings')}
+            onClick={() => setShowCancelConfirm(true)}
             style={{
               height: '36px',
               padding: '0 16px',
@@ -354,6 +397,31 @@ export default function NewUserPage() {
         </div>
 
       </form>
+
+      {/* Confirmation Modal: Create User */}
+      <ConfirmModal
+        open={showCreateConfirm}
+        title="Create user & staff member?"
+        description="Please check all the entered information before creating the user. Do you want to continue?"
+        confirmLabel="Create"
+        cancelLabel="No"
+        variant="primary"
+        onConfirm={executeCreateUser}
+        onCancel={() => setShowCreateConfirm(false)}
+        loading={saving}
+      />
+
+      {/* Confirmation Modal: Cancel / Discard */}
+      <ConfirmModal
+        open={showCancelConfirm}
+        title="Discard changes?"
+        description="All the entered data will be discarded. Are you sure you want to cancel?"
+        confirmLabel="Yes, discard"
+        cancelLabel="No, stay here"
+        variant="danger"
+        onConfirm={() => router.push('/settings?tab=users')}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
     </div>
   )
 }
