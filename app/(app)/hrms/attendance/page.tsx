@@ -81,13 +81,15 @@ function ApplyPopup({ open, onClose, onSubmit, submitting, submitError }: ApplyP
   const [applyDate, setApplyDate] = useState(getTodayDateString())
   const applyType: LeaveRequestType = 'leave'
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [prevOpen, setPrevOpen] = useState(open)
 
-  useEffect(() => {
+  if (open !== prevOpen) {
+    setPrevOpen(open)
     if (open) {
       setApplyDate(getTodayDateString())
       setConfirmOpen(false)
     }
-  }, [open])
+  }
 
   if (!open) return null
 
@@ -302,16 +304,19 @@ function TeamAttendanceView() {
 
   // Fetch month time logs for all staff
   useEffect(() => {
-    setLoading(true)
+    let active = true
     getAllStaffMonthTimeLogs(year, month)
       .then(logsMap => {
+        if (!active) return
         setMonthLogsMap(logsMap)
         setLoading(false)
       })
       .catch(err => {
+        if (!active) return
         console.error('[attendance] getAllStaffMonthTimeLogs error:', err)
         setLoading(false)
       })
+    return () => { active = false }
   }, [year, month])
 
   // Subscribe to all leave requests for month
@@ -952,16 +957,19 @@ function MyAttendancePage() {
 
   useEffect(() => {
     if (!appUser?.uid) return
-    setLoading(true)
+    let active = true
     getMonthTimeLogs(appUser.uid, year, month)
       .then(logs => {
+        if (!active) return
         setTimeLogs(logs)
         setLoading(false)
       })
       .catch(err => {
+        if (!active) return
         console.error('[attendance] getMonthTimeLogs error:', err)
         setLoading(false)
       })
+    return () => { active = false }
   }, [appUser?.uid, year, month])
 
   useEffect(() => {

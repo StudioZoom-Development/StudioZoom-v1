@@ -73,15 +73,14 @@ function runningSessionSeconds(checkInAt: Date, now: Date): number {
 
 // ─── Team Time Clock View (Admin & Manager) ───────────────────────────────────
 
-function TeamTimeClockView({ appUid: _appUid }: { appUid: string }) {
+function TeamTimeClockView() {
   const [now, setNow] = useState<Date>(() => new Date())
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [allLogs, setAllLogs] = useState<TimeLog[]>([])
   const [loadingStaff, setLoadingStaff] = useState(true)
   const [loadingLogs, setLoadingLogs] = useState(true)
 
-  const dayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
-  const todayStr = useMemo(() => getTodayDateString(), [dayKey])
+  const todayStr = getTodayDateString()
 
   // 1-second live clock tick
   useEffect(() => {
@@ -744,7 +743,7 @@ export default function TimeClockPage() {
 
   // Admin & Manager see Team Time Clock; Staff sees individual check-in/out view
   if (appUser.role === 'admin' || appUser.role === 'manager') {
-    return <TeamTimeClockView appUid={appUser.uid} />
+    return <TeamTimeClockView />
   }
 
   return <IndividualTimeClockView appUid={appUser.uid} />
