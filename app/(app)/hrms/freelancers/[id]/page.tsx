@@ -101,6 +101,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
   const [assignProjectId, setAssignProjectId] = useState('')
   const [assignRole, setAssignRole] = useState('Photographer')
   const [assignDays, setAssignDays] = useState('1')
+  const [assignDayRate, setAssignDayRate] = useState('')
   const [assigning, setAssigning] = useState(false)
   const [assignError, setAssignError] = useState('')
 
@@ -136,6 +137,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
             notes: fl.notes || '',
           })
           setPayoutDayRate(String(fl.dayRate || 6000))
+          setAssignDayRate(String(fl.dayRate || 6000))
         }
         setPayouts(flPayouts)
         setAssignedProjects(flProjects)
@@ -216,6 +218,18 @@ export default function FreelancerDetailPage({ params }: PageProps) {
     }
   }
 
+  // Open Assign Modal
+  const handleOpenAssignModal = () => {
+    setAssignError('')
+    setAssignDayRate(String(freelancer?.dayRate || 6000))
+    setAssignDays('1')
+    setAssignRole(freelancer?.skill ? (freelancer.skill.charAt(0).toUpperCase() + freelancer.skill.slice(1)) : 'Photographer')
+    if (allActiveProjects.length > 0 && !assignProjectId) {
+      setAssignProjectId(allActiveProjects[0].projectId)
+    }
+    setShowAssignModal(true)
+  }
+
   // Assign to Project Confirm
   const handleAssignConfirm = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -226,7 +240,11 @@ export default function FreelancerDetailPage({ params }: PageProps) {
     setAssigning(true)
     setAssignError('')
     try {
-      await assignFreelancerToProject(assignProjectId, freelancerId)
+      await assignFreelancerToProject(assignProjectId, freelancerId, {
+        role: assignRole,
+        days: Number(assignDays) || 1,
+        dayRate: Number(assignDayRate) || (freelancer?.dayRate || 0),
+      })
       // Refresh assignments
       const updatedProjects = await getFreelancerProjects(freelancerId)
       setAssignedProjects(updatedProjects)
@@ -236,6 +254,40 @@ export default function FreelancerDetailPage({ params }: PageProps) {
       setAssignError(err instanceof Error ? err.message : 'Failed to assign freelancer')
     } finally {
       setAssigning(false)
+    }
+  }
+
+  // Open Record Payout Modal
+  const handleOpenPayoutModal = () => {
+    setPayoutError('')
+    const defaultProjId = payoutProjectId || (assignedProjects[0]?.projectId || allActiveProjects[0]?.projectId || '')
+    setPayoutProjectId(defaultProjId)
+    const proj = allActiveProjects.find(p => p.projectId === defaultProjId) || assignedProjects.find(p => p.projectId === defaultProjId)
+    const specificAssignment = proj?.freelancerAssignments?.[freelancerId]
+    if (specificAssignment) {
+      setPayoutDays(String(specificAssignment.days || 1))
+      setPayoutDayRate(String(specificAssignment.dayRate || freelancer?.dayRate || 6000))
+    } else if (proj?.freelancerRates?.[freelancerId]) {
+      setPayoutDayRate(String(proj.freelancerRates[freelancerId]))
+    } else {
+      setPayoutDays('1')
+      setPayoutDayRate(String(freelancer?.dayRate || 6000))
+    }
+    setShowPayoutModal(true)
+  }
+
+  // Handle Project Change in Payout Modal
+  const handlePayoutProjectChange = (projId: string) => {
+    setPayoutProjectId(projId)
+    const proj = allActiveProjects.find(p => p.projectId === projId) || assignedProjects.find(p => p.projectId === projId)
+    const specificAssignment = proj?.freelancerAssignments?.[freelancerId]
+    if (specificAssignment) {
+      setPayoutDays(String(specificAssignment.days || 1))
+      setPayoutDayRate(String(specificAssignment.dayRate || freelancer?.dayRate || 6000))
+    } else if (proj?.freelancerRates?.[freelancerId]) {
+      setPayoutDayRate(String(proj.freelancerRates[freelancerId]))
+    } else {
+      setPayoutDayRate(String(freelancer?.dayRate || 6000))
     }
   }
 
@@ -372,10 +424,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
 
         <Button
           className="h-9 font-medium"
-          onClick={() => {
-            setAssignError('')
-            setShowAssignModal(true)
-          }}
+          onClick={handleOpenAssignModal}
         >
           Assign to project
         </Button>
@@ -651,6 +700,10 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                 )
                 const formattedDate = format(proj.eventDate, 'd MMM yyyy')
                 const icon = getEventIcon(proj.eventType)
+                const specificAssignment = proj.freelancerAssignments?.[freelancerId]
+                const assignedRole = specificAssignment?.role || skillDisplay
+                const assignedDays = specificAssignment?.days || 1
+                const assignedRate = specificAssignment?.dayRate || proj.freelancerRates?.[freelancerId] || freelancer.dayRate || 0
 
                 return (
                   <div
@@ -693,7 +746,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                         {proj.eventName}
                       </span>
                       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                        {skillDisplay} · {formattedDate}
+                        {assignedRole} · {formattedDate} · ₹{assignedRate.toLocaleString('en-IN')}/day
                       </span>
                     </div>
 
@@ -705,7 +758,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                       background: 'var(--color-secondary-muted)',
                       color: 'var(--color-secondary)',
                     }}>
-                      1 day
+                      {assignedDays} {assignedDays > 1 ? 'days' : 'day'}
                     </span>
                   </div>
                 )
@@ -739,10 +792,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
               <Button
                 variant="outline"
                 className="h-7 text-xs font-medium"
-                onClick={() => {
-                  setPayoutError('')
-                  setShowPayoutModal(true)
-                }}
+                onClick={handleOpenPayoutModal}
               >
                 ＋ Record payout
               </Button>
@@ -1017,17 +1067,52 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                 </select>
               </div>
 
-              {/* Days */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                  Number of Days
-                </label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={assignDays}
-                  onChange={e => setAssignDays(e.target.value)}
-                />
+              {/* Days & Project Day Rate */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                    Number of days *
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    required
+                    value={assignDays}
+                    onChange={e => setAssignDays(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                    Project day rate (₹) *
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    required
+                    placeholder="6000"
+                    value={assignDayRate}
+                    onChange={e => setAssignDayRate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Agreed Total Calculation Preview */}
+              <div style={{
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  Agreed project total:
+                </span>
+                <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-primary)' }}>
+                  ₹{((Number(assignDays) || 1) * (Number(assignDayRate) || 0)).toLocaleString('en-IN')}
+                </span>
               </div>
 
               {/* Modal Footer */}
@@ -1117,7 +1202,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                 </label>
                 <select
                   value={payoutProjectId}
-                  onChange={e => setPayoutProjectId(e.target.value)}
+                  onChange={e => handlePayoutProjectChange(e.target.value)}
                   required
                   style={{
                     fontFamily: 'var(--font-inter)',

@@ -60,26 +60,34 @@ export type ProjectStage =
 
 export type ProjectStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
 
+export interface FreelancerProjectAssignment {
+  role:     string
+  days:     number
+  dayRate:  number
+}
+
 export interface Project {
-  projectId:       string
-  clientId:        string
-  eventDate:       Date              // DENORMALIZED from client
-  eventName:       string            // DENORMALIZED from client
-  clientName:      string            // DENORMALIZED from client
-  eventType:       EventType         // DENORMALIZED from client
-  stage:           ProjectStage
-  status:          ProjectStatus
-  callTime?:       string
-  engagementDate?: Date
-  preWeddingDate?: Date
-  staffUids:       string[]          // DENORMALIZED for array-contains queries
-  freelancerIds:   string[]
-  milestones:      Partial<Record<MilestoneKey, Date>>
-  override?:       { by: string; reason: string; at: Date }
-  isDeleted?:      boolean
-  createdBy:       string
-  createdAt:       Date
-  updatedAt:       Date
+  projectId:              string
+  clientId:               string
+  eventDate:              Date              // DENORMALIZED from client
+  eventName:              string            // DENORMALIZED from client
+  clientName:             string            // DENORMALIZED from client
+  eventType:              EventType         // DENORMALIZED from client
+  stage:                  ProjectStage
+  status:                 ProjectStatus
+  callTime?:              string
+  engagementDate?:        Date
+  preWeddingDate?:        Date
+  staffUids:              string[]          // DENORMALIZED for array-contains queries
+  freelancerIds:          string[]
+  freelancerAssignments?: Record<string, FreelancerProjectAssignment>
+  freelancerRates?:       Record<string, number>
+  milestones:             Partial<Record<MilestoneKey, Date>>
+  override?:              { by: string; reason: string; at: Date }
+  isDeleted?:             boolean
+  createdBy:              string
+  createdAt:              Date
+  updatedAt:              Date
 }
 
 export type MilestoneKey =

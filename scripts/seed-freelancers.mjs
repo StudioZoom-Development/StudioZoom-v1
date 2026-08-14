@@ -158,6 +158,12 @@ async function runSeed() {
       status: 'upcoming',
       staffUids: ['GnbwIqJRSdRBX2ZyZnyEcy4QuQ42', 'aLJWIldrWDdUHFP6HfE56okpZyn1', 'xa7XnTOfqAav1fZiaP8nKqwVcZS2'],
       freelancerIds: ['fl_guna_v'],
+      freelancerAssignments: {
+        fl_guna_v: { role: 'Candid Photographer', days: 2, dayRate: 6000 },
+      },
+      freelancerRates: {
+        fl_guna_v: 6000,
+      },
     },
     {
       id: 'proj_sangeetha_baby',
@@ -169,6 +175,12 @@ async function runSeed() {
       status: 'upcoming',
       staffUids: [],
       freelancerIds: ['fl_guna_v'],
+      freelancerAssignments: {
+        fl_guna_v: { role: 'Photographer', days: 1, dayRate: 6000 },
+      },
+      freelancerRates: {
+        fl_guna_v: 6000,
+      },
     },
     {
       id: 'proj_meera_prewedding',
@@ -180,6 +192,12 @@ async function runSeed() {
       status: 'upcoming',
       staffUids: [],
       freelancerIds: ['fl_guna_v'],
+      freelancerAssignments: {
+        fl_guna_v: { role: 'Second Shooter', days: 1, dayRate: 5000 },
+      },
+      freelancerRates: {
+        fl_guna_v: 5000,
+      },
     },
   ]
 

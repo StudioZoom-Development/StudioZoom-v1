@@ -180,15 +180,33 @@ export async function getFreelancerProjects(freelancerId: string): Promise<Proje
   }
 }
 
-/** Assign a freelancer to a project */
+export interface AssignFreelancerInput {
+  role?:    string
+  days?:    number
+  dayRate?: number
+}
+
+/** Assign a freelancer to a project with role, days, and project-specific day rate */
 export async function assignFreelancerToProject(
   projectId: string,
-  freelancerId: string
+  freelancerId: string,
+  assignment?: AssignFreelancerInput
 ): Promise<void> {
-  await updateDoc(doc(db, 'projects', projectId), {
+  const payload: Record<string, unknown> = {
     freelancerIds: arrayUnion(freelancerId),
     updatedAt: serverTimestamp(),
-  })
+  }
+
+  if (assignment) {
+    payload[`freelancerAssignments.${freelancerId}`] = {
+      role: assignment.role || 'Photographer',
+      days: Number(assignment.days) || 1,
+      dayRate: Number(assignment.dayRate) || 0,
+    }
+    payload[`freelancerRates.${freelancerId}`] = Number(assignment.dayRate) || 0
+  }
+
+  await updateDoc(doc(db, 'projects', projectId), payload)
 }
 
 export interface RecordPayoutInput {
