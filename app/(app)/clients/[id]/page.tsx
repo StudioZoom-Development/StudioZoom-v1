@@ -236,12 +236,15 @@ export default function ClientDetailPage() {
   ]
 
   const teamChips = assignments.length > 0
-    ? assignments.map(a => ({
-        uid: a.assignmentId,
-        name: a.staffUid,
-        role: a.role.charAt(0).toUpperCase() + a.role.slice(1),
-        initials: getInitials(a.staffUid)
-      }))
+    ? assignments.map(a => {
+        const displayName = a.staffName || a.staffUid
+        return {
+          uid: a.assignmentId,
+          name: displayName,
+          role: a.role.charAt(0).toUpperCase() + a.role.slice(1),
+          initials: getInitials(displayName)
+        }
+      })
     : defaultTeamChips
 
   const pendingGateCount = gate?.reasons.length || 0

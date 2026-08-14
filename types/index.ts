@@ -98,6 +98,7 @@ export interface StaffAssignment {
   projectId:     string
   clientId:      string
   staffUid:      string
+  staffName?:    string
   eventDate:     string   // ← "YYYY-MM-DD" STRING, not Timestamp — required for equality queries
   role:          AssignmentRole
   status:        'confirmed' | 'tentative'
@@ -263,10 +264,13 @@ export interface Payslip {
 export interface Freelancer {
   freelancerId: string
   name:         string
-  skill:        'photographer' | 'videographer' | 'editor' | 'designer'
+  skill:        'photographer' | 'videographer' | 'editor' | 'designer' | 'other'
   dayRate:      number
   contact:      string
+  notes?:       string
   isActive:     boolean
+  createdAt?:   Date
+  updatedAt?:   Date
 }
 
 export interface FreelancerPayout {
@@ -274,11 +278,15 @@ export interface FreelancerPayout {
   freelancerId:    string
   freelancerName:  string
   projectId:       string
+  eventName?:      string
   days:            number
   dayRate:         number
   amount:          number
   paidDate:        Date
+  method?:         'cash' | 'gpay' | 'bankTransfer'
   postedExpenseId: string    // links to auto-created expense doc
+  recordedBy?:     string
+  createdAt?:      Date
 }
 
 // ─── EXPENSES ─────────────────────────────────────────────────────────────

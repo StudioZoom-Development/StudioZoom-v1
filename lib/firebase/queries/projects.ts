@@ -105,3 +105,28 @@ export async function advanceProjectStage(
   await batch.commit()
   return nextStage
 }
+
+/** Get active projects (non-deleted, not delivered/cancelled) */
+export async function getActiveProjects(): Promise<Project[]> {
+  try {
+    const snap = await getDocs(collection(db, 'projects'))
+    const list = snap.docs
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          projectId: d.id,
+          eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
+        } as Project
+      })
+      .filter(p => !p.isDeleted && p.status !== 'cancelled')
+
+    list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
+    return list
+  } catch (err) {
+    console.error('Failed to get active projects:', err)
+    return []
+  }
+}
