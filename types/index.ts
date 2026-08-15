@@ -21,6 +21,7 @@ export type ClientStatus  = 'inquiry' | 'booked'
 
 export interface Client {
   clientId:       string
+  projectId?:     string
   name:           string
   contact:        string
   email:          string

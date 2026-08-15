@@ -14,6 +14,7 @@ import {
   recordPayment
 } from '@/lib/firebase/queries/clients'
 import {
+  getProjectById,
   getProjectByClientId,
   subscribeToProject,
   subscribeToProjectStaffAssignments,
@@ -88,31 +89,66 @@ export default function ClientDetailPage() {
   useEffect(() => {
     if (!id) return
 
-    // 1. Fetch Client
-    getClientById(id).then(c => {
-      setClient(c)
-      setLoading(false)
+    let isMounted = true
 
-      if (c) {
-        // 2. Fetch linked Project
-        getProjectByClientId(c.clientId).then(p => {
+    async function loadInitialData() {
+      setLoading(true)
+      try {
+        let c = await getClientById(id)
+        let p: Project | null = null
+
+        if (!c) {
+          // Check if id was a projectId
+          p = await getProjectById(id)
+          if (p?.clientId) {
+            c = await getClientById(p.clientId)
+          }
+        }
+
+        if (!isMounted) return
+
+        if (c) {
+          setClient(c)
+          if (!p) {
+            if (c.projectId) {
+              p = await getProjectById(c.projectId)
+            }
+            if (!p) {
+              p = await getProjectByClientId(c.clientId)
+            }
+          }
           setProject(p)
           if (p) {
-            checkStageGate(p.projectId, p.stage).then(setGate)
+            const g = await checkStageGate(p.projectId, p.stage)
+            if (isMounted) setGate(g)
           }
-        })
+        }
+      } catch (err) {
+        console.error('Failed to load client details:', err)
+      } finally {
+        if (isMounted) setLoading(false)
       }
-    })
+    }
 
-    // 3. Real-time Payments
-    const unsubPayments = subscribeToPayments(id, data => {
+    loadInitialData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id])
+
+  // 3. Real-time Payments
+  useEffect(() => {
+    if (!client?.clientId) return
+
+    const unsubPayments = subscribeToPayments(client.clientId, data => {
       setPayments(data)
     })
 
     return () => {
       unsubPayments()
     }
-  }, [id])
+  }, [client?.clientId])
 
   // Real-time listener for project if project exists
   useEffect(() => {
@@ -899,27 +935,47 @@ export default function ClientDetailPage() {
             position: 'fixed',
             inset: 0,
             zIndex: 50,
-            background: 'rgba(0,0,0,0.7)',
+            background: 'rgba(0, 0, 0, 0.7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontFamily: 'var(--font-inter)'
+            fontFamily: 'var(--font-inter)',
+            padding: '16px',
           }}
         >
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              width: '420px',
+              width: '100%',
+              maxWidth: '420px',
               background: 'var(--color-surface-overlay)',
               border: '0.5px solid var(--color-border)',
-              borderRadius: '16px',
+              borderRadius: '12px',
               padding: '24px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px'
+              gap: '16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
             }}
           >
-            <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Record payment</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                Record payment
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecordPaymentOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-foreground-muted)',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
 
             {paymentError && (
               <div style={{
@@ -934,8 +990,10 @@ export default function ClientDetailPage() {
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Instalment</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Instalment
+                </label>
                 <select
                   value={instalment}
                   onChange={e => setInstalment(e.target.value as '1st' | '2nd' | '3rd')}
@@ -949,7 +1007,8 @@ export default function ClientDetailPage() {
                     padding: '0 10px',
                     fontSize: 'var(--text-sm)',
                     color: 'var(--color-foreground)',
-                    outline: 'none'
+                    outline: 'none',
+                    cursor: 'pointer',
                   }}
                 >
                   <option value="1st">1st Instalment</option>
@@ -958,8 +1017,10 @@ export default function ClientDetailPage() {
                 </select>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Amount</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Amount
+                </label>
                 <Input
                   type="number"
                   placeholder="₹0"
@@ -969,8 +1030,10 @@ export default function ClientDetailPage() {
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Date</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Date
+                </label>
                 <Input
                   type="date"
                   value={paymentDate}
@@ -979,8 +1042,10 @@ export default function ClientDetailPage() {
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Method</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Method
+                </label>
                 <select
                   value={paymentMethod}
                   onChange={e => setPaymentMethod(e.target.value as 'cash' | 'gpay' | 'bankTransfer' | 'cheque')}
@@ -994,7 +1059,8 @@ export default function ClientDetailPage() {
                     padding: '0 10px',
                     fontSize: 'var(--text-sm)',
                     color: 'var(--color-foreground)',
-                    outline: 'none'
+                    outline: 'none',
+                    cursor: 'pointer',
                   }}
                 >
                   <option value="gpay">GPay</option>
