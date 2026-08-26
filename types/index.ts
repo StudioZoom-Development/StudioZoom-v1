@@ -21,6 +21,7 @@ export type ClientStatus  = 'inquiry' | 'booked'
 
 export interface Client {
   clientId:       string
+  projectId?:     string
   name:           string
   contact:        string
   email:          string
@@ -60,26 +61,34 @@ export type ProjectStage =
 
 export type ProjectStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
 
+export interface FreelancerProjectAssignment {
+  role:     string
+  days:     number
+  dayRate:  number
+}
+
 export interface Project {
-  projectId:       string
-  clientId:        string
-  eventDate:       Date              // DENORMALIZED from client
-  eventName:       string            // DENORMALIZED from client
-  clientName:      string            // DENORMALIZED from client
-  eventType:       EventType         // DENORMALIZED from client
-  stage:           ProjectStage
-  status:          ProjectStatus
-  callTime?:       string
-  engagementDate?: Date
-  preWeddingDate?: Date
-  staffUids:       string[]          // DENORMALIZED for array-contains queries
-  freelancerIds:   string[]
-  milestones:      Partial<Record<MilestoneKey, Date>>
-  override?:       { by: string; reason: string; at: Date }
-  isDeleted?:      boolean
-  createdBy:       string
-  createdAt:       Date
-  updatedAt:       Date
+  projectId:              string
+  clientId:               string
+  eventDate:              Date              // DENORMALIZED from client
+  eventName:              string            // DENORMALIZED from client
+  clientName:             string            // DENORMALIZED from client
+  eventType:              EventType         // DENORMALIZED from client
+  stage:                  ProjectStage
+  status:                 ProjectStatus
+  callTime?:              string
+  engagementDate?:        Date
+  preWeddingDate?:        Date
+  staffUids:              string[]          // DENORMALIZED for array-contains queries
+  freelancerIds:          string[]
+  freelancerAssignments?: Record<string, FreelancerProjectAssignment>
+  freelancerRates?:       Record<string, number>
+  milestones:             Partial<Record<MilestoneKey, Date>>
+  override?:              { by: string; reason: string; at: Date }
+  isDeleted?:             boolean
+  createdBy:              string
+  createdAt:              Date
+  updatedAt:              Date
 }
 
 export type MilestoneKey =
@@ -98,6 +107,7 @@ export interface StaffAssignment {
   projectId:     string
   clientId:      string
   staffUid:      string
+  staffName?:    string
   eventDate:     string   // ← "YYYY-MM-DD" STRING, not Timestamp — required for equality queries
   role:          AssignmentRole
   status:        'confirmed' | 'tentative'
@@ -263,10 +273,13 @@ export interface Payslip {
 export interface Freelancer {
   freelancerId: string
   name:         string
-  skill:        'photographer' | 'videographer' | 'editor' | 'designer'
+  skill:        'photographer' | 'videographer' | 'editor' | 'designer' | 'other'
   dayRate:      number
   contact:      string
+  notes?:       string
   isActive:     boolean
+  createdAt?:   Date
+  updatedAt?:   Date
 }
 
 export interface FreelancerPayout {
@@ -274,11 +287,15 @@ export interface FreelancerPayout {
   freelancerId:    string
   freelancerName:  string
   projectId:       string
+  eventName?:      string
   days:            number
   dayRate:         number
   amount:          number
   paidDate:        Date
+  method?:         'cash' | 'gpay' | 'bankTransfer'
   postedExpenseId: string    // links to auto-created expense doc
+  recordedBy?:     string
+  createdAt?:      Date
 }
 
 // ─── EXPENSES ─────────────────────────────────────────────────────────────
