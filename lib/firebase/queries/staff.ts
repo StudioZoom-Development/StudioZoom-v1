@@ -38,17 +38,67 @@ export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () =
     where('role', 'in', ['staff', 'manager'])
   )
   return onSnapshot(q, snap => {
-    const list = snap.docs.map(d => {
-      const data = d.data()
-      return {
-        ...data,
-        uid: d.id,
-        joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-      } as StaffMember
-    })
+    const list = snap.docs
+      .filter(d => !d.data().isDeleted)
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          uid: d.id,
+          joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
+        } as StaffMember
+      })
     // In-memory sort by name (alphabetical)
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    callback(list)
+  })
+}
+
+/** Real-time list — staff ONLY (excluding admins & managers), alphabetical */
+export function subscribeToStaffOnly(callback: (staff: StaffMember[]) => void): () => void {
+  const q = query(
+    collection(db, 'users'),
+    where('role', '==', 'staff')
+  )
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .filter(d => !d.data().isDeleted)
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          uid: d.id,
+          joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
+        } as StaffMember
+      })
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    callback(list)
+  })
+}
+
+/** Real-time list — ALL team members (admin, manager, staff), alphabetical */
+export function subscribeToAllTeamMembers(callback: (staff: StaffMember[]) => void): () => void {
+  const q = query(
+    collection(db, 'users'),
+    where('role', 'in', ['admin', 'manager', 'staff'])
+  )
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .filter(d => !d.data().isDeleted)
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          uid: d.id,
+          joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
+        } as StaffMember
+      })
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)
   })
@@ -123,6 +173,39 @@ export async function getAttendanceSummary(
     console.error('Failed to get attendance summary:', err)
     return null
   }
+}
+
+/** Real-time subscription to ALL attendance documents for a given year & month */
+export function subscribeToAllAttendanceRecords(
+  year: number,
+  month: number,
+  callback: (recordsMap: Record<string, import('@/types').AttendanceRecord>) => void
+): () => void {
+  const q = query(
+    collection(db, 'attendance'),
+    where('year', '==', year),
+    where('month', '==', month)
+  )
+
+  return onSnapshot(q, snap => {
+    const map: Record<string, import('@/types').AttendanceRecord> = {}
+    for (const d of snap.docs) {
+      const data = d.data()
+      map[data.staffUid] = {
+        attendanceId: d.id,
+        staffUid: data.staffUid as string,
+        year: data.year as number,
+        month: data.month as number,
+        dailyStatus: (data.dailyStatus as Record<string, import('@/types').AttendanceStatus>) || {},
+        dailyHours: (data.dailyHours as Record<string, number>) || {},
+        summary: data.summary as import('@/types').AttendanceRecord['summary'],
+      }
+    }
+    callback(map)
+  }, err => {
+    console.error('[staff] subscribeToAllAttendanceRecords error:', err)
+    callback({})
+  })
 }
 
 /** Payslip history for detail page */

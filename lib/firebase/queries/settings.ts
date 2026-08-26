@@ -250,3 +250,14 @@ export async function updateUser(
     updatedAt: serverTimestamp(),
   })
 }
+
+/** Soft delete user document from Firestore */
+export async function deleteUserDoc(uid: string): Promise<void> {
+  const { updateDoc } = await import('firebase/firestore')
+  await updateDoc(doc(db, 'users', uid), {
+    isDeleted: true,
+    status:    'inactive',
+    updatedAt: serverTimestamp(),
+  })
+}
+

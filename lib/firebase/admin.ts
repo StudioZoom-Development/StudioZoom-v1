@@ -98,3 +98,4 @@ export async function getAdminFirestore(): Promise<Firestore> {
   }
   return _firestore
 }
+
