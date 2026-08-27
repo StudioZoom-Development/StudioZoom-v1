@@ -445,6 +445,7 @@ export default function FreelancersListPage() {
                   </tr>
                 )
               })
+            )}
           </tbody>
         </table>
         </div>
