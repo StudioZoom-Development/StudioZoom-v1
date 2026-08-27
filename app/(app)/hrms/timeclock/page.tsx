@@ -199,21 +199,15 @@ function TeamTimeClockView() {
     fontFamily: 'var(--font-inter)',
   }
 
-  return (
     <div
+      className="w-full px-4 py-4 sm:px-8 sm:py-6 max-w-[1280px] mx-auto flex flex-col gap-6"
       style={{
         fontFamily: 'var(--font-inter)',
         color: 'var(--color-foreground)',
-        padding: '24px 32px',
-        maxWidth: '1280px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
       }}
     >
       {/* ── Top Header Section ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px' }}>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-5 w-full">
         <div>
           <h1
             style={{
@@ -242,14 +236,10 @@ function TeamTimeClockView() {
 
         {/* Live Digital Clock */}
         <div
+          className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-foreground)] text-left sm:text-right pt-1"
           style={{
-            fontSize: '2.2rem',
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
-            color: 'var(--color-foreground)',
             fontFamily: 'var(--font-inter)',
             lineHeight: 1,
-            paddingTop: '4px',
           }}
         >
           {formatClock12h(now)}
