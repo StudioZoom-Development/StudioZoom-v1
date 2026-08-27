@@ -199,6 +199,7 @@ function TeamTimeClockView() {
     fontFamily: 'var(--font-inter)',
   }
 
+  return (
     <div
       className="w-full px-4 py-4 sm:px-8 sm:py-6 max-w-[1280px] mx-auto flex flex-col gap-6"
       style={{
