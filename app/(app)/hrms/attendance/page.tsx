@@ -1105,64 +1105,88 @@ function MyAttendancePage() {
         gap: '20px',
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {/* Top Controls Row: Month Selector Pill + Apply Button */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-          <div
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '10px',
+            padding: '4px 12px',
+            height: '38px',
+          }}
+        >
+          <button
+            id="att-prev-month"
+            onClick={() => setViewDate(d => subMonths(d, 1))}
             style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-foreground-muted)',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              background: 'var(--color-surface)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '10px',
-              padding: '4px 12px',
-              height: '38px',
+              padding: 0,
             }}
           >
-            <button
-              id="att-prev-month"
-              onClick={() => setViewDate(d => subMonths(d, 1))}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--color-foreground-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                padding: 0,
-              }}
-            >
-              <i className="ti ti-chevron-left" style={{ fontSize: '16px' }} />
-            </button>
+            <i className="ti ti-chevron-left" style={{ fontSize: '16px' }} />
+          </button>
 
-            <span
-              style={{
-                fontSize: 'var(--text-sm)',
-                fontWeight: 600,
-                minWidth: '100px',
-                textAlign: 'center',
-                color: 'var(--color-foreground)',
-              }}
-            >
-              {format(viewDate, 'MMMM yyyy')}
-            </span>
+          <span
+            style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
+              minWidth: '100px',
+              textAlign: 'center',
+              color: 'var(--color-foreground)',
+            }}
+          >
+            {format(viewDate, 'MMMM yyyy')}
+          </span>
 
-            <button
-              id="att-next-month"
-              onClick={() => setViewDate(d => addMonths(d, 1))}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--color-foreground-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                padding: 0,
-              }}
-            >
-              <i className="ti ti-chevron-right" style={{ fontSize: '16px' }} />
-            </button>
+          <button
+            id="att-next-month"
+            onClick={() => setViewDate(d => addMonths(d, 1))}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-foreground-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              padding: 0,
+            }}
+          >
+            <i className="ti ti-chevron-right" style={{ fontSize: '16px' }} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            {[
+              { label: 'Present', color: 'var(--color-success)' },
+              { label: 'Late', color: 'var(--color-secondary)' },
+              { label: 'Half day', color: 'var(--color-accent)' },
+              { label: 'Absent', color: 'var(--color-danger)' },
+              { label: 'Leave', color: 'var(--color-purple)' },
+            ].map(({ label, color }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span
+                  style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '2px',
+                    background: color,
+                    display: 'inline-block',
+                  }}
+                />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  {label}
+                </span>
+              </div>
+            ))}
           </div>
 
           <button
@@ -1190,32 +1214,6 @@ function MyAttendancePage() {
           >
             Apply
           </button>
-        </div>
-
-        {/* Legend Strip: wraps cleanly on mobile viewports */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px 14px', flexWrap: 'wrap', paddingTop: '2px' }}>
-          {[
-            { label: 'Present', color: 'var(--color-success)' },
-            { label: 'Late', color: 'var(--color-secondary)' },
-            { label: 'Half day', color: 'var(--color-accent)' },
-            { label: 'Absent', color: 'var(--color-danger)' },
-            { label: 'Leave', color: 'var(--color-purple)' },
-          ].map(({ label, color }) => (
-            <div key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <span
-                style={{
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '2px',
-                  background: color,
-                  display: 'inline-block',
-                }}
-              />
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap' }}>
-                {label}
-              </span>
-            </div>
-          ))}
         </div>
       </div>
 
