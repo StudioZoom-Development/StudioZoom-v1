@@ -530,9 +530,10 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
             gridTemplateColumns: '1fr 1fr 1fr',
             borderTop: '0.5px solid var(--color-border)',
             paddingTop: '16px',
+            width: '100%',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', textAlign: 'center', width: '100%' }}>
             <span
               style={{
                 fontSize: 'var(--text-xs)',
@@ -540,11 +541,14 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 color: 'var(--color-foreground-subtle)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               Check-In
             </span>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', textAlign: 'center', width: '100%', display: 'block' }}>
               {firstSession ? formatTime12h(firstSession.checkInAt) : '—'}
             </span>
           </div>
@@ -555,6 +559,8 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
               flexDirection: 'column',
               gap: '4px',
               alignItems: 'center',
+              textAlign: 'center',
+              width: '100%',
               borderLeft: '0.5px solid var(--color-border)',
               borderRight: '0.5px solid var(--color-border)',
             }}
@@ -566,16 +572,19 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 color: 'var(--color-foreground-subtle)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               Hours Today
             </span>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', textAlign: 'center', width: '100%', display: 'block' }}>
               {formatDuration(totalSecs)}
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', textAlign: 'center', width: '100%' }}>
             <span
               style={{
                 fontSize: 'var(--text-xs)',
@@ -583,6 +592,9 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 color: 'var(--color-foreground-subtle)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               VS 9H
@@ -592,6 +604,9 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 fontSize: 'var(--text-sm)',
                 fontWeight: 700,
                 color: vsNegative ? 'var(--color-secondary)' : 'var(--color-success)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               {formatVs9h(totalSecs)}

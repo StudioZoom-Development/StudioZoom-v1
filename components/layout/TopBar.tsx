@@ -1,6 +1,7 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':          'Dashboard',
@@ -28,14 +29,15 @@ const PAGE_TITLES: Record<string, string> = {
   '/notifications':      'Notifications',
 }
 
-function getInitials(name: string) {
+function getInitials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
 export function TopBar() {
-  const pathname = usePathname()
-  const router   = useRouter()
-  const appUser  = useAuthStore(s => s.appUser)
+  const pathname        = usePathname()
+  const router          = useRouter()
+  const appUser         = useAuthStore(s => s.appUser)
+  const { setSidebarOpen } = useUIStore()
 
   const title = PAGE_TITLES[pathname]
     ?? Object.entries(PAGE_TITLES).find(([k]) => pathname.startsWith(k + '/'))?.[1]
@@ -46,17 +48,32 @@ export function TopBar() {
       height: '56px', flexShrink: 0,
       background: 'var(--color-surface)',
       borderBottom: '0.5px solid var(--color-border)',
-      display: 'flex', alignItems: 'center', gap: '16px', padding: '0 24px',
+      display: 'flex', alignItems: 'center', gap: '12px', padding: '0 16px',
     }}>
+      {/* Hamburger — mobile & tablet (hidden on lg+ / desktop) */}
+      <button
+        className="lg:hidden"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open navigation menu"
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer', padding: '6px',
+          color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
+          borderRadius: '8px', flexShrink: 0,
+        }}
+      >
+        <i className="ti ti-menu-2" style={{ fontSize: '22px' }} />
+      </button>
+
       {/* Page title */}
       <div style={{
         fontSize: 'var(--text-lg)', fontWeight: 600,
         letterSpacing: '-0.01em', whiteSpace: 'nowrap',
         color: 'var(--color-foreground)',
+        flexShrink: 0,
       }}>{title}</div>
 
-      {/* Search */}
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+      {/* Search — hidden on mobile/tablet (< lg), visible on desktop (1025px+) */}
+      <div className="hidden lg:flex" style={{ flex: 1, justifyContent: 'center' }}>
         <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
           <i className="ti ti-search" style={{
             fontSize: '16px', color: 'var(--color-foreground-subtle)',
@@ -75,8 +92,11 @@ export function TopBar() {
         </div>
       </div>
 
+      {/* Spacer on mobile & tablet so right icons stay right */}
+      <div className="flex-1 lg:hidden" />
+
       {/* Right: bell + avatar + role */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
         <div
           style={{ position: 'relative', cursor: 'pointer',
             color: 'var(--color-foreground-muted)', display: 'flex' }}
@@ -100,7 +120,7 @@ export function TopBar() {
           }}>
             {getInitials(appUser?.name ?? 'SZ')}
           </div>
-          <span style={{
+          <span className="hidden sm:inline" style={{
             fontSize: 'var(--text-xs)', fontWeight: 600,
             textTransform: 'uppercase', letterSpacing: '0.04em',
             padding: '2px 8px', borderRadius: '10px',
