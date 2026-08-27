@@ -6,7 +6,6 @@ import { signOut } from '@/lib/firebase/auth'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { NAV_GROUPS, ALL_NAV_HREFS } from './navItems'
-import type { UserRole } from '@/types'
 
 function getInitials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)

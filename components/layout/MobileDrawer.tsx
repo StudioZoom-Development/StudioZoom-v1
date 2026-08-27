@@ -50,6 +50,7 @@ export function MobileDrawer() {
 
   useEffect(() => {
     if (sidebarOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted(true)
       // Small delay so the CSS transition fires after mount
       const t = setTimeout(() => setVisible(true), 10)
