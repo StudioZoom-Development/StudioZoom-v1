@@ -814,6 +814,7 @@ export default function SettingsPage() {
                 )
               })}
             </div>
+          </div>
 
           {/* ── Branding fields header with edit toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
