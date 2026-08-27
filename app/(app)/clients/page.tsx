@@ -11,6 +11,8 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { Client } from '@/types'
 
+import { useRolePermissions } from '@/hooks/useRole'
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 const EVENT_TYPE_LABELS: Record<string, string> = {
   wedding: 'Wedding', preWedding: 'Pre-Wedding', engagement: 'Engagement',
@@ -35,6 +37,7 @@ const SELECT_STYLE: React.CSSProperties = {
 export default function ClientsPage() {
   const router  = useRouter()
   const appUser = useAuthStore(s => s.appUser)
+  const { isAdminOrManager } = useRolePermissions()
 
   const [clients,      setClients]      = useState<Client[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -80,10 +83,10 @@ export default function ClientsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
       {/* ── Filter bar (exact from design-components/ScreenClients_dc.html) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-2.5 w-full">
 
         {/* Search with icon prefix */}
-        <div style={{ position: 'relative' }}>
+        <div className="relative w-full sm:w-auto">
           <i className="ti ti-search" style={{
             fontSize: '15px', color: 'var(--color-foreground-subtle)',
             position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
@@ -92,8 +95,9 @@ export default function ClientsPage() {
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search clients"
+            className="w-full sm:w-[200px]"
             style={{
-              fontFamily: 'var(--font-inter)', width: '200px', boxSizing: 'border-box',
+              fontFamily: 'var(--font-inter)', boxSizing: 'border-box',
               height: '36px', background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)', borderRadius: '8px',
               padding: '0 12px 0 30px', fontSize: 'var(--text-sm)',
@@ -102,40 +106,43 @@ export default function ClientsPage() {
           />
         </div>
 
-        {/* Event type · All (exact label from design) */}
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={SELECT_STYLE}>
-          <option value="">Event type · All</option>
-          <option value="wedding">Wedding</option>
-          <option value="engagement">Engagement</option>
-          <option value="corporate">Corporate</option>
-          <option value="portrait">Portrait</option>
-          <option value="preWedding">Pre-Wedding</option>
-          <option value="studio">Studio</option>
-        </select>
+        {/* Filters Wrapper for Mobile */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+          {/* Event type · All */}
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ ...SELECT_STYLE, width: '100%' }}>
+            <option value="">Event type · All</option>
+            <option value="wedding">Wedding</option>
+            <option value="engagement">Engagement</option>
+            <option value="corporate">Corporate</option>
+            <option value="portrait">Portrait</option>
+            <option value="preWedding">Pre-Wedding</option>
+            <option value="studio">Studio</option>
+          </select>
 
-        {/* Stage · All */}
-        <select value={filterStage} onChange={e => setFilterStage(e.target.value)} style={SELECT_STYLE}>
-          <option value="">Stage · All</option>
-          <option value="booked">Booked</option>
-          <option value="planning">Planning</option>
-          <option value="preProduction">Pre-Prod</option>
-          <option value="eventDay">Event Day</option>
-          <option value="postProduction">Post-Prod</option>
-          <option value="delivered">Delivered</option>
-        </select>
+          {/* Stage · All */}
+          <select value={filterStage} onChange={e => setFilterStage(e.target.value)} style={{ ...SELECT_STYLE, width: '100%' }}>
+            <option value="">Stage · All</option>
+            <option value="booked">Booked</option>
+            <option value="planning">Planning</option>
+            <option value="preProduction">Pre-Prod</option>
+            <option value="eventDay">Event Day</option>
+            <option value="postProduction">Post-Prod</option>
+            <option value="delivered">Delivered</option>
+          </select>
 
-        {/* Payment · All */}
-        <select value={filterPmt} onChange={e => setFilterPmt(e.target.value)} style={SELECT_STYLE}>
-          <option value="">Payment · All</option>
-          <option value="paid">Paid</option>
-          <option value="partial">Partial</option>
-          <option value="unpaid">Overdue</option>
-        </select>
+          {/* Payment · All */}
+          <select value={filterPmt} onChange={e => setFilterPmt(e.target.value)} style={{ ...SELECT_STYLE, width: '100%', gridColumn: 'span 2 / span 2' }}>
+            <option value="">Payment · All</option>
+            <option value="paid">Paid</option>
+            <option value="partial">Partial</option>
+            <option value="unpaid">Overdue</option>
+          </select>
+        </div>
 
-        <div style={{ flex: 1 }} />
+        <div className="hidden sm:block sm:flex-1" />
 
         {/* ShadcnButton → shadcn Button (MyDesignSystem.ShadcnButton) */}
-        <Button className="h-9 font-medium" onClick={() => router.push('/clients/new')}>
+        <Button className="h-9 font-medium w-full sm:w-auto" onClick={() => router.push('/clients/new')}>
           ＋ New client
         </Button>
       </div>
@@ -145,7 +152,8 @@ export default function ClientsPage() {
         background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
         borderRadius: '12px', overflow: 'hidden',
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+          <table style={{ width: '100%', minWidth: isAdminOrManager ? '720px' : '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
             <tr>
               {['#', 'Client', 'Event type', 'Event date', 'Stage', 'Balance due', 'Assigned', ''].map((h, i) => (
@@ -191,6 +199,7 @@ export default function ClientsPage() {
             )}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination footer (exact from design) */}
         {!loading && filtered.length > 0 && (

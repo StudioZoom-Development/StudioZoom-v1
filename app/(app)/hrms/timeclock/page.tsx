@@ -426,38 +426,22 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
 
   return (
     <div
+      className="w-full px-3 py-4 sm:px-6 sm:py-8 flex flex-col items-center gap-5"
       style={{
         fontFamily: 'var(--font-inter)',
         color: 'var(--color-foreground)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '20px',
-        padding: '32px 24px',
       }}
     >
       <div
+        className="w-full max-w-[480px] p-4 sm:p-7 rounded-2xl flex flex-col gap-5"
         style={{
-          width: '100%',
-          maxWidth: '480px',
           background: 'var(--color-surface)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '16px',
-          padding: '28px 24px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
         }}
       >
         <div style={{ textAlign: 'center' }}>
           <div
-            style={{
-              fontSize: '2.6rem',
-              fontWeight: 700,
-              letterSpacing: '-0.03em',
-              color: 'var(--color-foreground)',
-              lineHeight: 1.1,
-            }}
+            className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-foreground)] leading-tight"
           >
             {formatClock12h(now)}
           </div>

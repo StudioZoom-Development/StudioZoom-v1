@@ -10,6 +10,8 @@ import { subscribeToLeads } from '@/lib/firebase/queries/leads'
 import { formatDisplayDate } from '@/lib/utils/dates'
 import { Lead } from '@/types'
 
+import { useRolePermissions } from '@/hooks/useRole'
+
 // Select styling matching design components
 const SELECT_STYLE: React.CSSProperties = {
   fontFamily:   'var(--font-inter)',
@@ -26,6 +28,7 @@ const SELECT_STYLE: React.CSSProperties = {
 
 export default function LeadsPage() {
   const router = useRouter()
+  const { isAdminOrManager } = useRolePermissions()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -92,10 +95,10 @@ export default function LeadsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'var(--font-inter)' }}>
 
       {/* ── Control / Filter Bar (exact from ScreenCRM2.dc.html line 193) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full">
 
         {/* Search leads with icon prefix */}
-        <div style={{ position: 'relative' }}>
+        <div className="relative w-full sm:w-auto">
           <i
             className="ti ti-search"
             style={{
@@ -112,9 +115,9 @@ export default function LeadsPage() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder="Search leads"
+            className="w-full sm:w-[200px]"
             style={{
               fontFamily: 'var(--font-inter)',
-              width: '200px',
               boxSizing: 'border-box',
               height: '36px',
               background: 'var(--color-surface-raised)',
@@ -135,6 +138,7 @@ export default function LeadsPage() {
             setLoading(true)
             setSourceFilter(e.target.value)
           }}
+          className="w-full sm:w-auto"
           style={SELECT_STYLE}
         >
           <option value="All">Source · All</option>
@@ -144,11 +148,11 @@ export default function LeadsPage() {
           <option value="Other">Other</option>
         </select>
 
-        <div style={{ flex: 1 }} />
+        <div className="hidden sm:block sm:flex-1" />
 
         {/* Requirement 1: Click New Lead -> opens /leads/new */}
         <Button
-          className="h-9 font-medium"
+          className="h-9 font-medium w-full sm:w-auto"
           onClick={() => router.push('/leads/new')}
         >
           ＋ New lead
@@ -164,7 +168,8 @@ export default function LeadsPage() {
           overflow: 'hidden',
         }}
       >
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+          <table style={{ width: '100%', minWidth: isAdminOrManager ? '680px' : '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
             <tr>
               {[
@@ -321,9 +326,9 @@ export default function LeadsPage() {
                   </td>
                 </tr>
               ))
-            )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

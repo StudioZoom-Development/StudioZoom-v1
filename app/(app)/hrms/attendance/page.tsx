@@ -538,8 +538,8 @@ function TeamAttendanceView() {
       }}
     >
       {/* ── Top Bar Controls ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 w-full" style={{ gap: '16px' }}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto">
           {/* Month Selector Pill */}
           <div
             style={{
@@ -697,8 +697,8 @@ function TeamAttendanceView() {
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
         }}
       >
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', tableLayout: 'auto' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+          <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', tableLayout: 'auto' }}>
             <thead>
               <tr style={{ background: 'var(--color-surface-raised)' }}>
                 {/* STAFF column header */}
