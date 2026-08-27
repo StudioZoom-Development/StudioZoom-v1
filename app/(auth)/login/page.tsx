@@ -50,16 +50,21 @@ export default function LoginPage() {
   // Quick sign in for preview/dev role testing
   const handleQuickSignIn = (role: 'admin' | 'manager' | 'staff') => {
     setError(null)
+    let email = ''
+    let password = ''
     if (role === 'admin') {
-      setValue('email', 'admin@studiozoom.in')
-      setValue('password', 'StudioZoom@2026')
+      email = 'admin@studiozoom.in'
+      password = 'StudioZoom@2026'
     } else if (role === 'manager') {
-      setValue('email', 'manager@studiozoom.in')
-      setValue('password', 'StudioZoom@2026')
+      email = 'manager@studiozoom.in'
+      password = 'StudioZoom@2026'
     } else {
-      setValue('email', 'staff@studiozoom.in')
-      setValue('password', 'StudioZoom@2026')
+      email = 'staff@studiozoom.in'
+      password = 'StudioZoom@2026'
     }
+    setValue('email', email, { shouldValidate: true })
+    setValue('password', password, { shouldValidate: true })
+    onSubmit({ email, password })
   }
 
   return (

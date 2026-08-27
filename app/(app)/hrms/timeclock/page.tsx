@@ -201,19 +201,14 @@ function TeamTimeClockView() {
 
   return (
     <div
+      className="w-full px-4 py-4 sm:px-8 sm:py-6 max-w-[1280px] mx-auto flex flex-col gap-6"
       style={{
         fontFamily: 'var(--font-inter)',
         color: 'var(--color-foreground)',
-        padding: '24px 32px',
-        maxWidth: '1280px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
       }}
     >
       {/* ── Top Header Section ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px' }}>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-5 w-full">
         <div>
           <h1
             style={{
@@ -242,14 +237,10 @@ function TeamTimeClockView() {
 
         {/* Live Digital Clock */}
         <div
+          className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-foreground)] text-left sm:text-right pt-1"
           style={{
-            fontSize: '2.2rem',
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
-            color: 'var(--color-foreground)',
             fontFamily: 'var(--font-inter)',
             lineHeight: 1,
-            paddingTop: '4px',
           }}
         >
           {formatClock12h(now)}
@@ -426,38 +417,22 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
 
   return (
     <div
+      className="w-full px-3 py-4 sm:px-6 sm:py-8 flex flex-col items-center gap-5"
       style={{
         fontFamily: 'var(--font-inter)',
         color: 'var(--color-foreground)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '20px',
-        padding: '32px 24px',
       }}
     >
       <div
+        className="w-full max-w-[480px] p-4 sm:p-7 rounded-2xl flex flex-col gap-5"
         style={{
-          width: '100%',
-          maxWidth: '480px',
           background: 'var(--color-surface)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '16px',
-          padding: '28px 24px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
         }}
       >
         <div style={{ textAlign: 'center' }}>
           <div
-            style={{
-              fontSize: '2.6rem',
-              fontWeight: 700,
-              letterSpacing: '-0.03em',
-              color: 'var(--color-foreground)',
-              lineHeight: 1.1,
-            }}
+            className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-foreground)] leading-tight"
           >
             {formatClock12h(now)}
           </div>
@@ -530,9 +505,10 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
             gridTemplateColumns: '1fr 1fr 1fr',
             borderTop: '0.5px solid var(--color-border)',
             paddingTop: '16px',
+            width: '100%',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', textAlign: 'center', width: '100%' }}>
             <span
               style={{
                 fontSize: 'var(--text-xs)',
@@ -540,11 +516,14 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 color: 'var(--color-foreground-subtle)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               Check-In
             </span>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', textAlign: 'center', width: '100%', display: 'block' }}>
               {firstSession ? formatTime12h(firstSession.checkInAt) : '—'}
             </span>
           </div>
@@ -555,6 +534,8 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
               flexDirection: 'column',
               gap: '4px',
               alignItems: 'center',
+              textAlign: 'center',
+              width: '100%',
               borderLeft: '0.5px solid var(--color-border)',
               borderRight: '0.5px solid var(--color-border)',
             }}
@@ -566,16 +547,19 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 color: 'var(--color-foreground-subtle)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               Hours Today
             </span>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', textAlign: 'center', width: '100%', display: 'block' }}>
               {formatDuration(totalSecs)}
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', textAlign: 'center', width: '100%' }}>
             <span
               style={{
                 fontSize: 'var(--text-xs)',
@@ -583,6 +567,9 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 color: 'var(--color-foreground-subtle)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               VS 9H
@@ -592,6 +579,9 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 fontSize: 'var(--text-sm)',
                 fontWeight: 700,
                 color: vsNegative ? 'var(--color-secondary)' : 'var(--color-success)',
+                textAlign: 'center',
+                width: '100%',
+                display: 'block',
               }}
             >
               {formatVs9h(totalSecs)}

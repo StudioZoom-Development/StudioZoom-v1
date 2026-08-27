@@ -12,9 +12,9 @@ export const useUIStore = create<UIState>()(
   persist(
     set => ({
       theme:          'dark',
-      sidebarOpen:    true,
+      sidebarOpen:    false,
       toggleTheme:    () => set(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
-      setSidebarOpen: v  => set({ sidebarOpen: v }),
+      setSidebarOpen: (v: boolean) => set({ sidebarOpen: v }),
     }),
     { name: 'studio-zoom-ui' }
   )

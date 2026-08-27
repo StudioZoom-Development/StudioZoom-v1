@@ -14,6 +14,8 @@ import {
   reactivateStaff,
 } from '@/lib/firebase/queries/staff'
 
+import { useRolePermissions } from '@/hooks/useRole'
+
 function getInitials(name: string): string {
   if (!name) return 'SP'
   const parts = name.trim().split(/\s+/)
@@ -23,6 +25,7 @@ function getInitials(name: string): string {
 
 export default function StaffListPage() {
   const router = useRouter()
+  const { isAdminOrManager } = useRolePermissions()
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -68,8 +71,8 @@ export default function StaffListPage() {
     <div style={{ padding: '24px', maxWidth: '1280px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
       {/* Top Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ position: 'relative' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full">
+        <div className="relative w-full sm:w-auto">
           <i className="ti ti-search" style={{
             fontSize: '15px',
             color: 'var(--color-foreground-subtle)',
@@ -83,9 +86,9 @@ export default function StaffListPage() {
             placeholder="Search staff"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            className="w-full sm:w-[200px]"
             style={{
               fontFamily: 'var(--font-inter)',
-              width: '200px',
               boxSizing: 'border-box',
               height: '36px',
               background: 'var(--color-surface-raised)',
@@ -98,8 +101,8 @@ export default function StaffListPage() {
             }}
           />
         </div>
-        <div style={{ flex: 1 }} />
-        <Button className="h-9 font-medium" onClick={() => router.push('/settings/users/new')}>
+        <div className="hidden sm:block sm:flex-1" />
+        <Button className="h-9 font-medium w-full sm:w-auto" onClick={() => router.push('/settings/users/new')}>
           ＋ Add staff
         </Button>
       </div>
@@ -111,7 +114,8 @@ export default function StaffListPage() {
         borderRadius: '12px',
         overflow: 'hidden'
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+          <table style={{ width: '100%', minWidth: isAdminOrManager ? '600px' : '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
             <tr>
               <th style={{
@@ -291,6 +295,7 @@ export default function StaffListPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Deactivate/Reactivate Confirmation Modal */}

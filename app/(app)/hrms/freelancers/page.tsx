@@ -37,8 +37,11 @@ const SKILL_FILTERS = [
   { key: 'designer', label: 'Designer' },
 ]
 
+import { useRolePermissions } from '@/hooks/useRole'
+
 export default function FreelancersListPage() {
   const router = useRouter()
+  const { isAdminOrManager } = useRolePermissions()
   const [freelancers, setFreelancers] = useState<Freelancer[]>([])
   const [payouts, setPayouts] = useState<FreelancerPayout[]>([])
   const [loading, setLoading] = useState(true)
@@ -120,10 +123,6 @@ export default function FreelancersListPage() {
       setFormError('Please enter freelancer full name')
       return
     }
-    if (!formData.contact.trim()) {
-      setFormError('Please enter contact number')
-      return
-    }
 
     setSaving(true)
     setFormError('')
@@ -155,9 +154,9 @@ export default function FreelancersListPage() {
       fontFamily: 'var(--font-inter)',
     }}>
       {/* Top Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full">
         {/* Search */}
-        <div style={{ position: 'relative' }}>
+        <div className="relative w-full sm:w-auto">
           <i
             className="ti ti-search"
             style={{
@@ -174,9 +173,9 @@ export default function FreelancersListPage() {
             placeholder="Search by name"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            className="w-full sm:w-[200px]"
             style={{
               fontFamily: 'var(--font-inter)',
-              width: '200px',
               boxSizing: 'border-box',
               height: '36px',
               background: 'var(--color-surface-raised)',
@@ -191,34 +190,36 @@ export default function FreelancersListPage() {
         </div>
 
         {/* Skill Filter Chips */}
-        {SKILL_FILTERS.map(f => {
-          const isActive = skillFilter === f.key
-          return (
-            <span
-              key={f.key}
-              onClick={() => setSkillFilter(f.key)}
-              style={{
-                cursor: 'pointer',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                padding: '6px 12px',
-                borderRadius: '16px',
-                background: isActive ? 'var(--color-primary-muted)' : 'var(--color-surface)',
-                color: isActive ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
-                border: `0.5px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                transition: 'all 0.15s ease',
-                userSelect: 'none',
-              }}
-            >
-              {f.label}
-            </span>
-          )
-        })}
+        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+          {SKILL_FILTERS.map(f => {
+            const isActive = skillFilter === f.key
+            return (
+              <span
+                key={f.key}
+                onClick={() => setSkillFilter(f.key)}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  background: isActive ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                  border: `0.5px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  transition: 'all 0.15s ease',
+                  userSelect: 'none',
+                }}
+              >
+                {f.label}
+              </span>
+            )
+          })}
+        </div>
 
-        <div style={{ flex: 1 }} />
+        <div className="hidden sm:block sm:flex-1" />
 
         {/* Add Freelancer Button */}
-        <Button className="h-9 font-medium" onClick={handleOpenAddModal}>
+        <Button className="h-9 font-medium w-full sm:w-auto" onClick={handleOpenAddModal}>
           ＋ Add freelancer
         </Button>
       </div>
@@ -230,21 +231,22 @@ export default function FreelancersListPage() {
         borderRadius: '12px',
         overflow: 'hidden',
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
-          <thead>
-            <tr>
-              <th style={{
-                textAlign: 'left',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                color: 'var(--color-foreground-subtle)',
-                padding: '12px 16px',
-                borderBottom: '0.5px solid var(--color-border-strong)',
-              }}>
-                Freelancer
-              </th>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+          <table style={{ width: '100%', minWidth: isAdminOrManager ? '640px' : '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+            <thead>
+              <tr>
+                <th style={{
+                  textAlign: 'left',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                  padding: '12px 16px',
+                  borderBottom: '0.5px solid var(--color-border-strong)',
+                }}>
+                  Freelancer
+                </th>
               <th style={{
                 textAlign: 'left',
                 fontSize: 'var(--text-xs)',
@@ -446,6 +448,7 @@ export default function FreelancersListPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Add Freelancer Modal Overlay */}

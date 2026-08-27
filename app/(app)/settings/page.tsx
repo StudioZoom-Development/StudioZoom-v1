@@ -501,6 +501,7 @@ export default function SettingsPage() {
     else if (tabParam === 'branding') setPage('Studio branding')
   }
   const [users, setUsers] = useState<UserRow[]>([])
+  const [mobileTab, setMobileTab] = useState<Page | null>(null)
 
   // Studio selector
   const [selectedStudio, setSelectedStudio] = useState<'studio-zoom' | 'studio-zoom-productions'>('studio-zoom')
@@ -734,276 +735,246 @@ export default function SettingsPage() {
 
   const deletingUser = users.find(u => u.uid === deleteUid)
 
-  return (
-    <div style={{
-      maxWidth: '1100px', margin: '0 auto', padding: '24px',
-      display: 'flex', gap: '20px', alignItems: 'start',
-      fontFamily: 'var(--font-inter)', color: 'var(--color-foreground)',
-    }}>
+  const renderDetailContent = () => (
+    <>
+      {/* ═══════════════════════════════════════
+          A — STUDIO BRANDING
+      ═══════════════════════════════════════ */}
+      {page === 'Studio branding' && (
+        <div style={{
+          background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
+          borderRadius: '12px', padding: '24px',
+          display: 'flex', flexDirection: 'column', gap: '20px',
+        }}>
+          {/* ── Studio identity selector */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px',
+            borderBottom: '0.5px solid var(--color-border)', paddingBottom: '20px' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Studio identity</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+              Select which studio this document set belongs to · appears on quotations, invoices and payslips
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ paddingBottom: '4px' }}>
+              {STUDIOS.map(studio => {
+                const isSelected = selectedStudio === studio.id
+                return (
+                  <div
+                    key={studio.id}
+                    onClick={() => {
+                      setSelectedStudio(studio.id as 'studio-zoom' | 'studio-zoom-productions')
+                      setBrandEditMode(false) // exit edit mode when switching studio
+                    }}
+                    style={{
+                      border: isSelected
+                        ? '1.5px solid var(--color-primary)'
+                        : '0.5px solid var(--color-border)',
+                      borderRadius: '12px',
+                      padding: '16px 18px',
+                      cursor: 'pointer',
+                      background: isSelected
+                        ? 'var(--color-primary-muted)'
+                        : 'var(--color-surface-raised)',
+                      display: 'flex', alignItems: 'center', gap: '14px',
+                      transition: 'border-color 0.15s, background 0.15s',
+                    }}
+                  >
+                    {/* Studio logo */}
+                    <div style={{
+                      width: '52px', height: '40px', borderRadius: '8px', flexShrink: 0,
+                      background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/logo.png" alt={studio.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
+                    </div>
 
-      {/* ── Left nav */}
-      <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {NAV_ITEMS.map(item => (
-          <div
-            key={item.label}
-            onClick={() => setPage(item.label)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              height: '38px', padding: '0 12px', borderRadius: '8px', cursor: 'pointer',
-              background: page === item.label ? 'var(--color-primary-muted)' : 'transparent',
-              color:      page === item.label ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
-              fontSize: 'var(--text-sm)', fontWeight: 500,
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            <i className={`ti ${item.icon}`} style={{ fontSize: '17px' }} />
-            {item.label}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Content panel */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-
-        {/* ═══════════════════════════════════════
-            A — STUDIO BRANDING
-        ═══════════════════════════════════════ */}
-        {page === 'Studio branding' && (
-          <div style={{
-            background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
-            borderRadius: '12px', padding: '24px',
-            display: 'flex', flexDirection: 'column', gap: '20px',
-          }}>
-
-
-                      {/* ── Studio identity selector */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px',
-              borderBottom: '0.5px solid var(--color-border)', paddingBottom: '20px' }}>
-              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Studio identity</div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                Select which studio this document set belongs to · appears on quotations, invoices and payslips
-              </div>
-              <div style={{ display: 'flex', gap: '12px', paddingBottom: '4px' }}>
-                {STUDIOS.map(studio => {
-                  const isSelected = selectedStudio === studio.id
-                  return (
-                    <div
-                      key={studio.id}
-                      onClick={() => {
-                        setSelectedStudio(studio.id as 'studio-zoom' | 'studio-zoom-productions')
-                        setBrandEditMode(false) // exit edit mode when switching studio
-                      }}
-                      style={{
-                        flex: 1,
-                        border: isSelected
-                          ? '1.5px solid var(--color-primary)'
-                          : '0.5px solid var(--color-border)',
-                        borderRadius: '12px',
-                        padding: '16px 18px',
-                        cursor: 'pointer',
-                        background: isSelected
-                          ? 'var(--color-primary-muted)'
-                          : 'var(--color-surface-raised)',
-                        display: 'flex', alignItems: 'center', gap: '14px',
-                        transition: 'border-color 0.15s, background 0.15s',
-                      }}
-                    >
-                      {/* Studio logo */}
-                      <div style={{
-                        width: '52px', height: '40px', borderRadius: '8px', flexShrink: 0,
-                        background: 'linear-gradient(135deg, var(--color-primary) 0%, #8b3a72 100%)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        overflow: 'hidden',
-                      }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logo.png" alt={studio.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
+                    {/* Studio name + tagline */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>
+                        {studio.name}
                       </div>
-
-                      {/* Studio name + tagline */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>
-                          {studio.name}
-                        </div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                          {studio.tagline}
-                        </div>
-                      </div>
-
-                      {/* Radio indicator */}
-                      <div style={{
-                        width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
-                        background:  isSelected ? 'var(--color-primary)' : 'transparent',
-                        border:      isSelected ? 'none' : '1.5px solid var(--color-foreground-subtle)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'background 0.15s, border 0.15s',
-                      }}>
-                        {isSelected && (
-                          <i className="ti ti-check" style={{ fontSize: '12px', color: '#ffffff' }} />
-                        )}
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                        {studio.tagline}
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
 
-            {/* ── Branding fields header with edit toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
-                {STUDIOS.find(s => s.id === selectedStudio)?.name} details
-              </div>
-              {!brandEditMode ? (
-                <span
-                  onClick={() => { setBrandEditMode(true); setBrandError('') }}
-                  title="Edit details"
-                  style={{
-                    width: '30px', height: '30px', borderRadius: '8px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: 'var(--color-accent)',
-                    background: 'transparent', transition: 'background 0.12s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-accent-muted)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <i className="ti ti-pencil" style={{ fontSize: '16px' }} />
-                </span>
-              ) : (
-                <span
-                  onClick={() => { setBrandEditMode(false); setBrandError('') }}
-                  title="Cancel editing"
-                  style={{
-                    width: '30px', height: '30px', borderRadius: '8px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: 'var(--color-foreground-muted)',
-                    background: 'transparent', transition: 'background 0.12s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <i className="ti ti-x" style={{ fontSize: '16px' }} />
-                </span>
-              )}
-            </div>
-
-            {brandError && (
-              <div style={{
-                fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
-                background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
-              }}>
-                {brandError}
-              </div>
-            )}
-
-            {/* ── 6 branding fields — 3-col grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-              {BRAND_FIELDS.map(f => {
-                const val = (brandData[selectedStudio] ?? EMPTY_BRAND)[f.key]
-                return (
-                  <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{f.label}</label>
-                    {brandEditMode ? (
-                      f.key === 'phone' ? (
-                        <PhoneNumberInput
-                          value={val}
-                          onChange={nextVal => {
-                            if (brandError) setBrandError('')
-                            setBrandData(prev => ({
-                              ...prev,
-                              [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), phone: nextVal },
-                            }))
-                          }}
-                          error={brandError}
-                        />
-                      ) : (
-                        <Input
-                          value={val}
-                          onChange={e => setBrandData(prev => ({
-                            ...prev,
-                            [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), [f.key]: e.target.value },
-                          }))}
-                          className="h-9"
-                        />
-                      )
-                    ) : (
-                      <div style={{
-                        height: '36px', padding: '0 12px',
-                        display: 'flex', alignItems: 'center',
-                        background: 'var(--color-surface-raised)',
-                        border: '0.5px solid var(--color-border)',
-                        borderRadius: '8px',
-                        fontSize: 'var(--text-sm)',
-                        color: val ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {val || '—'}
-                      </div>
-                    )}
+                    {/* Radio indicator */}
+                    <div style={{
+                      width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                      background:  isSelected ? 'var(--color-primary)' : 'transparent',
+                      border:      isSelected ? 'none' : '1.5px solid var(--color-foreground-subtle)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'background 0.15s, border 0.15s',
+                    }}>
+                      {isSelected && (
+                        <i className="ti ti-check" style={{ fontSize: '12px', color: '#ffffff' }} />
+                      )}
+                    </div>
                   </div>
                 )
               })}
             </div>
+          </div>
 
-            {/* ── Save — only in edit mode */}
-            {brandEditMode && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-                <Button className="h-9 font-medium" onClick={handleSaveBranding} disabled={brandSaving}>
-                  {brandSaving ? 'Saving…' : brandSaved ? 'Saved ✓' : 'Save changes'}
-                </Button>
-              </div>
+          {/* ── Branding fields header with edit toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
+              {STUDIOS.find(s => s.id === selectedStudio)?.name} details
+            </div>
+            {!brandEditMode ? (
+              <span
+                onClick={() => { setBrandEditMode(true); setBrandError('') }}
+                title="Edit details"
+                style={{
+                  width: '30px', height: '30px', borderRadius: '8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: 'var(--color-accent)',
+                  background: 'transparent', transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-accent-muted)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <i className="ti ti-pencil" style={{ fontSize: '16px' }} />
+              </span>
+            ) : (
+              <span
+                onClick={() => { setBrandEditMode(false); setBrandError('') }}
+                title="Cancel editing"
+                style={{
+                  width: '30px', height: '30px', borderRadius: '8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: 'var(--color-foreground-muted)',
+                  background: 'transparent', transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <i className="ti ti-x" style={{ fontSize: '16px' }} />
+              </span>
             )}
           </div>
-        )}
 
-        {/* ═══════════════════════════════════════
-            B — PACKAGES
-        ═══════════════════════════════════════ */}
-        {page === 'Packages' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                className="h-9 font-medium"
-                onClick={() => { setEditPkg('new'); setShowPkgModal(true) }}
-                disabled={pkgSaving}
-              >
-                + Add package
+          {brandError && (
+            <div style={{
+              fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
+              background: 'var(--color-danger-muted)', borderRadius: '8px', padding: '8px 12px',
+            }}>
+              {brandError}
+            </div>
+          )}
+
+          {/* ── 6 branding fields — responsive grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {BRAND_FIELDS.map(f => {
+              const val = (brandData[selectedStudio] ?? EMPTY_BRAND)[f.key]
+              return (
+                <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{f.label}</label>
+                  {brandEditMode ? (
+                    f.key === 'phone' ? (
+                      <PhoneNumberInput
+                        value={val}
+                        onChange={nextVal => {
+                          if (brandError) setBrandError('')
+                          setBrandData(prev => ({
+                            ...prev,
+                            [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), phone: nextVal },
+                          }))
+                        }}
+                        error={brandError}
+                      />
+                    ) : (
+                      <Input
+                        value={val}
+                        onChange={e => setBrandData(prev => ({
+                          ...prev,
+                          [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), [f.key]: e.target.value },
+                        }))}
+                        className="h-9"
+                      />
+                    )
+                  ) : (
+                    <div style={{
+                      height: '36px', padding: '0 12px',
+                      display: 'flex', alignItems: 'center',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '8px',
+                      fontSize: 'var(--text-sm)',
+                      color: val ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {val || '—'}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ── Save — only in edit mode */}
+          {brandEditMode && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+              <Button className="h-9 font-medium" onClick={handleSaveBranding} disabled={brandSaving}>
+                {brandSaving ? 'Saving…' : brandSaved ? 'Saved ✓' : 'Save changes'}
               </Button>
             </div>
+          )}
+        </div>
+      )}
 
-            {packages.map((p, index) => {
-              const colour = PKG_COLOURS[p.name] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
-              const displayPrice = p.lineItems && p.lineItems.length > 0
-                ? p.lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
-                : p.price
+      {/* ═══════════════════════════════════════
+          B — PACKAGES
+      ═══════════════════════════════════════ */}
+      {page === 'Packages' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              className="h-9 font-medium"
+              onClick={() => { setEditPkg('new'); setShowPkgModal(true) }}
+              disabled={pkgSaving}
+            >
+              + Add package
+            </Button>
+          </div>
 
-              const isDragging = draggedIndex === index
-              const isDragOver = dragOverIndex === index
+          {packages.map((p, index) => {
+            const colour = PKG_COLOURS[p.name] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
+            const displayPrice = p.lineItems && p.lineItems.length > 0
+              ? p.lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+              : p.price
 
-              return (
-                <div
-                  key={p.id}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={e => handleDragOver(e, index)}
-                  onDrop={() => handleDrop(index)}
-                  onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null) }}
-                  style={{
-                    background: 'var(--color-surface)',
-                    border: isDragOver
-                      ? '1.5px solid var(--color-primary)'
-                      : '0.5px solid var(--color-border)',
-                    opacity: isDragging ? 0.4 : 1,
-                    borderRadius: '12px', padding: '16px 20px',
-                    display: 'flex', alignItems: 'center', gap: '16px',
-                    transition: 'border-color 0.15s, opacity 0.15s',
-                    cursor: 'grab',
-                  }}
-                  onMouseEnter={e => {
-                    if (!isDragOver) e.currentTarget.style.borderColor = 'var(--color-border-strong)'
-                  }}
-                  onMouseLeave={e => {
-                    if (!isDragOver) e.currentTarget.style.borderColor = 'var(--color-border)'
-                  }}
-                >
+            const isDragging = draggedIndex === index
+            const isDragOver = dragOverIndex === index
+
+            return (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={e => handleDragOver(e, index)}
+                onDrop={() => handleDrop(index)}
+                onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null) }}
+                className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4"
+                style={{
+                  background: 'var(--color-surface)',
+                  border: isDragOver
+                    ? '1.5px solid var(--color-primary)'
+                    : '0.5px solid var(--color-border)',
+                  opacity: isDragging ? 0.4 : 1,
+                  borderRadius: '12px',
+                  transition: 'border-color 0.15s, opacity 0.15s',
+                  cursor: 'grab',
+                }}
+                onMouseEnter={e => {
+                  if (!isDragOver) e.currentTarget.style.borderColor = 'var(--color-border-strong)'
+                }}
+                onMouseLeave={e => {
+                  if (!isDragOver) e.currentTarget.style.borderColor = 'var(--color-border)'
+                }}
+              >
+                {/* Top drag & icon row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   {/* Drag handle */}
                   <i className="ti ti-grip-vertical" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} />
 
@@ -1015,19 +986,20 @@ export default function SettingsPage() {
                   }}>
                     <i className="ti ti-package" style={{ fontSize: '20px' }} />
                   </div>
+                </div>
 
-                  {/* Name + description */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{p.items}</div>
-                  </div>
+                {/* Name + description */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                  <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{p.name}</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{p.items}</div>
+                </div>
 
-                  {/* Price */}
+                {/* Price + Edit row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                   <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>
                     ₹{displayPrice.toLocaleString('en-IN')}
                   </div>
 
-                  {/* Edit */}
                   <span
                     onClick={e => {
                       e.stopPropagation()
@@ -1039,204 +1011,333 @@ export default function SettingsPage() {
                     Edit
                   </span>
                 </div>
-              )
-            })}
-
-            {packages.length === 0 && (
-              <div style={{
-                background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
-                borderRadius: '12px', padding: '40px',
-                textAlign: 'center', color: 'var(--color-foreground-muted)', fontSize: 'var(--text-sm)',
-              }}>
-                No packages yet. Click &quot;+ Add package&quot; to create your first one.
               </div>
-            )}
-          </div>
-        )}
+            )
+          })}
 
-        {/* ═══════════════════════════════════════
-            C — NUMBERING
-        ═══════════════════════════════════════ */}
-        {page === 'Numbering' && (
-          <div style={{
-            background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
-            borderRadius: '12px', padding: '24px',
-            display: 'flex', flexDirection: 'column', gap: '18px',
-          }}>
-            {/* 3-col grid — Invoice prefix / Quotation prefix / Next number */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Invoice prefix</label>
-                <Input value={invoicePrefix} onChange={e => setInvoicePrefix(e.target.value)} className="h-9" placeholder="ZS-INV-" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Quotation prefix</label>
-                <Input value={quotationPrefix} onChange={e => setQuotationPrefix(e.target.value)} className="h-9" placeholder="ZS-Q-" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Next number</label>
-                <Input value={nextNumber} onChange={e => setNextNumber(e.target.value)} className="h-9" placeholder="0048" />
-              </div>
-            </div>
-
-            {/* Save */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-              <Button className="h-9 font-medium" onClick={handleSaveGst} disabled={gstSaving}>
-                {gstSaving ? 'Saving…' : gstSaved ? 'Saved ✓' : 'Save changes'}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════
-            D — USER MANAGEMENT
-        ═══════════════════════════════════════ */}
-        {page === 'User management' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button className="h-9 font-medium" onClick={() => router.push('/settings/users/new')}>
-                + Add user
-              </Button>
-            </div>
-
+          {packages.length === 0 && (
             <div style={{
               background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
-              borderRadius: '12px', overflow: 'hidden',
+              borderRadius: '12px', padding: '40px',
+              textAlign: 'center', color: 'var(--color-foreground-muted)', fontSize: 'var(--text-sm)',
             }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-surface-raised)' }}>
-                    {['USER', 'EMAIL', 'ROLE', 'STATUS', ''].map((h, i) => (
-                      <th
-                        key={i}
-                        style={{
-                          padding: '0 16px', height: '38px', textAlign: 'left',
-                          fontSize: 'var(--text-xs)', fontWeight: 600, letterSpacing: '0.04em',
-                          color: 'var(--color-foreground-subtle)',
-                          borderBottom: '0.5px solid var(--color-border-strong)',
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(u => (
-                    <tr
-                      key={u.uid}
-                      style={{ cursor: 'default', transition: 'background 0.1s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              No packages yet. Click &quot;+ Add package&quot; to create your first one.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════
+          C — NUMBERING
+      ═══════════════════════════════════════ */}
+      {page === 'Numbering' && (
+        <div style={{
+          background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
+          borderRadius: '12px', padding: '24px',
+          display: 'flex', flexDirection: 'column', gap: '18px',
+        }}>
+          {/* Responsive grid — Invoice prefix / Quotation prefix / Next number */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Invoice prefix</label>
+              <Input value={invoicePrefix} onChange={e => setInvoicePrefix(e.target.value)} className="h-9" placeholder="ZS-INV-" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Quotation prefix</label>
+              <Input value={quotationPrefix} onChange={e => setQuotationPrefix(e.target.value)} className="h-9" placeholder="ZS-Q-" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Next number</label>
+              <Input value={nextNumber} onChange={e => setNextNumber(e.target.value)} className="h-9" placeholder="0048" />
+            </div>
+          </div>
+
+          {/* Save */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+            <Button className="h-9 font-medium" onClick={handleSaveGst} disabled={gstSaving}>
+              {gstSaving ? 'Saving…' : gstSaved ? 'Saved ✓' : 'Save changes'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════
+          D — USER MANAGEMENT
+      ═══════════════════════════════════════ */}
+      {page === 'User management' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button className="h-9 font-medium" onClick={() => router.push('/settings/users/new')}>
+              + Add user
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto" style={{
+            background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+          }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', minWidth: '600px' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface-raised)' }}>
+                  {['USER', 'EMAIL', 'ROLE', 'STATUS', ''].map((h, i) => (
+                    <th
+                      key={i}
+                      style={{
+                        padding: '0 16px', height: '38px', textAlign: 'left',
+                        fontSize: 'var(--text-xs)', fontWeight: 600, letterSpacing: '0.04em',
+                        color: 'var(--color-foreground-subtle)',
+                        borderBottom: '0.5px solid var(--color-border-strong)',
+                      }}
                     >
-                      {/* USER */}
-                      <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{
-                            width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                            background: 'var(--color-primary-muted)', color: 'var(--color-primary)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '10px', fontWeight: 700,
-                          }}>
-                            {getInitials(u.name)}
-                          </div>
-                          <span style={{ fontWeight: 600 }}>{u.name}</span>
-                        </div>
-                      </td>
-
-                      {/* EMAIL */}
-                      <td style={{
-                        padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)',
-                        color: 'var(--color-foreground-muted)',
-                      }}>
-                        {u.email}
-                      </td>
-
-                      {/* ROLE — inline badge span, NOT <Badge> component */}
-                      <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)' }}>
-                        <span style={{
-                          fontSize: 'var(--text-xs)', fontWeight: 600,
-                          padding: '2px 8px', borderRadius: '10px',
-                          background: ROLE_STYLE[u.role]?.bg ?? 'var(--color-surface-overlay)',
-                          color:      ROLE_STYLE[u.role]?.fg ?? 'var(--color-foreground-muted)',
-                        }}>
-                          {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
-                        </span>
-                      </td>
-
-                      {/* STATUS */}
-                      <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                          <span style={{
-                            width: '7px', height: '7px', borderRadius: '50%',
-                            background: u.isActive ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                            flexShrink: 0,
-                          }} />
-                          {u.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-
-                      {/* ACTIONS */}
-                      <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                          {/* Edit */}
-                          <span
-                            onClick={() => setEditUser(u)}
-                            title="Edit profile"
-                            style={{
-                              width: '30px', height: '30px', borderRadius: '8px',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              cursor: 'pointer', color: 'var(--color-accent)',
-                              background: 'transparent', transition: 'background 0.12s',
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-accent-muted)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <i className="ti ti-pencil" style={{ fontSize: '16px' }} />
-                          </span>
-
-                          {/* Reset password */}
-                          <span
-                            onClick={() => setResetUser(u)}
-                            title="Reset password"
-                            style={{
-                              width: '30px', height: '30px', borderRadius: '8px',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              cursor: 'pointer', color: 'var(--color-foreground-muted)',
-                              background: 'transparent', transition: 'background 0.12s',
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <i className="ti ti-key" style={{ fontSize: '16px' }} />
-                          </span>
-
-                          {/* Delete */}
-                          <span
-                            onClick={() => setDeleteUid(u.uid)}
-                            title="Delete user"
-                            style={{
-                              width: '30px', height: '30px', borderRadius: '8px',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              cursor: 'pointer', color: 'var(--color-danger)',
-                              background: 'transparent', transition: 'background 0.12s',
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-danger-muted)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <i className="ti ti-trash" style={{ fontSize: '16px' }} />
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
+                      {h}
+                    </th>
                   ))}
-                </tbody>
-              </table>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr
+                    key={u.uid}
+                    style={{ cursor: 'default', transition: 'background 0.1s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {/* USER */}
+                    <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                          background: 'var(--color-primary-muted)', color: 'var(--color-primary)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '10px', fontWeight: 700,
+                        }}>
+                          {getInitials(u.name)}
+                        </div>
+                        <span style={{ fontWeight: 600 }}>{u.name}</span>
+                      </div>
+                    </td>
+
+                    {/* EMAIL */}
+                    <td style={{
+                      padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)',
+                      color: 'var(--color-foreground-muted)',
+                    }}>
+                      {u.email}
+                    </td>
+
+                    {/* ROLE — inline badge span, NOT <Badge> component */}
+                    <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)' }}>
+                      <span style={{
+                        fontSize: 'var(--text-xs)', fontWeight: 600,
+                        padding: '2px 8px', borderRadius: '10px',
+                        background: ROLE_STYLE[u.role]?.bg ?? 'var(--color-surface-overlay)',
+                        color:      ROLE_STYLE[u.role]?.fg ?? 'var(--color-foreground-muted)',
+                      }}>
+                        {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                      </span>
+                    </td>
+
+                    {/* STATUS */}
+                    <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                        <span style={{
+                          width: '7px', height: '7px', borderRadius: '50%',
+                          background: u.isActive ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                          flexShrink: 0,
+                        }} />
+                        {u.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+
+                    {/* ACTIONS */}
+                    <td style={{ padding: '0 16px', height: '48px', borderBottom: '0.5px solid var(--color-border)', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        {/* Edit */}
+                        <span
+                          onClick={() => setEditUser(u)}
+                          title="Edit profile"
+                          style={{
+                            width: '30px', height: '30px', borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', color: 'var(--color-accent)',
+                            background: 'transparent', transition: 'background 0.12s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-accent-muted)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <i className="ti ti-pencil" style={{ fontSize: '16px' }} />
+                        </span>
+
+                        {/* Reset password */}
+                        <span
+                          onClick={() => setResetUser(u)}
+                          title="Reset password"
+                          style={{
+                            width: '30px', height: '30px', borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', color: 'var(--color-foreground-muted)',
+                            background: 'transparent', transition: 'background 0.12s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <i className="ti ti-key" style={{ fontSize: '16px' }} />
+                        </span>
+
+                        {/* Delete */}
+                        <span
+                          onClick={() => setDeleteUid(u.uid)}
+                          title="Delete user"
+                          style={{
+                            width: '30px', height: '30px', borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', color: 'var(--color-danger)',
+                            background: 'transparent', transition: 'background 0.12s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-danger-muted)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <i className="ti ti-trash" style={{ fontSize: '16px' }} />
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  return (
+    <div style={{
+      maxWidth: '1100px', margin: '0 auto', padding: '16px',
+      fontFamily: 'var(--font-inter)', color: 'var(--color-foreground)',
+      width: '100%', boxSizing: 'border-box',
+    }}>
+      {/* ── DESKTOP VIEW (1025px+) — Side-by-side 2-column layout */}
+      <div className="hidden lg:flex" style={{ gap: '20px', alignItems: 'flex-start' }}>
+        {/* Left sub-nav */}
+        <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {NAV_ITEMS.map(item => (
+            <div
+              key={item.label}
+              onClick={() => setPage(item.label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                height: '38px', padding: '0 12px', borderRadius: '8px', cursor: 'pointer',
+                background: page === item.label ? 'var(--color-primary-muted)' : 'transparent',
+                color:      page === item.label ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                fontSize: 'var(--text-sm)', fontWeight: 500,
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <i className={`ti ${item.icon}`} style={{ fontSize: '17px' }} />
+              {item.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Right detail panel */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {renderDetailContent()}
+        </div>
+      </div>
+
+      {/* ── MOBILE & TABLET VIEW (< 1025px) — Responsive Drill-in Navigation */}
+      <div className="lg:hidden" style={{ width: '100%' }}>
+        {mobileTab === null ? (
+          /* Initial View: Full-width Sub-nav Cards List */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{
+              fontSize: 'var(--text-xs)', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              color: 'var(--color-foreground-subtle)', marginBottom: '4px',
+            }}>
+              Studio Settings
+            </div>
+            {NAV_ITEMS.map(item => (
+              <div
+                key={item.label}
+                onClick={() => {
+                  setPage(item.label)
+                  setMobileTab(item.label)
+                }}
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+              >
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '10px', flexShrink: 0,
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-primary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <i className={`ti ${item.icon}`} style={{ fontSize: '20px' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                    {item.label === 'Studio branding' && 'Studio identity, logo, GSTIN, address & contact details'}
+                    {item.label === 'Packages' && 'Service package templates & line items'}
+                    {item.label === 'Numbering' && 'Invoice & quotation prefix numbers'}
+                    {item.label === 'User management' && 'Manage staff accounts, roles & permissions'}
+                  </div>
+                </div>
+                <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Detail View: Sticky Back Header + Section Content */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '12px',
+              paddingBottom: '8px', borderBottom: '0.5px solid var(--color-border)',
+            }}>
+              <button
+                onClick={() => setMobileTab(null)}
+                style={{
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  color: 'var(--color-foreground)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-inter)',
+                }}
+              >
+                <i className="ti ti-arrow-left" style={{ fontSize: '16px' }} />
+                Back to Settings
+              </button>
+              <div style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                {mobileTab}
+              </div>
+            </div>
+
+            {/* Section Detail Content */}
+            <div style={{ width: '100%', minWidth: 0 }}>
+              {renderDetailContent()}
             </div>
           </div>
         )}
-
-
       </div>
 
       {/* ── Modals */}
@@ -1247,8 +1348,6 @@ export default function SettingsPage() {
           onClose={() => setShowPkgModal(false)}
         />
       )}
-
-
 
       {editUser && (
         <EditUserModal user={editUser} onClose={() => setEditUser(null)} />
