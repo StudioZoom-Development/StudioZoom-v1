@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/shared/Badge'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
-import { subscribeToLeads } from '@/lib/firebase/queries/leads'
+import { subscribeToLeads, softDeleteLead } from '@/lib/firebase/queries/leads'
 import { formatDisplayDate } from '@/lib/utils/dates'
+import { useAuthStore } from '@/store/authStore'
 import { Lead } from '@/types'
 
 // Select styling matching design components
@@ -19,13 +21,27 @@ const SELECT_STYLE: React.CSSProperties = {
   borderRadius: '8px',
   padding:      '0 10px',
   fontSize:     'var(--text-sm)',
-  color:        'var(--color-foreground-muted)',
+  color:        'var(--color-foreground)',
   outline:      'none',
   cursor:       'pointer',
 }
 
+function getPaginationItems(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, 'ellipsis', total]
+  }
+  if (current >= total - 3) {
+    return [1, 'ellipsis', total - 4, total - 3, total - 2, total - 1, total]
+  }
+  return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total]
+}
+
 export default function LeadsPage() {
   const router = useRouter()
+  const appUser = useAuthStore(s => s.appUser)
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -34,10 +50,19 @@ export default function LeadsPage() {
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
-  // Debounce search input (~250-300ms)
+  // Pagination states
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // Debounce search input (~250ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput)
+      setPage(1)
     }, 250)
     return () => clearTimeout(timer)
   }, [searchInput])
@@ -83,15 +108,25 @@ export default function LeadsPage() {
     })
   }, [leads, sourceFilter, debouncedSearch])
 
-  const handleConvertToBooking = (e: React.MouseEvent, lead: Lead) => {
-    e.stopPropagation()
-    console.log('Convert to booking selected for lead:', lead.name, lead.leadId)
+  const totalPages = Math.ceil(filteredLeads.length / pageSize) || 1
+  const paginatedLeads = filteredLeads.slice((page - 1) * pageSize, page * pageSize)
+
+  const handleConvertToBooking = (lead: Lead) => {
+    router.push(`/clients/new?leadId=${lead.leadId}`)
+  }
+
+  const handleDeleteLead = async () => {
+    if (!deleteTarget || !appUser) return
+    setDeleting(true)
+    await softDeleteLead(deleteTarget.leadId, appUser.uid)
+    setDeleting(false)
+    setDeleteTarget(null)
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'var(--font-inter)' }}>
 
-      {/* ── Control / Filter Bar (exact from ScreenCRM2.dc.html line 193) ── */}
+      {/* ── Control / Filter Bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
 
         {/* Search leads with icon prefix */}
@@ -134,6 +169,7 @@ export default function LeadsPage() {
           onChange={e => {
             setLoading(true)
             setSourceFilter(e.target.value)
+            setPage(1)
           }}
           style={SELECT_STYLE}
         >
@@ -146,7 +182,6 @@ export default function LeadsPage() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Requirement 1: Click New Lead -> opens /leads/new */}
         <Button
           className="h-9 font-medium"
           onClick={() => router.push('/leads/new')}
@@ -155,7 +190,7 @@ export default function LeadsPage() {
         </Button>
       </div>
 
-      {/* ── Table Container (exact layout from ScreenCRM2.dc.html line 206) ── */}
+      {/* ── Table Container ── */}
       <div
         style={{
           background: 'var(--color-surface)',
@@ -198,7 +233,7 @@ export default function LeadsPage() {
           <tbody>
             {loading ? (
               <TableRowSkeleton rows={5} cols={6} />
-            ) : filteredLeads.length === 0 ? (
+            ) : paginatedLeads.length === 0 ? (
               <tr>
                 <td colSpan={6}>
                   <EmptyState
@@ -209,122 +244,321 @@ export default function LeadsPage() {
                 </td>
               </tr>
             ) : (
-              filteredLeads.map(lead => (
-                <tr
+              paginatedLeads.map((lead, idx) => (
+                <LeadRow
                   key={lead.leadId}
-                  style={{ cursor: 'pointer', transition: 'background 0.15s ease' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  {/* LEAD (Requirement 1: Clicking lead name opens edit mode) */}
-                  <td
-                    onClick={() => router.push(`/leads/${lead.leadId}`)}
-                    style={{
-                      padding: '0 16px',
-                      height: '48px',
-                      borderBottom: '0.5px solid var(--color-border)',
-                      fontWeight: 600,
-                      color: 'var(--color-foreground)',
-                    }}
-                  >
-                    {lead.name}
-                  </td>
-
-                  {/* EVENT TYPE */}
-                  <td
-                    onClick={() => router.push(`/leads/${lead.leadId}`)}
-                    style={{
-                      padding: '0 16px',
-                      height: '48px',
-                      borderBottom: '0.5px solid var(--color-border)',
-                      color: 'var(--color-foreground-muted)',
-                    }}
-                  >
-                    {lead.eventType}
-                  </td>
-
-                  {/* TENTATIVE DATE */}
-                  <td
-                    onClick={() => router.push(`/leads/${lead.leadId}`)}
-                    style={{
-                      padding: '0 16px',
-                      height: '48px',
-                      borderBottom: '0.5px solid var(--color-border)',
-                      color: 'var(--color-foreground-muted)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {formatDisplayDate(lead.tentativeDate)}
-                  </td>
-
-                  {/* SOURCE */}
-                  <td
-                    onClick={() => router.push(`/leads/${lead.leadId}`)}
-                    style={{
-                      padding: '0 16px',
-                      height: '48px',
-                      borderBottom: '0.5px solid var(--color-border)',
-                      color: 'var(--color-foreground-muted)',
-                    }}
-                  >
-                    {lead.source || '—'}
-                  </td>
-
-                  {/* STATUS */}
-                  <td
-                    onClick={() => router.push(`/leads/${lead.leadId}`)}
-                    style={{
-                      padding: '0 16px',
-                      height: '48px',
-                      borderBottom: '0.5px solid var(--color-border)',
-                    }}
-                  >
-                    <Badge variant={lead.status || 'inquiry'} />
-                  </td>
-
-                  {/* ACTIONS */}
-                  <td
-                    style={{
-                      padding: '0 16px',
-                      height: '48px',
-                      borderBottom: '0.5px solid var(--color-border)',
-                      textAlign: 'right',
-                    }}
-                  >
-                    {/* Requirement 5: Hover state does not change background or text color */}
-                    <span
-                      onClick={e => handleConvertToBooking(e, lead)}
-                      style={{
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 600,
-                        color: 'var(--color-primary)',
-                        cursor: 'pointer',
-                        padding: '4px 10px',
-                        borderRadius: '8px',
-                        background: 'var(--color-primary-muted)',
-                        whiteSpace: 'nowrap',
-                        display: 'inline-block',
-                        userSelect: 'none',
-                        transition: 'none',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = 'var(--color-primary-muted)'
-                        e.currentTarget.style.color = 'var(--color-primary)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = 'var(--color-primary-muted)'
-                        e.currentTarget.style.color = 'var(--color-primary)'
-                      }}
-                    >
-                      Convert to booking
-                    </span>
-                  </td>
-                </tr>
+                  lead={lead}
+                  isNearBottom={idx >= Math.max(0, paginatedLeads.length - 2)}
+                  onView={() => router.push(`/leads/${lead.leadId}`)}
+                  onConvert={() => handleConvertToBooking(lead)}
+                  onDelete={() => setDeleteTarget(lead)}
+                />
               ))
             )}
           </tbody>
         </table>
+
+        {/* Pagination footer */}
+        {!loading && filteredLeads.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px', flexWrap: 'wrap', gap: '12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredLeads.length)} of {filteredLeads.length} leads
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>Show:</span>
+                <select
+                  value={pageSize}
+                  onChange={e => {
+                    setPageSize(Number(e.target.value))
+                    setPage(1)
+                  }}
+                  style={{
+                    fontFamily:   'var(--font-inter)',
+                    height:       '28px',
+                    background:   'var(--color-surface-raised)',
+                    border:       '0.5px solid var(--color-border)',
+                    borderRadius: '6px',
+                    padding:      '0 8px',
+                    fontSize:     'var(--text-xs)',
+                    color:        'var(--color-foreground)',
+                    outline:      'none',
+                    cursor:       'pointer',
+                  }}
+                >
+                  <option value={10}>10 / page</option>
+                  <option value={25}>25 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {/* Prev Button */}
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                style={{
+                  width: '28px', height: '28px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', cursor: page === 1 ? 'not-allowed' : 'pointer',
+                  color: page === 1 ? 'var(--color-foreground-subtle)' : 'var(--color-foreground-muted)',
+                  background: 'transparent', border: 'none',
+                  opacity: page === 1 ? 0.4 : 1,
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                <i className="ti ti-chevron-left" style={{ fontSize: '13px' }} />
+              </button>
+
+              {/* Page numbers with smart ellipsis */}
+              {getPaginationItems(page, totalPages).map((item, idx) => {
+                if (item === 'ellipsis') {
+                  return (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      style={{
+                        width: '28px', height: '28px', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--color-foreground-subtle)', fontSize: 'var(--text-xs)',
+                        userSelect: 'none',
+                      }}
+                    >
+                      ···
+                    </span>
+                  )
+                }
+
+                const p = item as number
+                const isActive = p === page
+                return (
+                  <span
+                    key={p}
+                    onClick={() => setPage(p)}
+                    style={{
+                      width: '28px', height: '28px', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      borderRadius: '6px', cursor: 'pointer',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: isActive ? 600 : 400,
+                      background: isActive ? 'var(--color-primary-muted)' : 'transparent',
+                      color: isActive ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                      transition: 'background 0.15s ease, color 0.15s ease',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isActive) e.currentTarget.style.background = 'var(--color-surface-raised)'
+                    }}
+                    onMouseLeave={e => {
+                      if (!isActive) e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    {p}
+                  </span>
+                )
+              })}
+
+              {/* Next Button */}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                style={{
+                  width: '28px', height: '28px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                  color: page === totalPages ? 'var(--color-foreground-subtle)' : 'var(--color-foreground-muted)',
+                  background: 'transparent', border: 'none',
+                  opacity: page === totalPages ? 0.4 : 1,
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                <i className="ti ti-chevron-right" style={{ fontSize: '13px' }} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Delete Lead Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        title={`Delete lead for ${deleteTarget?.name || 'this client'}?`}
+        description="This will remove this lead inquiry from the system. This action cannot be undone."
+        confirmLabel="Delete lead"
+        onConfirm={handleDeleteLead}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
     </div>
+  )
+}
+
+function LeadRow({
+  lead,
+  isNearBottom,
+  onView,
+  onConvert,
+  onDelete,
+}: {
+  lead:         Lead
+  isNearBottom: boolean
+  onView:       () => void
+  onConvert:    () => void
+  onDelete:     () => void
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLTableCellElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
+  const td: React.CSSProperties = {
+    padding: '0 16px',
+    height: '48px',
+    borderBottom: '0.5px solid var(--color-border)',
+  }
+
+  return (
+    <tr
+      onClick={onView}
+      style={{ cursor: 'pointer', transition: 'background 0.15s ease' }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+    >
+      {/* LEAD Name & Contact */}
+      <td style={{ ...td }}>
+        <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+          {lead.name}
+        </div>
+        {lead.contact && (
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+            {lead.contact}
+          </div>
+        )}
+      </td>
+
+      {/* EVENT TYPE */}
+      <td style={{ ...td, color: 'var(--color-foreground-muted)' }}>
+        {lead.eventType}
+      </td>
+
+      {/* TENTATIVE DATE */}
+      <td style={{ ...td, color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap' }}>
+        {formatDisplayDate(lead.tentativeDate)}
+      </td>
+
+      {/* SOURCE */}
+      <td style={{ ...td, color: 'var(--color-foreground-muted)' }}>
+        {lead.source || '—'}
+      </td>
+
+      {/* STATUS */}
+      <td style={td}>
+        <Badge variant={lead.status || 'inquiry'} />
+      </td>
+
+      {/* ACTIONS */}
+      <td
+        ref={menuRef}
+        onClick={e => e.stopPropagation()}
+        style={{ ...td, textAlign: 'right', position: 'relative' }}
+      >
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          {/* Quick Convert Button */}
+          <span
+            onClick={() => onConvert()}
+            style={{
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+              color: 'var(--color-primary)',
+              cursor: 'pointer',
+              padding: '4px 10px',
+              borderRadius: '8px',
+              background: 'var(--color-primary-muted)',
+              whiteSpace: 'nowrap',
+              display: 'inline-block',
+              userSelect: 'none',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary-muted)')}
+          >
+            Convert to booking
+          </span>
+
+          {/* Action Menu (···) */}
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-foreground-subtle)',
+              padding: '4px 6px',
+              borderRadius: '6px',
+            }}
+          >
+            <i className="ti ti-dots-vertical" style={{ fontSize: '16px' }} />
+          </button>
+
+          {menuOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                right: '12px',
+                ...(isNearBottom ? { bottom: '38px' } : { top: '40px' }),
+                zIndex: 50,
+                background: 'var(--color-surface-overlay)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                minWidth: '150px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                textAlign: 'left',
+              }}
+            >
+              {[
+                { icon: 'ti-pencil', label: 'Edit lead', action: onView, danger: false },
+                { icon: 'ti-arrow-right', label: 'Convert to booking', action: onConvert, danger: false },
+                { icon: 'ti-trash', label: 'Delete lead', action: onDelete, danger: true },
+              ].map(item => (
+                <div
+                  key={item.label}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    item.action()
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 14px',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                    color: item.danger ? 'var(--color-danger)' : 'var(--color-foreground)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-raised)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <i className={`ti ${item.icon}`} style={{ fontSize: '15px' }} />
+                  {item.label}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
   )
 }

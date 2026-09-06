@@ -106,6 +106,32 @@ export async function advanceProjectStage(
   return nextStage
 }
 
+/** Real-time subscription to all active projects */
+export function subscribeToProjects(
+  callback: (projects: Project[]) => void
+): () => void {
+  const q = query(collection(db, 'projects'))
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          projectId: d.id,
+          eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
+        } as Project
+      })
+      .filter(p => !p.isDeleted && p.status !== 'cancelled')
+
+    list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
+    callback(list)
+  }, err => {
+    console.error('subscribeToProjects error:', err)
+  })
+}
+
 /** Get active projects (non-deleted, not delivered/cancelled) */
 export async function getActiveProjects(): Promise<Project[]> {
   try {
@@ -130,3 +156,4 @@ export async function getActiveProjects(): Promise<Project[]> {
     return []
   }
 }
+
