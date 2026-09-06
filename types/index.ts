@@ -452,7 +452,7 @@ export interface BookingDraft {
   eventType:      EventType | string
   totalAmount:    number
   currentStep:    number
-  state:          any
+  state:          unknown
   createdBy:      string
   createdAt:      Date
   updatedAt:      Date

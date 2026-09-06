@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,64 +31,60 @@ const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
 ]
 
 export function EditClientModal({ open, client, onClose, onSuccess }: EditClientModalProps) {
+  if (!open || !client) return null
+
+  return (
+    <EditClientModalInner
+      key={client.clientId || 'edit-client-modal'}
+      client={client}
+      onClose={onClose}
+      onSuccess={onSuccess}
+    />
+  )
+}
+
+function EditClientModalInner({
+  client,
+  onClose,
+  onSuccess,
+}: {
+  client: Client
+  onClose: () => void
+  onSuccess?: () => void
+}) {
   const appUser = useAuthStore(s => s.appUser)
 
-  const [name, setName] = useState('')
-  const [contact, setContact] = useState('')
-  const [email, setEmail] = useState('')
-  const [eventName, setEventName] = useState('')
-  const [eventType, setEventType] = useState<EventType>('wedding')
-  const [customEventType, setCustomEventType] = useState('')
-  const [startTime, setStartTime] = useState('09:00')
-  const [endTime, setEndTime] = useState('18:00')
-  const [location, setLocation] = useState('')
-  const [notes, setNotes] = useState('')
-  const [packageType, setPackageType] = useState('')
-  const [totalAmount, setTotalAmount] = useState('')
-  const [status, setStatus] = useState<'booked' | 'inquiry'>('booked')
-  const [bookingType, setBookingType] = useState<BookingType>('oneTime')
-  const [eventDate, setEventDate] = useState('')
-  const [eventDates, setEventDates] = useState<Array<{ id: string; label: string; date: string; location: string; startTime?: string; endTime?: string }>>([])
+  const [name, setName] = useState(client.name || '')
+  const [contact, setContact] = useState(client.contact ? client.contact.replace(/^\+91/, '') : '')
+  const [email, setEmail] = useState(client.email || '')
+  const [eventName, setEventName] = useState(client.eventName || '')
+  const [eventType, setEventType] = useState<EventType>(client.eventType || 'wedding')
+  const [customEventType, setCustomEventType] = useState(client.customEventType || '')
+  const [startTime, setStartTime] = useState(client.startTime || '09:00')
+  const [endTime, setEndTime] = useState(client.endTime || '18:00')
+  const [location, setLocation] = useState(client.location || '')
+  const [notes, setNotes] = useState(client.notes || '')
+  const [packageType, setPackageType] = useState(client.packageType || '')
+  const [totalAmount, setTotalAmount] = useState(client.totalAmount ? String(client.totalAmount) : '')
+  const [status, setStatus] = useState<'booked' | 'inquiry'>(client.status || 'booked')
+  const [bookingType, setBookingType] = useState<BookingType>(client.bookingType || 'oneTime')
+  const [eventDate, setEventDate] = useState(client.eventDate ? format(new Date(client.eventDate), 'yyyy-MM-dd') : '')
+  const [eventDates, setEventDates] = useState<Array<{ id: string; label: string; date: string; location: string; startTime?: string; endTime?: string }>>(() => {
+    if (client.eventDates && client.eventDates.length > 0) {
+      return client.eventDates.map(ed => ({
+        id: ed.id || Math.random().toString(36).substring(2, 9),
+        label: ed.label || '',
+        date: ed.date ? format(new Date(ed.date), 'yyyy-MM-dd') : '',
+        location: ed.location || '',
+        startTime: ed.startTime || '09:00',
+        endTime: ed.endTime || '18:00',
+      }))
+    }
+    return []
+  })
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!client) return
-    setName(client.name || '')
-    setContact(client.contact ? client.contact.replace(/^\+91/, '') : '')
-    setEmail(client.email || '')
-    setEventName(client.eventName || '')
-    setEventType(client.eventType || 'wedding')
-    setCustomEventType(client.customEventType || '')
-    setStartTime(client.startTime || '09:00')
-    setEndTime(client.endTime || '18:00')
-    setLocation(client.location || '')
-    setNotes(client.notes || '')
-    setPackageType(client.packageType || '')
-    setTotalAmount(client.totalAmount ? String(client.totalAmount) : '')
-    setStatus(client.status || 'booked')
-    setBookingType(client.bookingType || 'oneTime')
-    setEventDate(client.eventDate ? format(new Date(client.eventDate), 'yyyy-MM-dd') : '')
-
-    if (client.eventDates && client.eventDates.length > 0) {
-      setEventDates(
-        client.eventDates.map(ed => ({
-          id: ed.id || Math.random().toString(36).substring(2, 9),
-          label: ed.label || '',
-          date: ed.date ? format(new Date(ed.date), 'yyyy-MM-dd') : '',
-          location: ed.location || '',
-          startTime: ed.startTime || '09:00',
-          endTime: ed.endTime || '18:00',
-        }))
-      )
-    } else {
-      setEventDates([])
-    }
-    setError('')
-  }, [client, open])
-
-  if (!open || !client) return null
 
   const handleAddDate = () => {
     setEventDates(prev => [

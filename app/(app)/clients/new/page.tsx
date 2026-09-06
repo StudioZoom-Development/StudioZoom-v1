@@ -5,12 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 import { createBooking } from '@/lib/firebase/queries/clients'
-import { createLead, getLeadById, updateLead } from '@/lib/firebase/queries/leads'
+import { getLeadById, updateLead } from '@/lib/firebase/queries/leads'
 import { getDraftById, saveBookingDraft, deleteBookingDraft } from '@/lib/firebase/queries/drafts'
 import { format } from 'date-fns'
 import { BookingDraft, EventType } from '@/types'
 import { DraftsModal } from '@/components/shared/DraftsModal'
-import { bookingReducer, createInitialState } from './bookingReducer'
+import { bookingReducer, createInitialState, BookingWizardState } from './bookingReducer'
 import StepIndicator from './StepIndicator'
 import StepBookingType from './steps/StepBookingType'
 import StepClient from './steps/StepClient'
@@ -146,7 +146,7 @@ function NewBookingPageContent(): React.JSX.Element {
 
   const handleSelectDraft = (draft: BookingDraft) => {
     if (draft.state) {
-      dispatch({ type: 'HYDRATE_STATE', payload: draft.state })
+      dispatch({ type: 'HYDRATE_STATE', payload: draft.state as Partial<BookingWizardState> })
       setActiveDraftId(draft.draftId)
       if (typeof draft.currentStep === 'number') {
         setCurrentStep(draft.currentStep)
@@ -319,7 +319,7 @@ function NewBookingPageContent(): React.JSX.Element {
     } finally {
       setSaving(false)
     }
-  }, [state, currentStep, activeDraftId, convertingLeadId, appUser, router])
+  }, [state, currentStep, activeDraftId, convertingLeadId, appUser, router, showToast])
 
   const handleSaveDraft = useCallback(() => {
     handleSubmit(true)

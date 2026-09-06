@@ -4,7 +4,7 @@ import {
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Client } from '@/types'
+import { Client, EventDateEntry } from '@/types'
 
 export interface ClientFilters {
   status?:        string
@@ -37,7 +37,7 @@ export function subscribeToClients(
             ? data.createdAt.toDate()
             : data.createdAt ? new Date(data.createdAt) : new Date(),
           eventDates: Array.isArray(data.eventDates)
-            ? data.eventDates.map((ed: any) => ({
+            ? data.eventDates.map((ed: Partial<EventDateEntry>) => ({
                 ...ed,
                 date: ed.date instanceof Timestamp
                   ? ed.date.toDate()
@@ -103,7 +103,7 @@ export async function getClientById(clientId: string): Promise<Client | null> {
     eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
     eventDates: Array.isArray(data.eventDates)
-      ? data.eventDates.map((ed: any) => ({
+      ? data.eventDates.map((ed: Partial<EventDateEntry>) => ({
           ...ed,
           date: ed.date instanceof Timestamp
             ? ed.date.toDate()

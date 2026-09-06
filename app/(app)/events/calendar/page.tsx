@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import {
   format,
   startOfMonth,
-  endOfMonth,
   getDaysInMonth,
   addMonths,
   subMonths,
@@ -14,8 +13,6 @@ import {
   addWeeks,
   subWeeks,
   eachDayOfInterval,
-  isSameDay,
-  isToday as isDateToday,
 } from 'date-fns'
 import { subscribeToProjects } from '@/lib/firebase/queries/projects'
 import { subscribeToClients } from '@/lib/firebase/queries/clients'
