@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'    // MyDesignSystem.ShadcnButton
@@ -8,13 +8,24 @@ import { subscribeToClients, softDeleteClient } from '@/lib/firebase/queries/cli
 import { Badge } from '@/components/shared/Badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
+import { EditClientModal } from '@/components/shared/EditClientModal'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { Client } from '@/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const EVENT_TYPE_LABELS: Record<string, string> = {
-  wedding: 'Wedding', preWedding: 'Pre-Wedding', engagement: 'Engagement',
-  corporate: 'Corporate', portrait: 'Portrait', studio: 'Studio', other: 'Other',
+  wedding: 'Wedding',
+  reception: 'Reception',
+  preWedding: 'Pre-Wedding',
+  engagement: 'Engagement',
+  birthday: 'Birthday',
+  babyShower: 'Baby Shower',
+  puberty: 'Puberty',
+  corporate: 'Corporate',
+  schoolEvent: 'School Event',
+  portrait: 'Portrait',
+  studio: 'Studio',
+  other: 'Other',
 }
 
 // Exact select style from design file
@@ -31,6 +42,53 @@ const SELECT_STYLE: React.CSSProperties = {
   cursor:       'pointer',
 }
 
+const DATE_INPUT_STYLE: React.CSSProperties = {
+  fontFamily:   'var(--font-inter)',
+  height:       '36px',
+  background:   'var(--color-surface-raised)',
+  border:       '0.5px solid var(--color-border)',
+  borderRadius: '8px',
+  padding:      '0 8px',
+  fontSize:     'var(--text-sm)',
+  color:        'var(--color-foreground)',
+  outline:      'none',
+  cursor:       'pointer',
+  boxSizing:    'border-box',
+}
+
+type SortField = 'client' | 'eventType' | 'eventDate' | 'stage' | 'balanceDue'
+type SortDir = 'asc' | 'desc'
+
+interface HeaderConfig {
+  label: string
+  field?: SortField
+  align?: 'left' | 'right'
+}
+
+const COLUMNS: HeaderConfig[] = [
+  { label: '#' },
+  { label: 'Client', field: 'client' },
+  { label: 'Event type', field: 'eventType' },
+  { label: 'Event date', field: 'eventDate' },
+  { label: 'Stage', field: 'stage' },
+  { label: 'Balance due', field: 'balanceDue', align: 'right' },
+  { label: 'Assigned' },
+  { label: '' },
+]
+
+function getPaginationItems(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, 'ellipsis', total]
+  }
+  if (current >= total - 3) {
+    return [1, 'ellipsis', total - 4, total - 3, total - 2, total - 1, total]
+  }
+  return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total]
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function ClientsPage() {
   const router  = useRouter()
@@ -42,10 +100,15 @@ export default function ClientsPage() {
   const [filterType,   setFilterType]   = useState('')
   const [filterStage,  setFilterStage]  = useState('')
   const [filterPmt,    setFilterPmt]    = useState('')
+  const [fromDate,     setFromDate]     = useState('')
+  const [toDate,       setToDate]       = useState('')
+  const [sortField,    setSortField]    = useState<SortField | null>(null)
+  const [sortDir,      setSortDir]      = useState<SortDir>('asc')
+  const [editTarget,   setEditTarget]   = useState<Client | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [deleting,     setDeleting]     = useState(false)
   const [page,         setPage]         = useState(1)
-  const PAGE_SIZE = 9
+  const [pageSize,     setPageSize]     = useState(10)
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -57,16 +120,120 @@ export default function ClientsPage() {
     return unsub
   }, [filterType, filterPmt])
 
-  // Client-side search + stage filter
-  const filtered = clients.filter(c =>
-    (!search || c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.eventName?.toLowerCase().includes(search.toLowerCase()) ||
-      c.contact?.includes(search)) &&
-    (!filterStage || c.status === filterStage)
-  )
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      if (sortDir === 'asc') {
+        setSortDir('desc')
+      } else {
+        setSortField(null)
+        setSortDir('asc')
+      }
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const hasActiveFilters = Boolean(search || filterType || filterStage || filterPmt || fromDate || toDate)
+
+  const handleResetFilters = () => {
+    setSearch('')
+    setFilterType('')
+    setFilterStage('')
+    setFilterPmt('')
+    setFromDate('')
+    setToDate('')
+    setPage(1)
+  }
+
+  // Client-side search + stage + date range filter
+  const filtered = clients.filter(c => {
+    // 1. Search Query: client name, event name, event type, phone, email, client ID, location
+    if (search.trim()) {
+      const q = search.toLowerCase().trim()
+      const nameMatch      = (c.name || '').toLowerCase().includes(q)
+      const eventNameMatch = (c.eventName || '').toLowerCase().includes(q)
+      const eventTypeRaw   = (c.eventType || '').toLowerCase()
+      const eventTypeLabel = (EVENT_TYPE_LABELS[c.eventType] || '').toLowerCase()
+      const customTypeMatch = (c.customEventType || '').toLowerCase().includes(q)
+      const contactMatch   = (c.contact || '').toLowerCase().includes(q)
+      const emailMatch     = (c.email || '').toLowerCase().includes(q)
+      const idMatch        = (c.clientId || '').toLowerCase().includes(q)
+      const locMatch       = (c.location || '').toLowerCase().includes(q)
+
+      if (!nameMatch && !eventNameMatch && !eventTypeRaw.includes(q) && !eventTypeLabel.includes(q) && !customTypeMatch && !contactMatch && !emailMatch && !idMatch && !locMatch) {
+        return false
+      }
+    }
+
+    // 2. Stage Filter
+    if (filterStage) {
+      const stageVal = (c.stage || c.status || '').toLowerCase()
+      if (stageVal !== filterStage.toLowerCase()) return false
+    }
+
+    // 3. Date Range Filter (From Date -> To Date)
+    if (fromDate || toDate) {
+      const cDate = c.eventDate instanceof Date ? c.eventDate : c.eventDate ? new Date(c.eventDate) : null
+      if (cDate) {
+        if (fromDate) {
+          const from = new Date(fromDate)
+          from.setHours(0, 0, 0, 0)
+          if (cDate < from) return false
+        }
+        if (toDate) {
+          const to = new Date(toDate)
+          to.setHours(23, 59, 59, 999)
+          if (cDate > to) return false
+        }
+      } else if (fromDate || toDate) {
+        return false
+      }
+    }
+
+    return true
+  })
+
+  // Client-side sorting
+  const sorted = [...filtered].sort((a, b) => {
+    if (!sortField) return 0
+    let cmp = 0
+    switch (sortField) {
+      case 'client': {
+        const nameA = (a.eventName || a.name || '').toLowerCase()
+        const nameB = (b.eventName || b.name || '').toLowerCase()
+        cmp = nameA.localeCompare(nameB)
+        break
+      }
+      case 'eventType': {
+        const typeA = (a.eventType === 'other' ? a.customEventType || 'Other' : EVENT_TYPE_LABELS[a.eventType] || a.eventType || '').toLowerCase()
+        const typeB = (b.eventType === 'other' ? b.customEventType || 'Other' : EVENT_TYPE_LABELS[b.eventType] || b.eventType || '').toLowerCase()
+        cmp = typeA.localeCompare(typeB)
+        break
+      }
+      case 'eventDate': {
+        const timeA = a.eventDate instanceof Date ? a.eventDate.getTime() : (a.eventDate ? new Date(a.eventDate).getTime() : 0)
+        const timeB = b.eventDate instanceof Date ? b.eventDate.getTime() : (b.eventDate ? new Date(b.eventDate).getTime() : 0)
+        cmp = timeA - timeB
+        break
+      }
+      case 'stage': {
+        const stageA = (a.status || '').toLowerCase()
+        const stageB = (b.status || '').toLowerCase()
+        cmp = stageA.localeCompare(stageB)
+        break
+      }
+      case 'balanceDue': {
+        cmp = (a.balanceDue ?? 0) - (b.balanceDue ?? 0)
+        break
+      }
+    }
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const totalPages = Math.ceil(sorted.length / pageSize) || 1
+  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize)
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget || !appUser) return
@@ -79,10 +246,10 @@ export default function ClientsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-      {/* ── Filter bar (exact from design-components/ScreenClients_dc.html) ── */}
+      {/* ── Filter bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
 
-        {/* Search with icon prefix */}
+        {/* Search with icon prefix: client, event name, event type, contact */}
         <div style={{ position: 'relative' }}>
           <i className="ti ti-search" style={{
             fontSize: '15px', color: 'var(--color-foreground-subtle)',
@@ -90,10 +257,11 @@ export default function ClientsPage() {
             pointerEvents: 'none',
           }} />
           <input
-            value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search clients"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            placeholder="Search client, event, type..."
             style={{
-              fontFamily: 'var(--font-inter)', width: '200px', boxSizing: 'border-box',
+              fontFamily: 'var(--font-inter)', width: '220px', boxSizing: 'border-box',
               height: '36px', background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)', borderRadius: '8px',
               padding: '0 12px 0 30px', fontSize: 'var(--text-sm)',
@@ -102,19 +270,25 @@ export default function ClientsPage() {
           />
         </div>
 
-        {/* Event type · All (exact label from design) */}
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={SELECT_STYLE}>
+        {/* Event type · All */}
+        <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1) }} style={SELECT_STYLE}>
           <option value="">Event type · All</option>
           <option value="wedding">Wedding</option>
+          <option value="reception">Reception</option>
           <option value="engagement">Engagement</option>
-          <option value="corporate">Corporate</option>
-          <option value="portrait">Portrait</option>
           <option value="preWedding">Pre-Wedding</option>
+          <option value="birthday">Birthday</option>
+          <option value="babyShower">Baby Shower</option>
+          <option value="puberty">Puberty</option>
+          <option value="corporate">Corporate</option>
+          <option value="schoolEvent">School Event</option>
+          <option value="portrait">Portrait</option>
           <option value="studio">Studio</option>
+          <option value="other">Other</option>
         </select>
 
         {/* Stage · All */}
-        <select value={filterStage} onChange={e => setFilterStage(e.target.value)} style={SELECT_STYLE}>
+        <select value={filterStage} onChange={e => { setFilterStage(e.target.value); setPage(1) }} style={SELECT_STYLE}>
           <option value="">Stage · All</option>
           <option value="booked">Booked</option>
           <option value="planning">Planning</option>
@@ -125,12 +299,70 @@ export default function ClientsPage() {
         </select>
 
         {/* Payment · All */}
-        <select value={filterPmt} onChange={e => setFilterPmt(e.target.value)} style={SELECT_STYLE}>
+        <select value={filterPmt} onChange={e => { setFilterPmt(e.target.value); setPage(1) }} style={SELECT_STYLE}>
           <option value="">Payment · All</option>
           <option value="paid">Paid</option>
           <option value="partial">Partial</option>
-          <option value="unpaid">Overdue</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="overdue">Overdue</option>
         </select>
+
+        {/* Event Date Range Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-surface)', padding: '0 4px', borderRadius: '8px', border: '0.5px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500, paddingLeft: '4px' }}>From:</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={e => { setFromDate(e.target.value); setPage(1) }}
+              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent' }}
+              title="Filter events from date"
+            />
+          </div>
+          <div style={{ width: '1px', height: '20px', background: 'var(--color-border)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>To:</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={e => { setToDate(e.target.value); setPage(1) }}
+              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent' }}
+              title="Filter events to date"
+            />
+          </div>
+        </div>
+
+        {/* Reset filters button */}
+        {hasActiveFilters && (
+          <button
+            onClick={handleResetFilters}
+            style={{
+              height: '36px',
+              padding: '0 12px',
+              background: 'transparent',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '8px',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-foreground-muted)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontFamily: 'var(--font-inter)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--color-danger)'
+              e.currentTarget.style.borderColor = 'var(--color-danger)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--color-foreground-muted)'
+              e.currentTarget.style.borderColor = 'var(--color-border)'
+            }}
+          >
+            <i className="ti ti-x" style={{ fontSize: '13px' }} />
+            Reset
+          </button>
+        )}
 
         <div style={{ flex: 1 }} />
 
@@ -148,19 +380,57 @@ export default function ClientsPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
             <tr>
-              {['#', 'Client', 'Event type', 'Event date', 'Stage', 'Balance due', 'Assigned', ''].map((h, i) => (
-                <th key={i} style={{
-                  textAlign:     i === 5 ? 'right' : 'left',
-                  fontSize:      'var(--text-xs)',
-                  fontWeight:    600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  color:         'var(--color-foreground-subtle)',
-                  padding:       '12px 16px',
-                  borderBottom:  '0.5px solid var(--color-border-strong)',
-                  whiteSpace:    'nowrap',
-                }}>{h}</th>
-              ))}
+              {COLUMNS.map((col, i) => {
+                const isSortable = !!col.field
+                const isActive   = sortField === col.field
+
+                return (
+                  <th
+                    key={i}
+                    onClick={() => col.field && handleSort(col.field)}
+                    style={{
+                      textAlign:     col.align === 'right' ? 'right' : 'left',
+                      fontSize:      'var(--text-xs)',
+                      fontWeight:    isActive ? 700 : 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color:         isActive ? 'var(--color-primary)' : 'var(--color-foreground-subtle)',
+                      padding:       '12px 16px',
+                      borderBottom:  '0.5px solid var(--color-border-strong)',
+                      whiteSpace:    'nowrap',
+                      cursor:        isSortable ? 'pointer' : 'default',
+                      userSelect:    'none',
+                      transition:    'color 0.15s ease',
+                    }}
+                  >
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      justifyContent: col.align === 'right' ? 'flex-end' : 'flex-start',
+                      width: col.align === 'right' ? '100%' : 'auto',
+                    }}>
+                      <span>{col.label}</span>
+                      {isSortable && (
+                        <i
+                          className={`ti ${
+                            isActive
+                              ? sortDir === 'asc'
+                                ? 'ti-arrow-up'
+                                : 'ti-arrow-down'
+                              : 'ti-arrows-sort'
+                          }`}
+                          style={{
+                            fontSize: '13px',
+                            color: isActive ? 'var(--color-primary)' : 'var(--color-foreground-subtle)',
+                            opacity: isActive ? 1 : 0.4,
+                          }}
+                        />
+                      )}
+                    </div>
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
@@ -182,9 +452,10 @@ export default function ClientsPage() {
                 <ClientRow
                   key={client.clientId}
                   client={client}
-                  rowNo={(page - 1) * PAGE_SIZE + idx + 1}
+                  rowNo={(page - 1) * pageSize + idx + 1}
+                  isNearBottom={idx >= Math.max(0, paginated.length - 2)}
                   onView={() => router.push(`/clients/${client.clientId}`)}
-                  onEdit={() => router.push(`/clients/${client.clientId}/edit`)}
+                  onEdit={() => setEditTarget(client)}
                   onDelete={() => setDeleteTarget(client)}
                 />
               ))
@@ -192,41 +463,137 @@ export default function ClientsPage() {
           </tbody>
         </table>
 
-        {/* Pagination footer (exact from design) */}
-        {!loading && filtered.length > 0 && (
+        {/* Pagination footer */}
+        {!loading && sorted.length > 0 && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 16px',
+            padding: '12px 16px', flexWrap: 'wrap', gap: '12px',
           }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} clients
-            </span>
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <span
-                  key={p} onClick={() => setPage(p)}
-                  style={{
-                    width: '28px', height: '28px', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '6px', cursor: 'pointer',
-                    fontSize: 'var(--text-xs)', fontWeight: p === page ? 600 : 400,
-                    background: p === page ? 'var(--color-primary-muted)' : 'transparent',
-                    color: p === page ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} of {sorted.length} clients
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>Show:</span>
+                <select
+                  value={pageSize}
+                  onChange={e => {
+                    setPageSize(Number(e.target.value))
+                    setPage(1)
                   }}
-                >{p}</span>
-              ))}
-              {page < totalPages && (
-                <span onClick={() => setPage(p => p + 1)} style={{
+                  style={{
+                    fontFamily:   'var(--font-inter)',
+                    height:       '28px',
+                    background:   'var(--color-surface-raised)',
+                    border:       '0.5px solid var(--color-border)',
+                    borderRadius: '6px',
+                    padding:      '0 8px',
+                    fontSize:     'var(--text-xs)',
+                    color:        'var(--color-foreground)',
+                    outline:      'none',
+                    cursor:       'pointer',
+                  }}
+                >
+                  <option value={10}>10 / page</option>
+                  <option value={25}>25 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {/* Prev Button */}
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                style={{
                   width: '28px', height: '28px', display: 'flex',
                   alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '6px', cursor: 'pointer',
-                  color: 'var(--color-foreground-muted)', fontSize: 'var(--text-xs)',
-                }}>▸</span>
-              )}
+                  borderRadius: '6px', cursor: page === 1 ? 'not-allowed' : 'pointer',
+                  color: page === 1 ? 'var(--color-foreground-subtle)' : 'var(--color-foreground-muted)',
+                  background: 'transparent', border: 'none',
+                  opacity: page === 1 ? 0.4 : 1,
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                <i className="ti ti-chevron-left" style={{ fontSize: '13px' }} />
+              </button>
+
+              {/* Page numbers with smart ellipsis */}
+              {getPaginationItems(page, totalPages).map((item, idx) => {
+                if (item === 'ellipsis') {
+                  return (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      style={{
+                        width: '28px', height: '28px', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--color-foreground-subtle)', fontSize: 'var(--text-xs)',
+                        userSelect: 'none',
+                      }}
+                    >
+                      ···
+                    </span>
+                  )
+                }
+
+                const p = item as number
+                const isActive = p === page
+                return (
+                  <span
+                    key={p}
+                    onClick={() => setPage(p)}
+                    style={{
+                      width: '28px', height: '28px', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      borderRadius: '6px', cursor: 'pointer',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: isActive ? 600 : 400,
+                      background: isActive ? 'var(--color-primary-muted)' : 'transparent',
+                      color: isActive ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                      transition: 'background 0.15s ease, color 0.15s ease',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isActive) e.currentTarget.style.background = 'var(--color-surface-raised)'
+                    }}
+                    onMouseLeave={e => {
+                      if (!isActive) e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    {p}
+                  </span>
+                )
+              })}
+
+              {/* Next Button */}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                style={{
+                  width: '28px', height: '28px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                  color: page === totalPages ? 'var(--color-foreground-subtle)' : 'var(--color-foreground-muted)',
+                  background: 'transparent', border: 'none',
+                  opacity: page === totalPages ? 0.4 : 1,
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                <i className="ti ti-chevron-right" style={{ fontSize: '13px' }} />
+              </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Edit client modal */}
+      <EditClientModal
+        open={!!editTarget}
+        client={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSuccess={() => setEditTarget(null)}
+      />
 
       {/* Delete confirmation */}
       <ConfirmModal
@@ -248,14 +615,27 @@ function getInitials(name: string) {
 }
 
 // ── Client row (exact structure from design file) ─────────────────────────
-function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
-  client:   Client
-  rowNo:    number
-  onView:   () => void
-  onEdit:   () => void
-  onDelete: () => void
+function ClientRow({ client, rowNo, isNearBottom, onView, onEdit, onDelete }: {
+  client:       Client
+  rowNo:        number
+  isNearBottom: boolean
+  onView:       () => void
+  onEdit:       () => void
+  onDelete:     () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLTableCellElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
 
   const isPastEvent = client.eventDate instanceof Date && client.eventDate < new Date()
   const isPaid      = client.paymentStatus === 'paid' || client.balanceDue === 0
@@ -355,6 +735,7 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
 
       {/* Actions — ti-dots-vertical + dropdown */}
       <td
+        ref={menuRef}
         onClick={e => e.stopPropagation()}
         style={{ ...td, textAlign: 'right', color: 'var(--color-foreground-subtle)', position: 'relative' }}
       >
@@ -370,9 +751,10 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
 
         {menuOpen && (
           <div
-            onMouseLeave={() => setMenuOpen(false)}
             style={{
-              position: 'absolute', right: '8px', top: '44px', zIndex: 20,
+              position: 'absolute', right: '8px',
+              ...(isNearBottom ? { bottom: '38px' } : { top: '40px' }),
+              zIndex: 50,
               background: 'var(--color-surface-overlay)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '10px', overflow: 'hidden', minWidth: '140px',
@@ -385,7 +767,11 @@ function ClientRow({ client, rowNo, onView, onEdit, onDelete }: {
               { icon: 'ti-trash',  label: 'Delete', action: onDelete, danger: true  },
             ].map(item => (
               <div
-                key={item.label} onClick={item.action}
+                key={item.label}
+                onClick={() => {
+                  setMenuOpen(false)
+                  item.action()
+                }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   padding: '10px 14px', cursor: 'pointer',

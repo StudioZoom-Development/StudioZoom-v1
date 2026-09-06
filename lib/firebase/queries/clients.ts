@@ -26,24 +26,60 @@ export function subscribeToClients(
         return {
           ...data,
           clientId:  d.id,
+          stage:     data.stage || (data.status === 'inquiry' ? 'inquiry' : 'booked'),
+          customEventType: data.customEventType || '',
+          startTime: data.startTime || '',
+          endTime:   data.endTime || '',
           eventDate: data.eventDate instanceof Timestamp
             ? data.eventDate.toDate()
             : data.eventDate ? new Date(data.eventDate) : new Date(),
           createdAt: data.createdAt instanceof Timestamp
             ? data.createdAt.toDate()
             : data.createdAt ? new Date(data.createdAt) : new Date(),
+          eventDates: Array.isArray(data.eventDates)
+            ? data.eventDates.map((ed: any) => ({
+                ...ed,
+                date: ed.date instanceof Timestamp
+                  ? ed.date.toDate()
+                  : ed.date ? new Date(ed.date) : new Date(),
+                startTime: ed.startTime || '',
+                endTime:   ed.endTime || '',
+              }))
+            : [],
+          recurringSchedule: data.recurringSchedule
+            ? {
+                ...data.recurringSchedule,
+                startDate: data.recurringSchedule.startDate instanceof Timestamp
+                  ? data.recurringSchedule.startDate.toDate()
+                  : new Date(data.recurringSchedule.startDate),
+                endDate: data.recurringSchedule.endDate instanceof Timestamp
+                  ? data.recurringSchedule.endDate.toDate()
+                  : new Date(data.recurringSchedule.endDate),
+              }
+            : undefined,
         } as Client
       })
-      .filter(c => !c.isDeleted)  // exclude soft-deleted
+      .filter(c => !c.isDeleted && c.status !== 'inquiry')  // exclude soft-deleted and draft inquiries
 
     if (filters.eventType) {
       clients = clients.filter(c => c.eventType === filters.eventType)
     }
     if (filters.paymentStatus) {
-      clients = clients.filter(c => c.paymentStatus === filters.paymentStatus)
+      const now = new Date()
+      if (filters.paymentStatus === 'overdue') {
+        clients = clients.filter(c => c.paymentStatus === 'overdue' || ((c.balanceDue ?? 0) > 0 && c.eventDate instanceof Date && c.eventDate < now))
+      } else if (filters.paymentStatus === 'unpaid') {
+        clients = clients.filter(c => c.paymentStatus === 'unpaid' || ((c.balanceDue ?? 0) > 0 && ((c.totalAmount ?? 0) === 0 || (c.balanceDue ?? 0) >= (c.totalAmount ?? 0))))
+      } else if (filters.paymentStatus === 'paid') {
+        clients = clients.filter(c => c.paymentStatus === 'paid' || (c.balanceDue ?? 0) === 0)
+      } else if (filters.paymentStatus === 'partial') {
+        clients = clients.filter(c => c.paymentStatus === 'partial' || ((c.balanceDue ?? 0) > 0 && (c.balanceDue ?? 0) < (c.totalAmount ?? 0)))
+      } else {
+        clients = clients.filter(c => c.paymentStatus === filters.paymentStatus)
+      }
     }
     if (filters.status) {
-      clients = clients.filter(c => c.status === filters.status)
+      clients = clients.filter(c => (c.stage || c.status) === filters.status)
     }
 
     callback(clients)
@@ -60,8 +96,33 @@ export async function getClientById(clientId: string): Promise<Client | null> {
   return {
     ...data,
     clientId: snap.id,
+    stage: data.stage || (data.status === 'inquiry' ? 'inquiry' : 'booked'),
+    customEventType: data.customEventType || '',
+    startTime: data.startTime || '',
+    endTime:   data.endTime || '',
     eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
+    eventDates: Array.isArray(data.eventDates)
+      ? data.eventDates.map((ed: any) => ({
+          ...ed,
+          date: ed.date instanceof Timestamp
+            ? ed.date.toDate()
+            : ed.date ? new Date(ed.date) : new Date(),
+          startTime: ed.startTime || '',
+          endTime:   ed.endTime || '',
+        }))
+      : [],
+    recurringSchedule: data.recurringSchedule
+      ? {
+          ...data.recurringSchedule,
+          startDate: data.recurringSchedule.startDate instanceof Timestamp
+            ? data.recurringSchedule.startDate.toDate()
+            : new Date(data.recurringSchedule.startDate),
+          endDate: data.recurringSchedule.endDate instanceof Timestamp
+            ? data.recurringSchedule.endDate.toDate()
+            : new Date(data.recurringSchedule.endDate),
+        }
+      : undefined,
   } as Client
 }
 
@@ -101,14 +162,12 @@ export async function recordPayment(
 ): Promise<void> {
   const clientSnap = await getDoc(doc(db, 'clients', clientId))
   if (!clientSnap.exists()) throw new Error('Client not found')
-  const data = clientSnap.data()
+  const client = clientSnap.data()
 
-  const total = Number(data.totalAmount) || 0
-  const balance = Number(data.balanceDue) ?? total
-  const currentPaid = Math.max(0, total - balance)
-  const newPaid     = currentPaid + payment.amount
-  const newBalance  = Math.max(0, total - newPaid)
-  const newStatus   = newBalance === 0 ? 'paid'
+  const currentBalance = Number(client.balanceDue) ?? Number(client.totalAmount)
+  const newBalance    = Math.max(0, currentBalance - payment.amount)
+  const newPaid       = (Number(client.totalAmount) || 0) - newBalance
+  const newStatus     = newBalance <= 0 ? 'paid'
     : newPaid > 0 ? 'partial' : 'unpaid'
 
   const batch = writeBatch(db)
@@ -138,12 +197,17 @@ export async function recordPayment(
 
 /** Atomic new booking — client + payment + project + settings counter */
 export async function createBooking(data: {
-  eventName: string; eventType: string; eventDate: Date; location: string
+  eventName: string; eventType: string; customEventType?: string; eventDate: Date; location: string
+  startTime?: string; endTime?: string
   clientName: string; contact: string; email: string
   packageType: string; totalAmount: number
   advanceAmount: number; advanceDate: Date; paymentMethod: string
   status: 'booked' | 'inquiry'
   createdBy: string
+  notes?: string
+  bookingType?: 'oneTime' | 'multiDate' | 'recurring'
+  eventDates?: Array<{ id: string; date: Date | string; label: string; location?: string; startTime?: string; endTime?: string }>
+  recurringSchedule?: { frequency: string; startDate: Date | string; endDate: Date | string; totalSessions: number; perSessionRate: number; paymentType?: 'perSession' | 'custom'; sessionStartTime?: string; sessionEndTime?: string }
 }): Promise<string> {
   // Read invoice counter from settings (check numberingConfig doc first, then config doc)
   let nextNum = 1
@@ -177,33 +241,67 @@ export async function createBooking(data: {
     ? data.contact.trim()
     : `+91${data.contact.trim()}`
 
-  // Write 1: Client
-  batch.set(clientRef, {
-    clientId:      clientRef.id,
-    projectId:     projectRef.id,
-    name:          data.clientName,
-    contact:       formattedContact,
-    email:         data.email,
-    eventName:     data.eventName,
-    eventType:     data.eventType,
-    eventDate:     Timestamp.fromDate(data.eventDate),
-    location:      data.location,
-    packageType:   data.packageType,
-    totalAmount:   data.totalAmount,
+  const formattedEventDates = data.eventDates && data.eventDates.length > 0
+    ? data.eventDates.map(ed => ({
+        id: ed.id,
+        label: ed.label,
+        date: Timestamp.fromDate(new Date(ed.date)),
+        location: ed.location || '',
+        startTime: ed.startTime || '09:00',
+        endTime:   ed.endTime || '18:00',
+      }))
+    : []
+
+  const formattedRecurringSchedule = data.recurringSchedule
+    ? {
+        frequency:        data.recurringSchedule.frequency,
+        startDate:        Timestamp.fromDate(new Date(data.recurringSchedule.startDate)),
+        endDate:          Timestamp.fromDate(new Date(data.recurringSchedule.endDate)),
+        totalSessions:    data.recurringSchedule.totalSessions,
+        perSessionRate:   data.recurringSchedule.perSessionRate,
+        paymentType:      data.recurringSchedule.paymentType || 'perSession',
+        sessionStartTime: data.recurringSchedule.sessionStartTime || '09:00',
+        sessionEndTime:   data.recurringSchedule.sessionEndTime || '18:00',
+      }
+    : null
+
+  const clientDocData = {
+    clientId:          clientRef.id,
+    projectId:         projectRef.id,
+    name:              data.clientName,
+    contact:           formattedContact,
+    email:             data.email,
+    eventName:         data.eventName,
+    eventType:         data.eventType,
+    customEventType:   data.customEventType || '',
+    eventDate:         Timestamp.fromDate(data.eventDate),
+    startTime:         data.startTime || '09:00',
+    endTime:           data.endTime || '18:00',
+    location:          data.location,
+    notes:             data.notes || '',
+    bookingType:       data.bookingType || 'oneTime',
+    eventDates:        formattedEventDates,
+    ...(formattedRecurringSchedule ? { recurringSchedule: formattedRecurringSchedule } : {}),
+    packageType:       data.packageType,
+    totalAmount:       data.totalAmount,
     balanceDue,
     paymentStatus,
-    invoiceNumber: invoiceNo,
-    status:        data.status,
-    isDeleted:     false,
-    createdBy:     data.createdBy,
-    createdAt:     serverTimestamp(),
-    updatedAt:     serverTimestamp(),
-  })
+    invoiceNumber:     invoiceNo,
+    status:            data.status,
+    isDeleted:         false,
+    createdBy:         data.createdBy,
+    createdAt:         serverTimestamp(),
+    updatedAt:         serverTimestamp(),
+  }
+
+  // Write 1: Client
+  batch.set(clientRef, clientDocData)
 
   // Write 2: First payment (only if advance > 0)
+  let paymentDocData: Record<string, unknown> | null = null
   if (data.advanceAmount > 0) {
     const payRef = doc(collection(db, 'clients', clientRef.id, 'payments'))
-    batch.set(payRef, {
+    paymentDocData = {
       paymentId:  payRef.id,
       instalment: '1st',
       amount:     data.advanceAmount,
@@ -211,30 +309,40 @@ export async function createBooking(data: {
       method:     data.paymentMethod,
       recordedBy: data.createdBy,
       createdAt:  serverTimestamp(),
-    })
+    }
+    batch.set(payRef, paymentDocData)
+  }
+
+  const projectDocData = {
+    projectId:         projectRef.id,
+    clientId:          clientRef.id,
+    eventDate:         Timestamp.fromDate(data.eventDate),   // DENORMALIZED
+    startTime:         data.startTime || '09:00',            // DENORMALIZED
+    endTime:           data.endTime || '18:00',              // DENORMALIZED
+    eventName:         data.eventName,                       // DENORMALIZED
+    clientName:        data.clientName,                      // DENORMALIZED
+    clientContact:     formattedContact,                     // DENORMALIZED
+    eventType:         data.eventType,                       // DENORMALIZED
+    customEventType:   data.customEventType || '',           // DENORMALIZED
+    notes:             data.notes || '',                     // DENORMALIZED
+    bookingType:       data.bookingType || 'oneTime',        // DENORMALIZED
+    eventDates:        formattedEventDates,                  // DENORMALIZED
+    ...(formattedRecurringSchedule ? { recurringSchedule: formattedRecurringSchedule } : {}),
+    packageType:       data.packageType,                     // DENORMALIZED
+    stage:             'booked',
+    status:            'upcoming',
+    staffUids:         [],
+    freelancerIds:     [],
+    milestones:        data.advanceAmount > 0
+      ? { depositPaid: Timestamp.fromDate(data.advanceDate) }
+      : {},
+    createdBy:         data.createdBy,
+    createdAt:         serverTimestamp(),
+    updatedAt:         serverTimestamp(),
   }
 
   // Write 3: Project — denormalized fields from client
-  batch.set(projectRef, {
-    projectId:     projectRef.id,
-    clientId:      clientRef.id,
-    eventDate:     Timestamp.fromDate(data.eventDate),   // DENORMALIZED
-    eventName:     data.eventName,                       // DENORMALIZED
-    clientName:    data.clientName,                      // DENORMALIZED
-    clientContact: formattedContact,                     // DENORMALIZED
-    eventType:     data.eventType,                       // DENORMALIZED
-    packageType:   data.packageType,                     // DENORMALIZED
-    stage:         'booked',
-    status:        'upcoming',
-    staffUids:     [],
-    freelancerIds: [],
-    milestones:    data.advanceAmount > 0
-      ? { depositPaid: Timestamp.fromDate(data.advanceDate) }
-      : {},
-    createdBy:     data.createdBy,
-    createdAt:     serverTimestamp(),
-    updatedAt:     serverTimestamp(),
-  })
+  batch.set(projectRef, projectDocData)
 
   // Write 4: Increment invoice counter
   if (data.status === 'booked') {
@@ -249,18 +357,172 @@ export async function createBooking(data: {
     }
   }
 
+  console.group('🔥 [createBooking] Firestore Batch Payload')
+  console.log('Incoming Data:', data)
+  console.log('Client Document (/clients/' + clientRef.id + '):', clientDocData)
+  if (paymentDocData) {
+    console.log('Payment Document (/clients/' + clientRef.id + '/payments):', paymentDocData)
+  }
+  console.log('Project Document (/projects/' + projectRef.id + '):', projectDocData)
+  console.log('Invoice Number Generated:', invoiceNo)
+  console.groupEnd()
+
   await batch.commit()
+
+  console.log('✅ [createBooking] Successfully committed batch. Created clientId:', clientRef.id)
   return clientRef.id
+}
+
+/** Update client details — updates client and syncs denormalized project fields */
+export async function updateClient(
+  clientId: string,
+  updates: {
+    name?: string
+    contact?: string
+    email?: string
+    eventName?: string
+    eventType?: string
+    customEventType?: string
+    startTime?: string
+    endTime?: string
+    eventDate?: Date
+    location?: string
+    notes?: string
+    packageType?: string
+    totalAmount?: number
+    status?: 'booked' | 'inquiry'
+    bookingType?: 'oneTime' | 'multiDate' | 'recurring'
+    eventDates?: Array<{ id: string; date: Date | string; label: string; location?: string; startTime?: string; endTime?: string }>
+    recurringSchedule?: { frequency: string; startDate: Date | string; endDate: Date | string; totalSessions: number; perSessionRate: number; paymentType?: 'perSession' | 'custom'; sessionStartTime?: string; sessionEndTime?: string }
+  },
+  updatedBy: string
+): Promise<void> {
+  const clientRef = doc(db, 'clients', clientId)
+  const clientSnap = await getDoc(clientRef)
+  if (!clientSnap.exists()) throw new Error('Client not found')
+  const clientData = clientSnap.data()
+
+  const batch = writeBatch(db)
+
+  const clientUpdates: Record<string, unknown> = {
+    updatedBy,
+    updatedAt: serverTimestamp(),
+  }
+
+  if (updates.name !== undefined) clientUpdates.name = updates.name.trim()
+  if (updates.contact !== undefined) {
+    const trimmed = updates.contact.trim()
+    clientUpdates.contact = trimmed.startsWith('+91') ? trimmed : `+91${trimmed}`
+  }
+  if (updates.email !== undefined) clientUpdates.email = updates.email.trim()
+  if (updates.eventName !== undefined) clientUpdates.eventName = updates.eventName.trim()
+  if (updates.eventType !== undefined) clientUpdates.eventType = updates.eventType
+  if (updates.customEventType !== undefined) clientUpdates.customEventType = updates.customEventType.trim()
+  if (updates.startTime !== undefined) clientUpdates.startTime = updates.startTime
+  if (updates.endTime !== undefined) clientUpdates.endTime = updates.endTime
+  if (updates.location !== undefined) clientUpdates.location = updates.location.trim()
+  if (updates.notes !== undefined) clientUpdates.notes = updates.notes.trim()
+  if (updates.packageType !== undefined) clientUpdates.packageType = updates.packageType
+  if (updates.status !== undefined) clientUpdates.status = updates.status
+  if (updates.bookingType !== undefined) clientUpdates.bookingType = updates.bookingType
+
+  if (updates.eventDate !== undefined) {
+    clientUpdates.eventDate = Timestamp.fromDate(updates.eventDate)
+  }
+
+  if (updates.eventDates !== undefined) {
+    clientUpdates.eventDates = updates.eventDates.map(ed => ({
+      id: ed.id,
+      label: ed.label,
+      date: Timestamp.fromDate(new Date(ed.date)),
+      location: ed.location || '',
+      startTime: ed.startTime || '09:00',
+      endTime:   ed.endTime || '18:00',
+    }))
+  }
+
+  if (updates.recurringSchedule !== undefined) {
+    clientUpdates.recurringSchedule = updates.recurringSchedule ? {
+      frequency:        updates.recurringSchedule.frequency,
+      startDate:        Timestamp.fromDate(new Date(updates.recurringSchedule.startDate)),
+      endDate:          Timestamp.fromDate(new Date(updates.recurringSchedule.endDate)),
+      totalSessions:    updates.recurringSchedule.totalSessions,
+      perSessionRate:   updates.recurringSchedule.perSessionRate,
+      paymentType:      updates.recurringSchedule.paymentType || 'perSession',
+      sessionStartTime: updates.recurringSchedule.sessionStartTime || '09:00',
+      sessionEndTime:   updates.recurringSchedule.sessionEndTime || '18:00',
+    } : null
+  }
+
+  if (updates.totalAmount !== undefined) {
+    clientUpdates.totalAmount = updates.totalAmount
+    // Calculate new balance due using current advance / payments
+    const total = updates.totalAmount
+    const currentTotal = Number(clientData.totalAmount) || 0
+    const currentBalance = Number(clientData.balanceDue) ?? currentTotal
+    const advancePaid = Math.max(0, currentTotal - currentBalance)
+    const newBalance = Math.max(0, total - advancePaid)
+    clientUpdates.balanceDue = newBalance
+    clientUpdates.paymentStatus = newBalance <= 0 ? 'paid' : advancePaid > 0 ? 'partial' : 'unpaid'
+  }
+
+  batch.update(clientRef, clientUpdates)
+
+  // Sync with project if projectId is linked
+  const projectId = clientData.projectId
+  if (projectId) {
+    const projectRef = doc(db, 'projects', projectId)
+    const projectSnap = await getDoc(projectRef)
+    if (projectSnap.exists()) {
+      const projectUpdates: Record<string, unknown> = {
+        updatedBy,
+        updatedAt: serverTimestamp(),
+      }
+      if (clientUpdates.eventName) projectUpdates.eventName = clientUpdates.eventName
+      if (clientUpdates.name) projectUpdates.clientName = clientUpdates.name
+      if (clientUpdates.contact) projectUpdates.clientContact = clientUpdates.contact
+      if (clientUpdates.eventType) projectUpdates.eventType = clientUpdates.eventType
+      if (clientUpdates.customEventType !== undefined) projectUpdates.customEventType = clientUpdates.customEventType
+      if (clientUpdates.startTime !== undefined) projectUpdates.startTime = clientUpdates.startTime
+      if (clientUpdates.endTime !== undefined) projectUpdates.endTime = clientUpdates.endTime
+      if (clientUpdates.packageType) projectUpdates.packageType = clientUpdates.packageType
+      if (clientUpdates.eventDate) projectUpdates.eventDate = clientUpdates.eventDate
+      if (clientUpdates.eventDates) projectUpdates.eventDates = clientUpdates.eventDates
+      if (clientUpdates.bookingType) projectUpdates.bookingType = clientUpdates.bookingType
+      if (clientUpdates.notes) projectUpdates.notes = clientUpdates.notes
+      if (clientUpdates.recurringSchedule !== undefined) projectUpdates.recurringSchedule = clientUpdates.recurringSchedule
+
+      batch.update(projectRef, projectUpdates)
+    }
+  }
+
+  await batch.commit()
 }
 
 /** Soft delete — isDeleted: true, never hard-delete */
 export async function softDeleteClient(clientId: string, deletedBy: string): Promise<void> {
   const batch = writeBatch(db)
-  batch.update(doc(db, 'clients', clientId), {
+  const clientRef = doc(db, 'clients', clientId)
+  const clientSnap = await getDoc(clientRef)
+  
+  batch.update(clientRef, {
     isDeleted:  true,
     deletedBy,
     deletedAt:  serverTimestamp(),
     updatedAt:  serverTimestamp(),
   })
+
+  if (clientSnap.exists()) {
+    const data = clientSnap.data()
+    if (data.projectId) {
+      batch.update(doc(db, 'projects', data.projectId), {
+        isDeleted:  true,
+        deletedBy,
+        deletedAt:  serverTimestamp(),
+        updatedAt:  serverTimestamp(),
+      })
+    }
+  }
+
   await batch.commit()
 }

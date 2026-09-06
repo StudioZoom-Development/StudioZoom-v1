@@ -13,10 +13,34 @@ export interface AppUser {
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────
 export type EventType =
-  | 'wedding' | 'preWedding' | 'engagement'
-  | 'corporate' | 'portrait' | 'studio' | 'other'
+  | 'wedding' | 'reception' | 'preWedding' | 'engagement'
+  | 'birthday' | 'babyShower' | 'puberty'
+  | 'corporate' | 'schoolEvent'
+  | 'portrait' | 'studio' | 'other'
 
-export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
+export type BookingType = 'oneTime' | 'multiDate' | 'recurring'
+
+export interface EventDateEntry {
+  id:         string
+  date:       Date
+  label:      string        // e.g. "Engagement", "Wedding Day 1", "Reception"
+  location?:  string        // optional per-date location override
+  startTime?: string        // e.g. "09:00"
+  endTime?:   string        // e.g. "18:00"
+}
+
+export interface RecurringSchedule {
+  frequency:         'weekly' | 'biweekly' | 'monthly'
+  startDate:         Date
+  endDate:           Date
+  totalSessions:     number
+  perSessionRate:    number
+  paymentType?:      'perSession' | 'custom'
+  sessionStartTime?: string
+  sessionEndTime?:   string
+}
+
+export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'overdue'
 export type ClientStatus  = 'inquiry' | 'booked'
 
 export interface Client {
@@ -27,7 +51,10 @@ export interface Client {
   email:          string
   eventName:      string
   eventType:      EventType
+  customEventType?: string
   eventDate:      Date
+  startTime?:     string
+  endTime?:       string
   location:       string
   packageType:    string
   totalAmount:    number
@@ -35,14 +62,19 @@ export interface Client {
   paymentStatus:  PaymentStatus
   invoiceNumber:  string
   status:         ClientStatus
-  notes?:         string
-  isDeleted?:     boolean
-  staffUids?:     string[]
-  assignedStaff?: string[]
-  teamInitials?:  string[]
-  createdBy:      string
-  createdAt:      Date
-  updatedAt:      Date
+  stage?:         ProjectStage
+  notes?:              string
+  isDeleted?:          boolean
+  staffUids?:          string[]
+  assignedStaff?:      string[]
+  teamInitials?:       string[]
+  bookingType?:        BookingType
+  eventDates?:         EventDateEntry[]
+  recurringSchedule?:  RecurringSchedule
+  bookingGroupId?:     string
+  createdBy:           string
+  createdAt:           Date
+  updatedAt:           Date
 }
 
 export interface Payment {
@@ -74,6 +106,9 @@ export interface Project {
   eventName:              string            // DENORMALIZED from client
   clientName:             string            // DENORMALIZED from client
   eventType:              EventType         // DENORMALIZED from client
+  customEventType?:       string            // DENORMALIZED from client
+  startTime?:             string            // DENORMALIZED from client
+  endTime?:               string            // DENORMALIZED from client
   stage:                  ProjectStage
   status:                 ProjectStatus
   callTime?:              string
@@ -85,6 +120,9 @@ export interface Project {
   freelancerRates?:       Record<string, number>
   milestones:             Partial<Record<MilestoneKey, Date>>
   override?:              { by: string; reason: string; at: Date }
+  bookingType?:           BookingType
+  bookingGroupId?:        string             // links sibling projects in multi-date bookings
+  dateLabel?:             string             // "Engagement", "Reception", etc.
   isDeleted?:             boolean
   createdBy:              string
   createdAt:              Date
@@ -398,10 +436,26 @@ export interface Lead {
   source?:        string
   status:         LeadStatus | string
   notes?:         string
+  convertedClientId?: string
   isDeleted?:     boolean
   createdBy?:     string
   createdAt?:     Date
   updatedAt?:     Date
+}
+
+// ─── BOOKING DRAFTS ───────────────────────────────────────────────────────
+export interface BookingDraft {
+  draftId:        string
+  name:           string
+  clientName:     string
+  eventName?:     string
+  eventType:      EventType | string
+  totalAmount:    number
+  currentStep:    number
+  state:          any
+  createdBy:      string
+  createdAt:      Date
+  updatedAt:      Date
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────

@@ -402,14 +402,18 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
               {saving ? 'Saving...' : 'Save'}
             </Button>
 
-            {/* Static hover state button */}
+            {/* Convert to booking button */}
             <span
-              onClick={() => console.log('Convert to booking triggered from LeadForm')}
+              onClick={() => {
+                if (leadId) {
+                  router.push(`/clients/new?leadId=${leadId}`)
+                }
+              }}
               style={{
                 fontSize: 'var(--text-xs)',
                 fontWeight: 600,
                 color: '#ffffff',
-                cursor: 'pointer',
+                cursor: leadId ? 'pointer' : 'default',
                 padding: '0 16px',
                 height: '36px',
                 borderRadius: '8px',
@@ -419,15 +423,8 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 userSelect: 'none',
-                transition: 'none',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'var(--color-primary)'
-                e.currentTarget.style.color = '#ffffff'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'var(--color-primary)'
-                e.currentTarget.style.color = '#ffffff'
+                opacity: leadId ? 1 : 0.6,
+                transition: 'opacity 0.15s ease',
               }}
             >
               Convert to booking →
