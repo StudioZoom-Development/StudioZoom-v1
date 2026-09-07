@@ -78,12 +78,14 @@ export interface Client {
 }
 
 export interface Payment {
-  paymentId:   string
-  instalment:  '1st' | '2nd' | '3rd'
-  amount:      number
-  date:        Date
-  method:      'cash' | 'gpay' | 'bankTransfer' | 'cheque'
-  recordedBy:  string
+  paymentId:       string
+  instalment:      '1st' | '2nd' | '3rd'
+  amount:          number
+  date:            Date
+  method:          'cash' | 'gpay' | 'bankTransfer' | 'cheque'
+  transactionId?:  string
+  recordedBy:      string
+  recordedByName?: string
 }
 
 // ─── PROJECT ──────────────────────────────────────────────────────────────

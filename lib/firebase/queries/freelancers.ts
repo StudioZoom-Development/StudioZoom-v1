@@ -1,7 +1,8 @@
 import {
   collection, query, where, onSnapshot,
   doc, getDoc, updateDoc, setDoc, getDocs,
-  writeBatch, arrayUnion, serverTimestamp, Timestamp
+  writeBatch, arrayUnion, arrayRemove, deleteField,
+  serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { Freelancer, FreelancerPayout, Project } from '@/types'
@@ -204,6 +205,21 @@ export async function assignFreelancerToProject(
       dayRate: Number(assignment.dayRate) || 0,
     }
     payload[`freelancerRates.${freelancerId}`] = Number(assignment.dayRate) || 0
+  }
+
+  await updateDoc(doc(db, 'projects', projectId), payload)
+}
+
+/** Unassign a freelancer from a project */
+export async function unassignFreelancerFromProject(
+  projectId: string,
+  freelancerId: string
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    freelancerIds: arrayRemove(freelancerId),
+    [`freelancerAssignments.${freelancerId}`]: deleteField(),
+    [`freelancerRates.${freelancerId}`]: deleteField(),
+    updatedAt: serverTimestamp(),
   }
 
   await updateDoc(doc(db, 'projects', projectId), payload)

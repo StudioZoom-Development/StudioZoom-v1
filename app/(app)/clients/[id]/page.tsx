@@ -11,6 +11,8 @@ import {
   getClientById,
   subscribeToPayments,
   recordPayment,
+  editPayment,
+  deletePayment,
   softDeleteClient,
 } from '@/lib/firebase/queries/clients'
 import {
@@ -27,12 +29,13 @@ import { Skeleton } from '@/components/shared/LoadingSkeleton'
 import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry } from '@/types'
 
 interface PaymentItem {
-  paymentId: string
-  instalment: string
-  amount: number
-  date: Date
-  method: string
-  recordedBy: string
+  paymentId:       string
+  instalment:      string
+  amount:          number
+  date:            Date
+  method:          string
+  transactionId?:  string
+  recordedBy:      string
   recordedByName?: string
 }
 
@@ -201,13 +204,28 @@ export default function ClientDetailPage() {
 
   // Record payment modal state
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false)
-  const [instalment, setInstalment] = useState<'1st' | '2nd' | '3rd'>('2nd')
+  const [instalment, setInstalment] = useState<'1st' | '2nd' | '3rd'>('1st')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gpay' | 'bankTransfer' | 'cheque'>('gpay')
+  const [transactionId, setTransactionId] = useState('')
   const [submittingPayment, setSubmittingPayment] = useState(false)
   const [paymentError, setPaymentError] = useState('')
   const [advancingStage, setAdvancingStage] = useState(false)
+
+  // Edit payment modal state
+  const [editingPayment, setEditingPayment] = useState<PaymentItem | null>(null)
+  const [editInstalment, setEditInstalment] = useState<'1st' | '2nd' | '3rd'>('1st')
+  const [editAmount, setEditAmount] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editMethod, setEditMethod] = useState<'cash' | 'gpay' | 'bankTransfer' | 'cheque'>('gpay')
+  const [editTransactionId, setEditTransactionId] = useState('')
+  const [submittingEditPayment, setSubmittingEditPayment] = useState(false)
+  const [editPaymentError, setEditPaymentError] = useState('')
+
+  // Delete payment modal state
+  const [deletePaymentTarget, setDeletePaymentTarget] = useState<PaymentItem | null>(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
 
   // Edit and Delete modal state
   const [editOpen, setEditOpen] = useState(false)
@@ -346,10 +364,28 @@ export default function ClientDetailPage() {
   const balanceDue = Math.max(0, totalAmount - advancePaid)
   const percentCollected = totalAmount > 0 ? Math.min(100, Math.round((advancePaid / totalAmount) * 100)) : 0
 
+  const receivedInstalments = new Set(payments.map(p => p.instalment))
+  const allInstalmentsReceived = (['1st', '2nd', '3rd'] as const).every(i => receivedInstalments.has(i))
+
+  const handleOpenRecordPayment = () => {
+    const nextInstalment = (['1st', '2nd', '3rd'] as const).find(i => !receivedInstalments.has(i)) || '3rd'
+    setInstalment(nextInstalment)
+    setPaymentAmount('')
+    setTransactionId('')
+    setPaymentDate(format(new Date(), 'yyyy-MM-dd'))
+    setPaymentMethod('gpay')
+    setPaymentError('')
+    setRecordPaymentOpen(true)
+  }
+
   const handleRecordPaymentSubmit = async () => {
     const amt = parseFloat(paymentAmount)
     if (isNaN(amt) || amt <= 0) {
       setPaymentError('Please enter a valid payment amount')
+      return
+    }
+    if (paymentMethod !== 'cash' && !transactionId.trim()) {
+      setPaymentError('Transaction ID is required for non-cash payments')
       return
     }
 
@@ -364,6 +400,7 @@ export default function ClientDetailPage() {
           amount: amt,
           date: new Date(paymentDate),
           method: paymentMethod,
+          transactionId: paymentMethod !== 'cash' ? transactionId.trim() : '',
         },
         appUser?.uid || 'system',
         appUser?.name || 'Staff'
@@ -375,11 +412,79 @@ export default function ClientDetailPage() {
 
       setRecordPaymentOpen(false)
       setPaymentAmount('')
+      setTransactionId('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record payment'
       setPaymentError(msg)
     } finally {
       setSubmittingPayment(false)
+    }
+  }
+
+  const handleStartEditPayment = (p: PaymentItem) => {
+    setEditingPayment(p)
+    setEditInstalment((p.instalment as '1st' | '2nd' | '3rd') || '1st')
+    setEditAmount(String(p.amount))
+    setEditDate(format(p.date, 'yyyy-MM-dd'))
+    setEditMethod((p.method as 'cash' | 'gpay' | 'bankTransfer' | 'cheque') || 'gpay')
+    setEditTransactionId(p.transactionId || '')
+    setEditPaymentError('')
+  }
+
+  const handleEditPaymentSubmit = async () => {
+    if (!editingPayment) return
+    const amt = parseFloat(editAmount)
+    if (isNaN(amt) || amt <= 0) {
+      setEditPaymentError('Please enter a valid payment amount')
+      return
+    }
+    if (editMethod !== 'cash' && !editTransactionId.trim()) {
+      setEditPaymentError('Transaction ID is required for non-cash payments')
+      return
+    }
+
+    setSubmittingEditPayment(true)
+    setEditPaymentError('')
+
+    try {
+      await editPayment(
+        client.clientId,
+        editingPayment.paymentId,
+        {
+          instalment: editInstalment,
+          amount: amt,
+          date: new Date(editDate),
+          method: editMethod,
+          transactionId: editMethod !== 'cash' ? editTransactionId.trim() : '',
+        },
+        appUser?.uid || 'system',
+        appUser?.name || 'Staff'
+      )
+
+      const updatedClient = await getClientById(client.clientId)
+      if (updatedClient) setClient(updatedClient)
+
+      setEditingPayment(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update payment'
+      setEditPaymentError(msg)
+    } finally {
+      setSubmittingEditPayment(false)
+    }
+  }
+
+  const handleDeletePaymentConfirm = async () => {
+    if (!deletePaymentTarget) return
+    setDeletingPayment(true)
+    try {
+      await deletePayment(client.clientId, deletePaymentTarget.paymentId)
+      const updatedClient = await getClientById(client.clientId)
+      if (updatedClient) setClient(updatedClient)
+      setDeletePaymentTarget(null)
+    } catch (err) {
+      console.error('Failed to delete payment:', err)
+    } finally {
+      setDeletingPayment(false)
     }
   }
 
@@ -1135,18 +1240,75 @@ export default function ClientDetailPage() {
               </div>
             ) : (
               payments.map(p => (
-                <div key={p.paymentId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                      ₹{p.amount.toLocaleString('en-IN')}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                      {format(p.date, 'd MMM yyyy')} · by {p.recordedByName || p.recordedBy}
-                    </span>
+                <div key={p.paymentId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px 0', borderBottom: '0.5px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                        ₹{p.amount.toLocaleString('en-IN')}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'var(--color-primary-muted)', padding: '1px 6px', borderRadius: '4px', fontWeight: 500 }}>
+                        {p.instalment}
+                      </span>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)' }}>
+                        {p.method}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                        {format(p.date, 'd MMM yyyy')} · by {p.recordedByName || p.recordedBy}
+                      </span>
+                      {p.transactionId && p.method !== 'cash' && (
+                        <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', background: 'var(--color-surface-raised)', padding: '1px 6px', borderRadius: '4px' }}>
+                          Txn: {p.transactionId}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)' }}>
-                    {p.method}
-                  </span>
+                  {/* Edit & Delete Action Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      title="Edit payment"
+                      onClick={() => handleStartEditPayment(p)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px 6px',
+                        borderRadius: '6px',
+                        color: 'var(--color-foreground-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.15s ease',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-primary)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-muted)')}
+                    >
+                      <i className="ti ti-pencil" style={{ fontSize: '15px' }} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete payment"
+                      onClick={() => setDeletePaymentTarget(p)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px 6px',
+                        borderRadius: '6px',
+                        color: 'var(--color-foreground-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.15s ease',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-danger)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-muted)')}
+                    >
+                      <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -1154,7 +1316,7 @@ export default function ClientDetailPage() {
             {/* RECORD PAYMENT BUTTON */}
             <Button
               className="h-11 w-full font-medium"
-              onClick={() => setRecordPaymentOpen(true)}
+              onClick={handleOpenRecordPayment}
             >
               Record payment
             </Button>
@@ -1280,6 +1442,18 @@ export default function ClientDetailPage() {
               </div>
             )}
 
+            {allInstalmentsReceived && (
+              <div style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-secondary)',
+                background: 'var(--color-secondary-muted)',
+                borderRadius: '8px',
+                padding: '8px 12px'
+              }}>
+                All instalments (1st, 2nd, 3rd) have already been marked as received.
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
@@ -1288,6 +1462,7 @@ export default function ClientDetailPage() {
                 <select
                   value={instalment}
                   onChange={e => setInstalment(e.target.value as '1st' | '2nd' | '3rd')}
+                  disabled={allInstalmentsReceived}
                   style={{
                     fontFamily: 'var(--font-inter)',
                     height: '36px',
@@ -1299,12 +1474,18 @@ export default function ClientDetailPage() {
                     fontSize: 'var(--text-sm)',
                     color: 'var(--color-foreground)',
                     outline: 'none',
-                    cursor: 'pointer',
+                    cursor: allInstalmentsReceived ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  <option value="1st">1st Instalment</option>
-                  <option value="2nd">2nd Instalment</option>
-                  <option value="3rd">3rd Instalment</option>
+                  <option value="1st" disabled={receivedInstalments.has('1st')}>
+                    1st Instalment {receivedInstalments.has('1st') ? '(Received)' : ''}
+                  </option>
+                  <option value="2nd" disabled={receivedInstalments.has('2nd')}>
+                    2nd Instalment {receivedInstalments.has('2nd') ? '(Received)' : ''}
+                  </option>
+                  <option value="3rd" disabled={receivedInstalments.has('3rd')}>
+                    3rd Instalment {receivedInstalments.has('3rd') ? '(Received)' : ''}
+                  </option>
                 </select>
               </div>
 
@@ -1360,6 +1541,21 @@ export default function ClientDetailPage() {
                   <option value="cheque">Cheque</option>
                 </select>
               </div>
+
+              {paymentMethod !== 'cash' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                    Transaction ID <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. UPI Ref / UTR / Cheque No."
+                    value={transactionId}
+                    onChange={e => setTransactionId(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              )}
             </div>
 
             <div style={{
@@ -1380,7 +1576,7 @@ export default function ClientDetailPage() {
               <Button
                 className="h-9 font-medium"
                 onClick={handleRecordPaymentSubmit}
-                disabled={submittingPayment}
+                disabled={submittingPayment || allInstalmentsReceived}
               >
                 {submittingPayment ? 'Recording…' : 'Record'}
               </Button>
@@ -1388,6 +1584,203 @@ export default function ClientDetailPage() {
           </div>
         </div>
       )}
+
+      {/* EDIT PAYMENT MODAL */}
+      {editingPayment && (
+        <div
+          onClick={() => setEditingPayment(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            background: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'var(--font-inter)',
+            padding: '16px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '420px',
+              background: 'var(--color-surface-overlay)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                Edit payment
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPayment(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-foreground-muted)',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+
+            {editPaymentError && (
+              <div style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-danger)',
+                background: 'var(--color-danger-muted)',
+                borderRadius: '8px',
+                padding: '8px 12px'
+              }}>
+                {editPaymentError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Instalment
+                </label>
+                <select
+                  value={editInstalment}
+                  onChange={e => setEditInstalment(e.target.value as '1st' | '2nd' | '3rd')}
+                  style={{
+                    fontFamily: 'var(--font-inter)',
+                    height: '36px',
+                    width: '100%',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    padding: '0 10px',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--color-foreground)',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="1st">1st Instalment</option>
+                  <option value="2nd">2nd Instalment</option>
+                  <option value="3rd">3rd Instalment</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Amount
+                </label>
+                <Input
+                  type="number"
+                  placeholder="₹0"
+                  value={editAmount}
+                  onChange={e => setEditAmount(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Date
+                </label>
+                <Input
+                  type="date"
+                  value={editDate}
+                  onChange={e => setEditDate(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                  Method
+                </label>
+                <select
+                  value={editMethod}
+                  onChange={e => setEditMethod(e.target.value as 'cash' | 'gpay' | 'bankTransfer' | 'cheque')}
+                  style={{
+                    fontFamily: 'var(--font-inter)',
+                    height: '36px',
+                    width: '100%',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    padding: '0 10px',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--color-foreground)',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="gpay">GPay</option>
+                  <option value="cash">Cash</option>
+                  <option value="bankTransfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                </select>
+              </div>
+
+              {editMethod !== 'cash' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                    Transaction ID <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. UPI Ref / UTR / Cheque No."
+                    value={editTransactionId}
+                    onChange={e => setEditTransactionId(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              borderTop: '0.5px solid var(--color-border)',
+              paddingTop: '16px',
+              marginTop: '4px'
+            }}>
+              <Button
+                variant="outline"
+                className="h-9"
+                onClick={() => setEditingPayment(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="h-9 font-medium"
+                onClick={handleEditPaymentSubmit}
+                disabled={submittingEditPayment}
+              >
+                {submittingEditPayment ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE PAYMENT CONFIRM MODAL */}
+      <ConfirmModal
+        open={!!deletePaymentTarget}
+        title="Delete payment record?"
+        description={`Are you sure you want to delete the ${deletePaymentTarget?.instalment} instalment payment of ₹${deletePaymentTarget?.amount.toLocaleString('en-IN')}? This will automatically recalculate the client's balance due and payment status.`}
+        confirmLabel="Delete payment"
+        onConfirm={handleDeletePaymentConfirm}
+        onCancel={() => setDeletePaymentTarget(null)}
+        loading={deletingPayment}
+      />
 
       {/* EDIT CLIENT MODAL */}
       <EditClientModal

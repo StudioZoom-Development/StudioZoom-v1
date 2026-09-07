@@ -1,6 +1,7 @@
 import {
   collection, query, orderBy,
-  onSnapshot, getDoc, doc, writeBatch,
+  onSnapshot, getDoc, getDocs, doc, writeBatch,
+  deleteDoc, updateDoc, setDoc,
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
@@ -131,7 +132,8 @@ export function subscribeToPayments(
   clientId: string,
   callback: (payments: Array<{
     paymentId: string; instalment: string
-    amount: number; date: Date; method: string; recordedBy: string; recordedByName?: string
+    amount: number; date: Date; method: string
+    transactionId?: string; recordedBy: string; recordedByName?: string
   }>) => void
 ): () => void {
   const q = query(
@@ -144,6 +146,7 @@ export function subscribeToPayments(
       instalment:     d.data().instalment as string,
       amount:         d.data().amount     as number,
       method:         d.data().method     as string,
+      transactionId:  (d.data().transactionId as string) || '',
       recordedBy:     d.data().recordedBy as string,
       recordedByName: (d.data().recordedByName as string) ?? (d.data().recordedBy as string),
       date: d.data().date instanceof Timestamp
@@ -153,46 +156,85 @@ export function subscribeToPayments(
   })
 }
 
-/** Record a new payment — batch updates payment subcollection + client.balanceDue */
-export async function recordPayment(
-  clientId: string,
-  payment: { instalment: string; amount: number; date: Date; method: string },
-  recordedBy: string,
-  recordedByName?: string
-): Promise<void> {
+/** Recalculate client balanceDue & paymentStatus based on all actual payment docs */
+export async function recalculateClientBalance(clientId: string): Promise<{ balanceDue: number; paymentStatus: string }> {
   const clientSnap = await getDoc(doc(db, 'clients', clientId))
   if (!clientSnap.exists()) throw new Error('Client not found')
   const client = clientSnap.data()
+  const totalAmount = Number(client.totalAmount) || 0
 
-  const currentBalance = Number(client.balanceDue) ?? Number(client.totalAmount)
-  const newBalance    = Math.max(0, currentBalance - payment.amount)
-  const newPaid       = (Number(client.totalAmount) || 0) - newBalance
-  const newStatus     = newBalance <= 0 ? 'paid'
-    : newPaid > 0 ? 'partial' : 'unpaid'
-
-  const batch = writeBatch(db)
-
-  // Write payment doc
-  const payRef = doc(collection(db, 'clients', clientId, 'payments'))
-  batch.set(payRef, {
-    paymentId:      payRef.id,
-    instalment:     payment.instalment,
-    amount:         payment.amount,
-    date:           Timestamp.fromDate(payment.date),
-    method:         payment.method,
-    recordedBy,
-    recordedByName: recordedByName ?? recordedBy,
-    createdAt:      serverTimestamp(),
+  const paymentsSnap = await getDocs(collection(db, 'clients', clientId, 'payments'))
+  let totalPaid = 0
+  paymentsSnap.forEach(d => {
+    totalPaid += Number(d.data().amount) || 0
   })
 
-  // Update client balanceDue + paymentStatus in same batch
-  batch.update(doc(db, 'clients', clientId), {
+  const newBalance = Math.max(0, totalAmount - totalPaid)
+  const newStatus  = newBalance <= 0 ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid'
+
+  await updateDoc(doc(db, 'clients', clientId), {
     balanceDue:    newBalance,
     paymentStatus: newStatus,
     updatedAt:     serverTimestamp(),
   })
 
-  await batch.commit()
+  return { balanceDue: newBalance, paymentStatus: newStatus }
+}
+
+/** Record a new payment — saves payment doc + recalculates client balance */
+export async function recordPayment(
+  clientId: string,
+  payment: { instalment: string; amount: number; date: Date; method: string; transactionId?: string },
+  recordedBy: string,
+  recordedByName?: string
+): Promise<void> {
+  const payRef = doc(collection(db, 'clients', clientId, 'payments'))
+  await setDoc(payRef, {
+    paymentId:      payRef.id,
+    instalment:     payment.instalment,
+    amount:         payment.amount,
+    date:           Timestamp.fromDate(payment.date),
+    method:         payment.method,
+    transactionId:  payment.transactionId || '',
+    recordedBy,
+    recordedByName: recordedByName ?? recordedBy,
+    createdAt:      serverTimestamp(),
+  })
+
+  await recalculateClientBalance(clientId)
+}
+
+/** Edit an existing payment record and recalculate client balance */
+export async function editPayment(
+  clientId: string,
+  paymentId: string,
+  payment: { instalment: string; amount: number; date: Date; method: string; transactionId?: string },
+  updatedBy: string,
+  updatedByName?: string
+): Promise<void> {
+  const payRef = doc(db, 'clients', clientId, 'payments', paymentId)
+  await updateDoc(payRef, {
+    instalment:     payment.instalment,
+    amount:         payment.amount,
+    date:           Timestamp.fromDate(payment.date),
+    method:         payment.method,
+    transactionId:  payment.transactionId || '',
+    updatedBy,
+    updatedByName:  updatedByName ?? updatedBy,
+    updatedAt:      serverTimestamp(),
+  })
+
+  await recalculateClientBalance(clientId)
+}
+
+/** Delete a payment record and recalculate client balance */
+export async function deletePayment(
+  clientId: string,
+  paymentId: string
+): Promise<void> {
+  const payRef = doc(db, 'clients', clientId, 'payments', paymentId)
+  await deleteDoc(payRef)
+  await recalculateClientBalance(clientId)
 }
 
 /** Atomic new booking — client + payment + project + settings counter */

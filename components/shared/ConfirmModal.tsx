@@ -12,6 +12,7 @@ interface ConfirmModalProps {
   onConfirm:     () => void
   onCancel:      () => void
   loading?:      boolean
+  zIndex?:       number
 }
 
 export function ConfirmModal({
@@ -24,6 +25,7 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
   loading,
+  zIndex = 70,
 }: ConfirmModalProps) {
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
@@ -43,7 +45,7 @@ export function ConfirmModal({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 50,
+        zIndex,
         background: 'rgba(0,0,0,0.7)',
         display: 'flex',
         alignItems: 'center',
