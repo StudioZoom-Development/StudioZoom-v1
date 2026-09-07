@@ -108,7 +108,7 @@ function NewBookingPageContent(): React.JSX.Element {
       setError(msg)
       setSavingDraftAndExiting(false)
     }
-  }, [state, currentStep, activeDraftId, appUser?.uid, router])
+  }, [state, currentStep, activeDraftId, appUser, router])
 
   const showToast = useCallback((msg: string, durationMs: number = 4000) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
