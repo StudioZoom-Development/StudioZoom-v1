@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,12 +57,13 @@ export function RecordPaymentModal({
     return () => unsub()
   }, [clientId, isOpen])
 
-  const receivedInstalments = new Set<string>(payments.map(p => p.instalment))
+  const receivedInstalments = useMemo(() => new Set<string>(payments.map(p => p.instalment)), [payments])
   const allStandardReceived = ['1st', '2nd', '3rd', '1st Instalment', '2nd Instalment', '3rd Instalment'].some(inst => receivedInstalments.has(inst))
 
   // Prefill when modal opens or balance changes
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return
+    const timer = setTimeout(() => {
       setPaymentError(null)
       setTransactionId('')
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'))
@@ -77,8 +78,10 @@ export function RecordPaymentModal({
       } else {
         setInstalment('settlement')
       }
-    }
-  }, [isOpen, balanceDue])
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [isOpen, balanceDue, receivedInstalments])
 
   if (!isOpen) return null
 
@@ -164,7 +167,9 @@ export function RecordPaymentModal({
             </div>
             {clientName && (
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                {clientName} {balanceDue > 0 && `· Balance: ₹${balanceDue.toLocaleString('en-IN')}`}
+                {clientName}
+                {totalAmount > 0 ? ` · Total: ₹${totalAmount.toLocaleString('en-IN')}` : ''}
+                {balanceDue > 0 ? ` · Balance: ₹${balanceDue.toLocaleString('en-IN')}` : ''}
               </div>
             )}
           </div>

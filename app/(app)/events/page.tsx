@@ -424,8 +424,8 @@ function EventsBoardContent() {
   // Real-time client & payment listener for the currently selected project
   useEffect(() => {
     if (!selectedProject?.clientId || selectedProject.clientId.startsWith('client-')) {
-      setSelectedClient(null)
-      return
+      const timer = setTimeout(() => setSelectedClient(null), 0)
+      return () => clearTimeout(timer)
     }
 
     const unsub = onSnapshot(doc(db, 'clients', selectedProject.clientId), snap => {
@@ -453,22 +453,26 @@ function EventsBoardContent() {
     if (urlParamsAppliedRef.current) return
     if (projects.length === 0) return
 
-    let applied = false
-    if (paramProject) {
-      const match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
-      if (match) {
-        setSelectedProjectId(match.projectId)
+    const timer = setTimeout(() => {
+      let applied = false
+      if (paramProject) {
+        const match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
+        if (match) {
+          setSelectedProjectId(match.projectId)
+          applied = true
+        }
+      }
+      if (paramStage && STAGE_CONFIGS.some(s => s.stageKey === paramStage)) {
+        setPanelStageKey(paramStage)
         applied = true
       }
-    }
-    if (paramStage && STAGE_CONFIGS.some(s => s.stageKey === paramStage)) {
-      setPanelStageKey(paramStage)
-      applied = true
-    }
 
-    if (applied || (!paramProject && !paramStage)) {
-      urlParamsAppliedRef.current = true
-    }
+      if (applied || (!paramProject && !paramStage)) {
+        urlParamsAppliedRef.current = true
+      }
+    }, 0)
+
+    return () => clearTimeout(timer)
   }, [paramProject, paramStage, projects])
 
   // ─── DYNAMIC PORT MEASUREMENT ───────────────────────────────────────────
@@ -561,7 +565,7 @@ function EventsBoardContent() {
     return idx >= 0 ? idx : 0
   }, [selectedProject])
 
-  const getStageStatus = (stageKey: ProjectStage): 'completed' | 'active' | 'pending' => {
+  const getStageStatus = useCallback((stageKey: ProjectStage): 'completed' | 'active' | 'pending' => {
     const stageIdx = STAGE_ORDER.indexOf(stageKey)
     if (stageIdx < currentStageIndex) return 'completed'
     if (stageIdx === currentStageIndex) {
@@ -571,7 +575,7 @@ function EventsBoardContent() {
       return 'active'
     }
     return 'pending'
-  }
+  }, [currentStageIndex, selectedProject])
 
   // Multi-day / Multi-event tracks detection
   const multiEventDays: EventDateEntry[] = useMemo(() => {
@@ -736,7 +740,7 @@ function EventsBoardContent() {
   const panelStageStatus = useMemo((): 'completed' | 'active' | 'pending' => {
     if (!panelStageKey) return 'pending'
     return getStageStatus(panelStageKey)
-  }, [panelStageKey, currentStageIndex, selectedProject])
+  }, [panelStageKey, getStageStatus])
 
   // ─── ADVANCE STAGE HANDLER ──────────────────────────────────────────────
   const handleAdvanceStage = async () => {
@@ -946,9 +950,6 @@ function EventsBoardContent() {
   }
 
   // ─── POST-PROD PARALLEL TRACKS PROGRESS ─────────────────────────────────
-  const photoMilestones = PHOTO_TRACK_MILESTONES
-  const videoMilestones = VIDEO_TRACK_MILESTONES
-
   const isPostProdActive = currentStageIndex >= 4
   const isPostProdComplete = currentStageIndex > 4
 

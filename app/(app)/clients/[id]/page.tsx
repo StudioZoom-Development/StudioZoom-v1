@@ -10,7 +10,6 @@ import { useAuthStore } from '@/store/authStore'
 import {
   getClientById,
   subscribeToPayments,
-  recordPayment,
   editPayment,
   deletePayment,
   softDeleteClient,
