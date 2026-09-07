@@ -6,6 +6,7 @@ import { BookingDraft } from '@/types'
 import { subscribeToDrafts, deleteBookingDraft } from '@/lib/firebase/queries/drafts'
 import { Badge } from '@/components/shared/Badge'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 
 interface DraftsModalProps {
   open:          boolean
@@ -16,7 +17,8 @@ interface DraftsModalProps {
 export function DraftsModal({ open, onClose, onSelectDraft }: DraftsModalProps) {
   const [drafts, setDrafts] = useState<BookingDraft[]>([])
   const [search, setSearch] = useState('')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [draftToDelete, setDraftToDelete] = useState<BookingDraft | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -43,11 +45,20 @@ export function DraftsModal({ open, onClose, onSelectDraft }: DraftsModalProps) 
     d.name?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const handleDelete = async (e: React.MouseEvent, draftId: string) => {
-    e.stopPropagation()
-    setDeletingId(draftId)
-    await deleteBookingDraft(draftId)
-    setDeletingId(null)
+  const handleConfirmDelete = async () => {
+    if (!draftToDelete) return
+    const targetId = draftToDelete.draftId
+    // Optimistically remove immediately from list so no page refresh is needed
+    setDrafts(prev => prev.filter(d => d.draftId !== targetId))
+    setDeleting(true)
+    try {
+      await deleteBookingDraft(targetId)
+    } catch (err) {
+      console.error('Failed to delete booking draft:', err)
+    } finally {
+      setDeleting(false)
+      setDraftToDelete(null)
+    }
   }
 
   return (
@@ -226,24 +237,39 @@ export function DraftsModal({ open, onClose, onSelectDraft }: DraftsModalProps) 
                   </span>
 
                   <button
-                    disabled={deletingId === draft.draftId}
-                    onClick={e => handleDelete(e, draft.draftId)}
+                    type="button"
+                    disabled={deleting && draftToDelete?.draftId === draft.draftId}
+                    onClick={e => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      setDraftToDelete(draft)
+                    }}
                     title="Delete Draft"
+                    aria-label={`Delete draft for ${draft.clientName || 'Untitled Client'}`}
                     style={{
                       background: 'transparent',
                       border: 'none',
                       color: 'var(--color-foreground-subtle)',
                       cursor: 'pointer',
-                      padding: '6px',
-                      borderRadius: '6px',
+                      minWidth: '36px',
+                      minHeight: '36px',
+                      padding: '8px',
+                      borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      transition: 'color 0.15s ease, background 0.15s ease',
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-danger)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-subtle)')}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.color = 'var(--color-danger)'
+                      e.currentTarget.style.background = 'var(--color-danger-muted)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.color = 'var(--color-foreground-subtle)'
+                      e.currentTarget.style.background = 'transparent'
+                    }}
                   >
-                    <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+                    <i className="ti ti-trash" style={{ fontSize: '16px' }} />
                   </button>
                 </div>
               </div>
@@ -275,6 +301,17 @@ export function DraftsModal({ open, onClose, onSelectDraft }: DraftsModalProps) 
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!draftToDelete}
+        title="Delete Saved Draft?"
+        description={`Are you sure you want to delete the draft for "${draftToDelete?.clientName || 'Untitled Client'}"? This will permanently remove your progress.`}
+        confirmLabel="Delete Draft"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDraftToDelete(null)}
+        loading={deleting}
+        zIndex={70}
+      />
     </div>
   )
 }

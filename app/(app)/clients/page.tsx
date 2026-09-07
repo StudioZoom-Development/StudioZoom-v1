@@ -109,6 +109,8 @@ export default function ClientsPage() {
   const [deleting,     setDeleting]     = useState(false)
   const [page,         setPage]         = useState(1)
   const [pageSize,     setPageSize]     = useState(10)
+  const fromDateRef = useRef<HTMLInputElement>(null)
+  const toDateRef   = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -219,8 +221,8 @@ export default function ClientsPage() {
         break
       }
       case 'stage': {
-        const stageA = (a.status || '').toLowerCase()
-        const stageB = (b.status || '').toLowerCase()
+        const stageA = (a.stage || a.status || '').toLowerCase()
+        const stageB = (b.stage || b.status || '').toLowerCase()
         cmp = stageA.localeCompare(stageB)
         break
       }
@@ -309,24 +311,40 @@ export default function ClientsPage() {
 
         {/* Event Date Range Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-surface)', padding: '0 4px', borderRadius: '8px', border: '0.5px solid var(--color-border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500, paddingLeft: '4px' }}>From:</span>
+          <div
+            onClick={() => { try { fromDateRef.current?.showPicker?.() } catch { fromDateRef.current?.focus() } }}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500, paddingLeft: '4px', userSelect: 'none' }}>From:</span>
             <input
+              ref={fromDateRef}
               type="date"
               value={fromDate}
               onChange={e => { setFromDate(e.target.value); setPage(1) }}
-              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent' }}
+              onClick={e => {
+                e.stopPropagation()
+                try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch {}
+              }}
+              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent', cursor: 'pointer' }}
               title="Filter events from date"
             />
           </div>
           <div style={{ width: '1px', height: '20px', background: 'var(--color-border)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>To:</span>
+          <div
+            onClick={() => { try { toDateRef.current?.showPicker?.() } catch { toDateRef.current?.focus() } }}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500, userSelect: 'none' }}>To:</span>
             <input
+              ref={toDateRef}
               type="date"
               value={toDate}
               onChange={e => { setToDate(e.target.value); setPage(1) }}
-              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent' }}
+              onClick={e => {
+                e.stopPropagation()
+                try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch {}
+              }}
+              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent', cursor: 'pointer' }}
               title="Filter events to date"
             />
           </div>
@@ -697,7 +715,7 @@ function ClientRow({ client, rowNo, isNearBottom, onView, onEdit, onDelete }: {
 
       {/* Stage badge (exact from design) */}
       <td style={td}>
-        <Badge variant={client.status} />
+        <Badge variant={client.stage || client.status || 'booked'} />
       </td>
 
       {/* Balance due */}

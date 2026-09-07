@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/shared/LoadingSkeleton'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { useAuthStore } from '@/store/authStore'
 import { Freelancer, FreelancerPayout, Project } from '@/types'
 import {
@@ -15,6 +16,7 @@ import {
   getFreelancerPayouts,
   getFreelancerProjects,
   assignFreelancerToProject,
+  unassignFreelancerFromProject,
   recordPayout,
 } from '@/lib/firebase/queries/freelancers'
 import { getActiveProjects } from '@/lib/firebase/queries/projects'
@@ -114,6 +116,10 @@ export default function FreelancerDetailPage({ params }: PageProps) {
   const [payoutMethod, setPayoutMethod] = useState<'gpay' | 'cash' | 'bankTransfer'>('gpay')
   const [recordingPayout, setRecordingPayout] = useState(false)
   const [payoutError, setPayoutError] = useState('')
+
+  // Unassign Assignment State
+  const [assignmentToUnassign, setAssignmentToUnassign] = useState<Project | null>(null)
+  const [unassigning, setUnassigning] = useState(false)
 
   // Load Freelancer & Related Data
   useEffect(() => {
@@ -254,6 +260,26 @@ export default function FreelancerDetailPage({ params }: PageProps) {
       setAssignError(err instanceof Error ? err.message : 'Failed to assign freelancer')
     } finally {
       setAssigning(false)
+    }
+  }
+
+  // Handle Unassign Freelancer from Project
+  const handleConfirmUnassign = async () => {
+    if (!assignmentToUnassign) return
+    const targetProj = assignmentToUnassign
+    const projId = targetProj.projectId
+    setUnassigning(true)
+    // Optimistic UI update: instantly remove from list (no refresh needed)
+    setAssignedProjects(prev => prev.filter(p => p.projectId !== projId))
+    try {
+      await unassignFreelancerFromProject(projId, freelancerId)
+    } catch (err) {
+      console.error('Failed to unassign freelancer from project:', err)
+      // Rollback on failure
+      setAssignedProjects(prev => [...prev, targetProj].sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime()))
+    } finally {
+      setUnassigning(false)
+      setAssignmentToUnassign(null)
     }
   }
 
@@ -708,7 +734,11 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                 return (
                   <div
                     key={proj.projectId}
-                    onClick={() => router.push(`/clients/${proj.clientId || proj.projectId}`)}
+                    onClick={() => {
+                      if (proj.clientId) {
+                        router.push(`/clients/${proj.clientId}`)
+                      }
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -717,11 +747,11 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                       border: `0.5px solid ${isConflicted ? 'var(--color-danger)' : 'var(--color-border)'}`,
                       borderRadius: '10px',
                       padding: '12px 14px',
-                      cursor: 'pointer',
+                      cursor: proj.clientId ? 'pointer' : 'default',
                       transition: 'border-color 0.15s ease',
                     }}
                     onMouseEnter={e => {
-                      if (!isConflicted) e.currentTarget.style.borderColor = 'var(--color-border-strong)'
+                      if (!isConflicted && proj.clientId) e.currentTarget.style.borderColor = 'var(--color-border-strong)'
                     }}
                     onMouseLeave={e => {
                       if (!isConflicted) e.currentTarget.style.borderColor = 'var(--color-border)'
@@ -757,9 +787,47 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                       borderRadius: '10px',
                       background: 'var(--color-secondary-muted)',
                       color: 'var(--color-secondary)',
+                      whiteSpace: 'nowrap',
                     }}>
                       {assignedDays} {assignedDays > 1 ? 'days' : 'day'}
                     </span>
+
+                    <button
+                      type="button"
+                      disabled={unassigning && assignmentToUnassign?.projectId === proj.projectId}
+                      onClick={e => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        setAssignmentToUnassign(proj)
+                      }}
+                      title="Remove Assignment"
+                      aria-label={`Remove assignment for ${proj.eventName}`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--color-foreground-subtle)',
+                        cursor: 'pointer',
+                        minWidth: '36px',
+                        minHeight: '36px',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        transition: 'color 0.15s ease, background 0.15s ease',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.color = 'var(--color-danger)'
+                        e.currentTarget.style.background = 'var(--color-danger-muted)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.color = 'var(--color-foreground-subtle)'
+                        e.currentTarget.style.background = 'transparent'
+                      }}
+                    >
+                      <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+                    </button>
                   </div>
                 )
               })
@@ -1332,6 +1400,18 @@ export default function FreelancerDetailPage({ params }: PageProps) {
           </div>
         </div>
       )}
+
+      {/* Unassign Confirmation Modal */}
+      <ConfirmModal
+        open={!!assignmentToUnassign}
+        title="Remove Assignment?"
+        description={`Remove "${assignmentToUnassign?.eventName}" from ${freelancer?.name || 'this freelancer'}? The event and client booking itself will not be deleted.`}
+        confirmLabel="Remove Assignment"
+        onConfirm={handleConfirmUnassign}
+        onCancel={() => setAssignmentToUnassign(null)}
+        loading={unassigning}
+        zIndex={70}
+      />
     </div>
   )
 }

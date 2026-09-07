@@ -8,6 +8,7 @@ import { createBooking } from '@/lib/firebase/queries/clients'
 import { getLeadById, updateLead } from '@/lib/firebase/queries/leads'
 import { getDraftById, saveBookingDraft, deleteBookingDraft } from '@/lib/firebase/queries/drafts'
 import { format } from 'date-fns'
+import { Button } from '@/components/ui/button'
 import { BookingDraft, EventType } from '@/types'
 import { DraftsModal } from '@/components/shared/DraftsModal'
 import { bookingReducer, createInitialState, BookingWizardState } from './bookingReducer'
@@ -63,6 +64,51 @@ function NewBookingPageContent(): React.JSX.Element {
   const [draftsModalOpen, setDraftsModalOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Back confirmation modal state
+  const [backConfirmOpen, setBackConfirmOpen] = useState(false)
+  const [savingDraftAndExiting, setSavingDraftAndExiting] = useState(false)
+
+  const isFormDirty = Boolean(
+    state.bookingType ||
+    state.clientName.trim() ||
+    state.contact.trim() ||
+    state.email.trim() ||
+    state.eventName.trim() ||
+    state.location.trim() ||
+    state.notes.trim() ||
+    (state.customEventType && state.customEventType.trim()) ||
+    state.totalAmount > 0 ||
+    state.advanceAmount > 0 ||
+    state.eventDates.length > 0 ||
+    currentStep > 0
+  )
+
+  const handleHeaderBack = useCallback(() => {
+    if (!isFormDirty) {
+      router.push('/clients')
+      return
+    }
+    setBackConfirmOpen(true)
+  }, [isFormDirty, router])
+
+  const handleDropBooking = useCallback(() => {
+    setBackConfirmOpen(false)
+    router.push('/clients')
+  }, [router])
+
+  const handleSaveDraftAndExit = useCallback(async () => {
+    setSavingDraftAndExiting(true)
+    try {
+      await saveBookingDraft(state, currentStep, activeDraftId || undefined, appUser?.uid)
+      setBackConfirmOpen(false)
+      router.push('/clients')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save draft'
+      setError(msg)
+      setSavingDraftAndExiting(false)
+    }
+  }, [state, currentStep, activeDraftId, appUser, router])
 
   const showToast = useCallback((msg: string, durationMs: number = 4000) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -374,7 +420,7 @@ function NewBookingPageContent(): React.JSX.Element {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span
-            onClick={() => router.push('/clients')}
+            onClick={handleHeaderBack}
             style={{
               cursor: 'pointer',
               color: 'var(--color-foreground-muted)',
@@ -594,6 +640,98 @@ function NewBookingPageContent(): React.JSX.Element {
         onClose={() => setDraftsModalOpen(false)}
         onSelectDraft={handleSelectDraft}
       />
+
+      {/* UNSAVED CHANGES / BACK CONFIRMATION MODAL */}
+      {backConfirmOpen && (
+        <div
+          onClick={() => !savingDraftAndExiting && setBackConfirmOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            background: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'var(--font-inter)',
+            padding: '16px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '440px',
+              background: 'var(--color-surface-overlay)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'var(--color-secondary-muted)',
+                color: 'var(--color-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: '20px' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  Unsaved booking changes
+                </div>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', lineHeight: 1.4 }}>
+                  You have unsaved changes in this booking. What would you like to do?
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              marginTop: '8px',
+            }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="outline"
+                  className="h-9"
+                  disabled={savingDraftAndExiting}
+                  onClick={() => setBackConfirmOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-9"
+                  style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                  disabled={savingDraftAndExiting}
+                  onClick={handleDropBooking}
+                >
+                  Drop Booking
+                </Button>
+                <Button
+                  className="h-9 font-medium"
+                  disabled={savingDraftAndExiting}
+                  onClick={handleSaveDraftAndExit}
+                >
+                  {savingDraftAndExiting ? 'Saving…' : 'Save as Draft'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
