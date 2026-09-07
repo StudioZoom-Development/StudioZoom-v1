@@ -68,6 +68,7 @@ export interface Client {
   staffUids?:          string[]
   assignedStaff?:      string[]
   teamInitials?:       string[]
+  freelancerIds?:      string[]
   bookingType?:        BookingType
   eventDates?:         EventDateEntry[]
   recurringSchedule?:  RecurringSchedule
@@ -121,10 +122,13 @@ export interface Project {
   freelancerAssignments?: Record<string, FreelancerProjectAssignment>
   freelancerRates?:       Record<string, number>
   milestones:             Partial<Record<MilestoneKey, Date>>
+  photoMilestones?:       Record<string, boolean>
+  videoMilestones?:       Record<string, boolean>
   override?:              { by: string; reason: string; at: Date }
   bookingType?:           BookingType
   bookingGroupId?:        string             // links sibling projects in multi-date bookings
   dateLabel?:             string             // "Engagement", "Reception", etc.
+  eventDates?:            EventDateEntry[]
   isDeleted?:             boolean
   createdBy:              string
   createdAt:              Date

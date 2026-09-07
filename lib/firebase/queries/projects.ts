@@ -1,6 +1,6 @@
 import {
   collection, query, where,
-  onSnapshot, getDoc, getDocs, doc, writeBatch,
+  onSnapshot, getDoc, getDocs, doc, writeBatch, updateDoc, arrayUnion, arrayRemove,
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
@@ -104,6 +104,121 @@ export async function advanceProjectStage(
   })
   await batch.commit()
   return nextStage
+}
+
+/** Update project stage with optional override reason and sync client doc */
+export async function updateProjectStage(
+  projectId: string,
+  newStage: ProjectStage,
+  clientId?: string,
+  override?: { by: string; reason: string }
+): Promise<void> {
+  const batch = writeBatch(db)
+  const projectRef = doc(db, 'projects', projectId)
+
+  const updateData: Record<string, unknown> = {
+    stage: newStage,
+    updatedAt: serverTimestamp(),
+  }
+
+  if (newStage === 'delivered') {
+    updateData.status = 'completed'
+  }
+
+  if (override && override.reason.trim()) {
+    updateData.override = {
+      by: override.by,
+      reason: override.reason.trim(),
+      at: new Date(),
+    }
+  }
+
+  batch.update(projectRef, updateData)
+
+  if (clientId) {
+    const clientRef = doc(db, 'clients', clientId)
+    const clientUpdate: Record<string, unknown> = {
+      stage: newStage,
+      updatedAt: serverTimestamp(),
+    }
+    if (newStage === 'delivered') {
+      clientUpdate.status = 'booked'
+    }
+    batch.update(clientRef, clientUpdate)
+  }
+
+  await batch.commit()
+}
+
+/** Toggle or update stage exit gates for a project */
+export async function updateProjectStageGates(
+  projectId: string,
+  stage: string,
+  gates: Record<string, boolean>
+): Promise<void> {
+  const projectRef = doc(db, 'projects', projectId)
+  await updateDoc(projectRef, {
+    [`stageGates.${stage}`]: gates,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+/** Toggle or update photo or video track milestone */
+export async function updateTrackMilestone(
+  projectId: string,
+  track: 'photo' | 'video',
+  milestone: string,
+  done: boolean
+): Promise<void> {
+  const projectRef = doc(db, 'projects', projectId)
+  await updateDoc(projectRef, {
+    [`${track}Milestones.${milestone}`]: done,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+/** Assign a staff member to a project */
+export async function assignStaffToProject(
+  projectId: string,
+  staffUid: string,
+  clientId?: string
+): Promise<void> {
+  const batch = writeBatch(db)
+  const projectRef = doc(db, 'projects', projectId)
+  batch.update(projectRef, {
+    staffUids: arrayUnion(staffUid),
+    updatedAt: serverTimestamp(),
+  })
+  if (clientId) {
+    const clientRef = doc(db, 'clients', clientId)
+    batch.update(clientRef, {
+      staffUids: arrayUnion(staffUid),
+      updatedAt: serverTimestamp(),
+    })
+  }
+  await batch.commit()
+}
+
+/** Remove a staff member from a project */
+export async function removeStaffFromProject(
+  projectId: string,
+  staffUid: string,
+  clientId?: string
+): Promise<void> {
+  const batch = writeBatch(db)
+  const projectRef = doc(db, 'projects', projectId)
+  batch.update(projectRef, {
+    staffUids: arrayRemove(staffUid),
+    updatedAt: serverTimestamp(),
+  })
+  if (clientId) {
+    const clientRef = doc(db, 'clients', clientId)
+    batch.update(clientRef, {
+      staffUids: arrayRemove(staffUid),
+      updatedAt: serverTimestamp(),
+    })
+  }
+  await batch.commit()
 }
 
 /** Real-time subscription to all active projects */
