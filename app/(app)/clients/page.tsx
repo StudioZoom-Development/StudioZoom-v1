@@ -1,16 +1,19 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'    // MyDesignSystem.ShadcnButton
 import { useAuthStore } from '@/store/authStore'
 import { subscribeToClients, softDeleteClient } from '@/lib/firebase/queries/clients'
+import { subscribeToProjects } from '@/lib/firebase/queries/projects'
+import { subscribeToFreelancers } from '@/lib/firebase/queries/freelancers'
+import { subscribeToStaff, StaffMember } from '@/lib/firebase/queries/staff'
 import { Badge } from '@/components/shared/Badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EditClientModal } from '@/components/shared/EditClientModal'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
-import { Client } from '@/types'
+import { Client, Project, Freelancer } from '@/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -95,6 +98,9 @@ export default function ClientsPage() {
   const appUser = useAuthStore(s => s.appUser)
 
   const [clients,      setClients]      = useState<Client[]>([])
+  const [projects,     setProjects]     = useState<Project[]>([])
+  const [freelancers,  setFreelancers]  = useState<Freelancer[]>([])
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [loading,      setLoading]      = useState(true)
   const [search,       setSearch]       = useState('')
   const [filterType,   setFilterType]   = useState('')
@@ -111,6 +117,17 @@ export default function ClientsPage() {
   const [pageSize,     setPageSize]     = useState(10)
   const fromDateRef = useRef<HTMLInputElement>(null)
   const toDateRef   = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const unsubProj = subscribeToProjects(data => setProjects(data || []))
+    const unsubFl   = subscribeToFreelancers(data => setFreelancers(data || []))
+    const unsubSt   = subscribeToStaff(data => setStaffMembers(data || []))
+    return () => {
+      unsubProj()
+      unsubFl()
+      unsubSt()
+    }
+  }, [])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -472,6 +489,9 @@ export default function ClientsPage() {
                   client={client}
                   rowNo={(page - 1) * pageSize + idx + 1}
                   isNearBottom={idx >= Math.max(0, paginated.length - 2)}
+                  projects={projects}
+                  freelancers={freelancers}
+                  staffMembers={staffMembers}
                   onView={() => router.push(`/clients/${client.clientId}`)}
                   onEdit={() => setEditTarget(client)}
                   onDelete={() => setDeleteTarget(client)}
@@ -632,11 +652,126 @@ function getInitials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+// ── Avatar item with instant hover tooltip ─────────────────────────
+function CrewAvatarItem({
+  member,
+  isFirst,
+  rowNo,
+  zIndex,
+}: {
+  member: {
+    id: string
+    name: string
+    initials: string
+    isFreelancer: boolean
+    role: string
+  }
+  isFirst: boolean
+  rowNo: number
+  zIndex: number
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        marginLeft: isFirst ? '0' : '-8px',
+        flexShrink: 0,
+        zIndex: hovered ? 100 : zIndex,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
+        style={{
+          width: '26px',
+          height: '26px',
+          borderRadius: '50%',
+          background: 'var(--color-surface-overlay)',
+          border: '2px solid var(--color-surface)',
+          color: 'var(--color-foreground)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '10px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          transition: 'transform 0.15s ease',
+          transform: hovered ? 'scale(1.15)' : 'scale(1)',
+        }}
+      >
+        {member.initials}
+      </div>
+
+      {hovered && (
+        <div
+          style={{
+            position: 'absolute',
+            ...(rowNo <= 2
+              ? { top: 'calc(100% + 6px)' }
+              : { bottom: 'calc(100% + 6px)' }),
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'var(--color-surface-raised)',
+            border: '0.5px solid var(--color-border-strong)',
+            borderRadius: '6px',
+            padding: '5px 9px',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '2px',
+            zIndex: 9999,
+          }}
+        >
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            {member.name}
+          </span>
+          <span style={{ fontSize: '10px', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
+            {member.role} {member.isFreelancer ? '· Freelancer' : '· Staff'}
+          </span>
+          {/* Arrow */}
+          <div
+            style={{
+              position: 'absolute',
+              ...(rowNo <= 2
+                ? { bottom: '100%', borderBottom: '4px solid var(--color-border-strong)' }
+                : { top: '100%', borderTop: '4px solid var(--color-border-strong)' }),
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 0,
+              height: 0,
+              borderLeft: '4px solid transparent',
+              borderRight: '4px solid transparent',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Client row (exact structure from design file) ─────────────────────────
-function ClientRow({ client, rowNo, isNearBottom, onView, onEdit, onDelete }: {
+function ClientRow({
+  client,
+  rowNo,
+  isNearBottom,
+  projects,
+  freelancers,
+  staffMembers,
+  onView,
+  onEdit,
+  onDelete,
+}: {
   client:       Client
   rowNo:        number
   isNearBottom: boolean
+  projects?:    Project[]
+  freelancers?: Freelancer[]
+  staffMembers?: StaffMember[]
   onView:       () => void
   onEdit:       () => void
   onDelete:     () => void
@@ -673,8 +808,58 @@ function ClientRow({ client, rowNo, isNearBottom, onView, onEdit, onDelete }: {
 
   const balLabel = isPaid ? '—' : `₹${client.balanceDue.toLocaleString('en-IN')}`
 
-  // Staff avatars
-  const staffList: string[] = (client.teamInitials || client.assignedStaff || client.staffUids || [])
+  // Crew avatars: staff + assigned freelancers
+  const assignedCrew = useMemo(() => {
+    const list: Array<{
+      id: string
+      name: string
+      initials: string
+      isFreelancer: boolean
+      role: string
+    }> = []
+    const seen = new Set<string>()
+
+    // Find linked project for this client if available
+    const proj = projects?.find(p => (p.clientId && p.clientId === client.clientId) || (client.projectId && p.projectId === client.projectId))
+
+    // 1. Staff members
+    const staffIds: string[] = proj?.staffUids || client.staffUids || client.assignedStaff || client.teamInitials || []
+    staffIds.forEach(item => {
+      if (!item || seen.has(item)) return
+      seen.add(item)
+      const staffMember = staffMembers?.find(s => s.uid === item)
+      const name = staffMember?.name || item
+      const initials = item.length <= 2 ? item.toUpperCase() : getInitials(name)
+      const role = staffMember?.role ? staffMember.role.charAt(0).toUpperCase() + staffMember.role.slice(1) : 'Staff'
+      list.push({
+        id: item,
+        name,
+        initials,
+        isFreelancer: false,
+        role,
+      })
+    })
+
+    // 2. Freelancers
+    const flIds: string[] = proj?.freelancerIds || client.freelancerIds || []
+    flIds.forEach(flId => {
+      if (!flId || seen.has(flId)) return
+      seen.add(flId)
+      const fl = freelancers?.find(f => f.freelancerId === flId)
+      const name = fl?.name || flId
+      const initials = getInitials(name)
+      const role = proj?.freelancerAssignments?.[flId]?.role || fl?.skill || 'Freelancer'
+      list.push({
+        id: `fl-${flId}`,
+        name,
+        initials,
+        isFreelancer: true,
+        role,
+      })
+    })
+
+    return list
+  }, [client, projects, staffMembers, freelancers])
 
   // TD shared style
   const td: React.CSSProperties = {
@@ -723,30 +908,37 @@ function ClientRow({ client, rowNo, isNearBottom, onView, onEdit, onDelete }: {
         {balLabel}
       </td>
 
-      {/* Assigned — avatar stack (empty if no staff assigned) */}
+      {/* Assigned — avatar stack */}
       <td style={td}>
-        {staffList.length > 0 && (
+        {assignedCrew.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {staffList.slice(0, 3).map((staff, i) => {
-              const initials = staff.length <= 2 ? staff.toUpperCase() : getInitials(staff)
-              return (
-                <div
-                  key={i}
-                  style={{
-                    width: '26px', height: '26px', borderRadius: '50%',
-                    background: 'var(--color-surface-overlay)',
-                    border: '2px solid var(--color-surface)',
-                    color: 'var(--color-foreground-muted)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '10px', fontWeight: 700,
-                    marginLeft: i === 0 ? '0' : '-8px',
-                    flexShrink: 0,
-                  }}
-                >
-                  {initials}
-                </div>
-              )
-            })}
+            {assignedCrew.slice(0, 3).map((member, i) => (
+              <CrewAvatarItem
+                key={member.id}
+                member={member}
+                isFirst={i === 0}
+                rowNo={rowNo}
+                zIndex={4 - i}
+              />
+            ))}
+            {assignedCrew.length > 3 && (
+              <div
+                title={`${assignedCrew.length - 3} more`}
+                style={{
+                  width: '26px', height: '26px', borderRadius: '50%',
+                  background: 'var(--color-surface-raised)',
+                  border: '2px solid var(--color-surface)',
+                  color: 'var(--color-foreground-subtle)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '10px', fontWeight: 700,
+                  marginLeft: '-8px',
+                  flexShrink: 0,
+                  cursor: 'default',
+                }}
+              >
+                +{assignedCrew.length - 3}
+              </div>
+            )}
           </div>
         )}
       </td>

@@ -31,6 +31,7 @@ export function subscribeToClients(
           customEventType: data.customEventType || '',
           startTime: data.startTime || '',
           endTime:   data.endTime || '',
+          freelancerIds: Array.isArray(data.freelancerIds) ? data.freelancerIds : [],
           eventDate: data.eventDate instanceof Timestamp
             ? data.eventDate.toDate()
             : data.eventDate ? new Date(data.eventDate) : new Date(),
@@ -101,6 +102,7 @@ export async function getClientById(clientId: string): Promise<Client | null> {
     customEventType: data.customEventType || '',
     startTime: data.startTime || '',
     endTime:   data.endTime || '',
+    freelancerIds: Array.isArray(data.freelancerIds) ? data.freelancerIds : [],
     eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
     eventDates: Array.isArray(data.eventDates)

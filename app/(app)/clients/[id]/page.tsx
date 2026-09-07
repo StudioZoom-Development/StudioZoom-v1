@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { useAuthStore } from '@/store/authStore'
 import {
   getClientById,
   subscribeToPayments,
-  recordPayment,
   editPayment,
   deletePayment,
   softDeleteClient,
@@ -22,11 +21,14 @@ import {
   subscribeToProjectStaffAssignments,
   advanceProjectStage
 } from '@/lib/firebase/queries/projects'
+import { subscribeToStaff, StaffMember } from '@/lib/firebase/queries/staff'
+import { subscribeToFreelancers } from '@/lib/firebase/queries/freelancers'
 import { checkStageGate, GateResult } from '@/lib/utils/gates'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EditClientModal } from '@/components/shared/EditClientModal'
+import { RecordPaymentModal } from '@/components/shared/RecordPaymentModal'
 import { Skeleton } from '@/components/shared/LoadingSkeleton'
-import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry } from '@/types'
+import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry, Freelancer } from '@/types'
 
 interface PaymentItem {
   paymentId:       string
@@ -198,19 +200,14 @@ export default function ClientDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [payments, setPayments] = useState<PaymentItem[]>([])
   const [assignments, setAssignments] = useState<StaffAssignment[]>([])
+  const [staffList, setStaffList] = useState<StaffMember[]>([])
+  const [freelancerList, setFreelancerList] = useState<Freelancer[]>([])
   const [gate, setGate] = useState<GateResult | null>(null)
   const [tab, setTab] = useState<'Overview' | 'Timeline' | 'Documents'>('Overview')
   const [loading, setLoading] = useState(true)
 
   // Record payment modal state
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false)
-  const [instalment, setInstalment] = useState<'1st' | '2nd' | '3rd'>('1st')
-  const [paymentAmount, setPaymentAmount] = useState('')
-  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gpay' | 'bankTransfer' | 'cheque'>('gpay')
-  const [transactionId, setTransactionId] = useState('')
-  const [submittingPayment, setSubmittingPayment] = useState(false)
-  const [paymentError, setPaymentError] = useState('')
   const [advancingStage, setAdvancingStage] = useState(false)
 
   // Edit payment modal state
@@ -335,6 +332,75 @@ export default function ClientDetailPage() {
     }
   }, [project?.projectId])
 
+  // Real-time subscription to staff and freelancers directory
+  useEffect(() => {
+    const unsubStaff = subscribeToStaff(list => setStaffList(list))
+    const unsubFreelancers = subscribeToFreelancers(list => setFreelancerList(list))
+    return () => {
+      unsubStaff()
+      unsubFreelancers()
+    }
+  }, [])
+
+  const allCrewChips = useMemo(() => {
+    const chips: Array<{
+      uid: string
+      name: string
+      role: string
+      initials: string
+      isFreelancer?: boolean
+    }> = []
+    const seenUids = new Set<string>()
+
+    // 1. Staff from project.staffUids or client.staffUids
+    const uids = project?.staffUids || client?.staffUids || []
+    uids.forEach(uid => {
+      seenUids.add(uid)
+      const staffMember = staffList.find(s => s.uid === uid)
+      const name = staffMember?.name || uid
+      const role = staffMember?.role || 'Staff'
+      chips.push({
+        uid,
+        name,
+        role: role.charAt(0).toUpperCase() + role.slice(1),
+        initials: getInitials(name),
+        isFreelancer: false,
+      })
+    })
+
+    // Fallback to staff assignments
+    assignments.forEach(a => {
+      if (!seenUids.has(a.staffUid)) {
+        seenUids.add(a.staffUid)
+        const name = a.staffName || a.staffUid
+        chips.push({
+          uid: a.assignmentId,
+          name,
+          role: a.role ? a.role.charAt(0).toUpperCase() + a.role.slice(1) : 'Staff',
+          initials: getInitials(name),
+          isFreelancer: false,
+        })
+      }
+    })
+
+    // 2. Freelancers from project.freelancerIds
+    const flIds = project?.freelancerIds || []
+    flIds.forEach(flId => {
+      const fl = freelancerList.find(f => f.freelancerId === flId)
+      const assignedRole = project?.freelancerAssignments?.[flId]?.role || (fl ? fl.skill : 'Freelancer')
+      const name = fl?.name || flId
+      chips.push({
+        uid: `fl-${flId}`,
+        name,
+        role: assignedRole.charAt(0).toUpperCase() + assignedRole.slice(1),
+        initials: getInitials(name),
+        isFreelancer: true,
+      })
+    })
+
+    return chips
+  }, [project?.staffUids, client?.staffUids, assignments, staffList, project?.freelancerIds, project?.freelancerAssignments, freelancerList])
+
   if (loading) {
     return <ClientDetailSkeleton />
   }
@@ -364,61 +430,8 @@ export default function ClientDetailPage() {
   const balanceDue = Math.max(0, totalAmount - advancePaid)
   const percentCollected = totalAmount > 0 ? Math.min(100, Math.round((advancePaid / totalAmount) * 100)) : 0
 
-  const receivedInstalments = new Set(payments.map(p => p.instalment))
-  const allInstalmentsReceived = (['1st', '2nd', '3rd'] as const).every(i => receivedInstalments.has(i))
-
   const handleOpenRecordPayment = () => {
-    const nextInstalment = (['1st', '2nd', '3rd'] as const).find(i => !receivedInstalments.has(i)) || '3rd'
-    setInstalment(nextInstalment)
-    setPaymentAmount('')
-    setTransactionId('')
-    setPaymentDate(format(new Date(), 'yyyy-MM-dd'))
-    setPaymentMethod('gpay')
-    setPaymentError('')
     setRecordPaymentOpen(true)
-  }
-
-  const handleRecordPaymentSubmit = async () => {
-    const amt = parseFloat(paymentAmount)
-    if (isNaN(amt) || amt <= 0) {
-      setPaymentError('Please enter a valid payment amount')
-      return
-    }
-    if (paymentMethod !== 'cash' && !transactionId.trim()) {
-      setPaymentError('Transaction ID is required for non-cash payments')
-      return
-    }
-
-    setSubmittingPayment(true)
-    setPaymentError('')
-
-    try {
-      await recordPayment(
-        client.clientId,
-        {
-          instalment,
-          amount: amt,
-          date: new Date(paymentDate),
-          method: paymentMethod,
-          transactionId: paymentMethod !== 'cash' ? transactionId.trim() : '',
-        },
-        appUser?.uid || 'system',
-        appUser?.name || 'Staff'
-      )
-
-      // Refresh client data
-      const updatedClient = await getClientById(client.clientId)
-      if (updatedClient) setClient(updatedClient)
-
-      setRecordPaymentOpen(false)
-      setPaymentAmount('')
-      setTransactionId('')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record payment'
-      setPaymentError(msg)
-    } finally {
-      setSubmittingPayment(false)
-    }
   }
 
   const handleStartEditPayment = (p: PaymentItem) => {
@@ -525,16 +538,6 @@ export default function ClientDetailPage() {
     }
   }
 
-  const teamChips = assignments.map(a => {
-    const displayName = a.staffName || a.staffUid
-    return {
-      uid: a.assignmentId,
-      name: displayName,
-      role: a.role ? a.role.charAt(0).toUpperCase() + a.role.slice(1) : 'Crew',
-      initials: getInitials(displayName)
-    }
-  })
-
   const pendingGateCount = gate?.reasons.length || 0
   const eventTypeDisplay = client.eventType === 'other' && client.customEventType
     ? `Other (${client.customEventType})`
@@ -605,7 +608,7 @@ export default function ClientDetailPage() {
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
               {eventTypeDisplay}
               {client.bookingType === 'multiDate' && client.eventDates && client.eventDates.length > 0
                 ? ` · Multi-Date (${client.eventDates.length} Events) · ${format(new Date(client.eventDates[0].date), 'd MMM yyyy')} – ${format(new Date(client.eventDates[client.eventDates.length - 1].date), 'd MMM yyyy')}`
@@ -673,7 +676,7 @@ export default function ClientDetailPage() {
                   padding: '12px 16px',
                   cursor: 'pointer',
                   fontSize: 'var(--text-sm)',
-                  fontWeight: tab === t ? 600 : 500,
+                  fontWeight: tab === t ? 700 : 600,
                   color: tab === t ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
                   borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
                   transition: 'all 0.2s ease'
@@ -810,26 +813,26 @@ export default function ClientDetailPage() {
                 ) : (
                   /* SINGLE EVENT 4-FIELD GRID */
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Event name</span>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{client.eventName}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Event name</span>
+                      <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>{client.eventName}</span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Type</span>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Type</span>
+                      <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
                         {eventTypeDisplay}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Date &amp; Timing</span>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Date &amp; Timing</span>
+                      <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
                         {format(client.eventDate, 'd MMM yyyy')}
                         {client.startTime ? ` (${client.startTime} – ${client.endTime || ''})` : ''}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Location</span>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{client.location || '—'}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Location</span>
+                      <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>{client.location || '—'}</span>
                     </div>
                   </div>
                 )}
@@ -853,17 +856,17 @@ export default function ClientDetailPage() {
                   Client
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Client</span>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{client.name}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Client</span>
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>{client.name}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Contact</span>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{client.contact}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Contact</span>
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>{client.contact}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', gridColumn: 'span 2' }}>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Email</span>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{client.email || '—'}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Email</span>
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>{client.email || '—'}</span>
                   </div>
                 </div>
               </div>
@@ -886,12 +889,12 @@ export default function ClientDetailPage() {
                   Team
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {teamChips.length === 0 ? (
+                  {allCrewChips.length === 0 ? (
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontStyle: 'italic' }}>
                       No team members assigned yet.
                     </div>
                   ) : (
-                    teamChips.map(tm => (
+                    allCrewChips.map(tm => (
                       <div
                         key={tm.uid}
                         style={{
@@ -908,8 +911,8 @@ export default function ClientDetailPage() {
                           width: '24px',
                           height: '24px',
                           borderRadius: '50%',
-                          background: 'var(--color-primary-muted)',
-                          color: 'var(--color-primary)',
+                          background: tm.isFreelancer ? 'var(--color-accent-muted)' : 'var(--color-primary-muted)',
+                          color: tm.isFreelancer ? 'var(--color-accent)' : 'var(--color-primary)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -919,7 +922,21 @@ export default function ClientDetailPage() {
                           {tm.initials}
                         </div>
                         <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600 }}>{tm.name}</span>
-                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>{tm.role}</span>
+                        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>{tm.role}</span>
+                        {tm.isFreelancer && (
+                          <span style={{
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            background: 'var(--color-accent-muted)',
+                            color: 'var(--color-accent)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            FL
+                          </span>
+                        )}
                       </div>
                     ))
                   )}
@@ -950,7 +967,8 @@ export default function ClientDetailPage() {
                     borderRadius: '8px',
                     padding: '12px',
                     fontSize: 'var(--text-sm)',
-                    color: 'var(--color-foreground-muted)',
+                    fontWeight: 500,
+                    color: 'var(--color-foreground)',
                     lineHeight: 1.5,
                     whiteSpace: 'pre-wrap'
                   }}>
@@ -972,6 +990,27 @@ export default function ClientDetailPage() {
           {/* TAB CONTENT: TIMELINE */}
           {tab === 'Timeline' && (
             <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* TIMELINE ACTION BAR */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    Event Lifecycle Timeline
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                    Track stage progress, deliverables, and requirements
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="h-8 gap-2 text-xs font-medium"
+                  onClick={() => router.push(`/events?project=${project?.projectId || client.clientId}&stage=${currentStage}`)}
+                >
+                  <i className="ti ti-layout-kanban" style={{ fontSize: '15px', color: 'var(--color-primary)' }} />
+                  <span>Go to Event Board</span>
+                  <i className="ti ti-arrow-right" style={{ fontSize: '12px' }} />
+                </Button>
+              </div>
+
               {/* STAGE DOT ROW */}
               <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                 {STAGE_ORDER.map((stg, i) => {
@@ -1060,22 +1099,49 @@ export default function ClientDetailPage() {
                 padding: '12px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px'
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
               }}>
-                <span style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: 'var(--color-primary)',
-                  flexShrink: 0,
-                  animation: 'szPulse 1.6s ease-in-out infinite'
-                }} />
-                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground)' }}>
-                  <strong>{STAGE_LABELS[currentStage]}</strong> stage in progress
-                  {gate && gate.reasons.length > 0
-                    ? ` — ${gate.reasons.join(', ')}`
-                    : ' — Ready to advance to next stage'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: 'var(--color-primary)',
+                    flexShrink: 0,
+                    animation: 'szPulse 1.6s ease-in-out infinite'
+                  }} />
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground)' }}>
+                    <strong>{STAGE_LABELS[currentStage]}</strong> stage in progress
+                    {gate && gate.reasons.length > 0
+                      ? ` — ${gate.reasons.join(', ')}`
+                      : ' — Ready to advance to next stage'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/events?project=${project?.projectId || client.clientId}&stage=${currentStage}`)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    color: 'var(--color-primary)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontFamily: 'var(--font-inter)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <i className="ti ti-layout-kanban" style={{ fontSize: '14px' }} />
+                  <span>Open {STAGE_LABELS[currentStage]} in Event Board</span>
+                  <i className="ti ti-arrow-right" style={{ fontSize: '12px' }} />
+                </button>
               </div>
             </div>
           )}
@@ -1187,13 +1253,13 @@ export default function ClientDetailPage() {
               paddingTop: '14px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--color-foreground-muted)' }}>Advance paid</span>
+                <span style={{ color: 'var(--color-foreground)', fontWeight: 500 }}>Advance paid</span>
                 <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>
                   ₹{advancePaid.toLocaleString('en-IN')}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--color-foreground-muted)' }}>Balance due</span>
+                <span style={{ color: 'var(--color-foreground)', fontWeight: 500 }}>Balance due</span>
                 <span style={{ fontWeight: 600, color: balanceDue > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
                   ₹{balanceDue.toLocaleString('en-IN')}
                 </span>
@@ -1216,7 +1282,7 @@ export default function ClientDetailPage() {
                   transition: 'width 0.3s ease'
                 }} />
               </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                 {percentCollected}% collected {balanceDue > 0 ? `· Balance ₹${balanceDue.toLocaleString('en-IN')}` : '· Fully paid'}
               </div>
             </div>
@@ -1332,258 +1398,151 @@ export default function ClientDetailPage() {
             flexDirection: 'column',
             gap: '14px'
           }}>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Advance to next stage</div>
-
-            {/* GATE ITEMS */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {gate?.canAdvance ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-sm)', color: 'var(--color-success)' }}>
-                  <i className="ti ti-circle-check" style={{ fontSize: '16px', color: 'var(--color-success)' }} />
-                  All requirements met for {STAGE_LABELS[currentStage]}
-                </div>
-              ) : (
-                gate?.reasons.map((reason, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
-                    <i className="ti ti-circle" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)' }} />
-                    {reason}
-                  </div>
-                ))
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                Stage: {STAGE_LABELS[currentStage]}
+              </div>
+              <Badge variant={currentStage} label={STAGE_LABELS[currentStage]} />
             </div>
 
-            {/* ADVANCE BUTTON */}
+            {/* DIRECT LINK TO OPEN EVENT BOARD STAGE PANEL */}
             <button
-              disabled={!gate?.canAdvance || advancingStage}
-              onClick={handleAdvanceStage}
+              type="button"
+              onClick={() => router.push(`/events?project=${project?.projectId || client.clientId}&stage=${currentStage}`)}
               style={{
-                cursor: gate?.canAdvance && !advancingStage ? 'pointer' : 'default',
-                fontFamily: 'var(--font-inter)',
-                width: '100%',
-                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 12px',
                 borderRadius: '8px',
-                border: 'none',
-                fontSize: 'var(--text-sm)',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                color: 'var(--color-foreground)',
+                fontSize: 'var(--text-xs)',
                 fontWeight: 600,
-                background: gate?.canAdvance ? 'var(--color-primary)' : 'var(--color-surface-raised)',
-                color: gate?.canAdvance ? '#ffffff' : 'var(--color-foreground-subtle)',
-                transition: 'background 0.15s, opacity 0.15s',
-                opacity: advancingStage ? 0.7 : 1,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
               }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-overlay)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--color-surface-raised)'}
             >
-              {advancingStage
-                ? 'Advancing…'
-                : gate?.canAdvance
-                ? `Advance to ${NEXT_STAGE_LABEL[currentStage]}`
-                : `Advance to ${NEXT_STAGE_LABEL[currentStage]} · ${pendingGateCount} gate${pendingGateCount > 1 ? 's' : ''} pending`}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="ti ti-layout-kanban" style={{ fontSize: '15px', color: 'var(--color-primary)' }} />
+                <span>Open {STAGE_LABELS[currentStage]} in Event Board</span>
+              </div>
+              <i className="ti ti-arrow-right" style={{ fontSize: '12px', color: 'var(--color-foreground-muted)' }} />
             </button>
+
+            {/* STAGE STATUS & GATES */}
+            {currentStage === 'delivered' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {balanceDue > 0 ? (
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: 'var(--color-secondary-muted)',
+                    border: '0.5px solid var(--color-secondary)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-secondary)' }}>
+                      <i className="ti ti-alert-circle" style={{ fontSize: '15px' }} />
+                      <span>Remaining Balance Pending</span>
+                    </div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground)' }}>
+                      ₹{balanceDue.toLocaleString('en-IN')} remaining of ₹{totalAmount.toLocaleString('en-IN')}. All payments must be recorded to finalize event.
+                    </div>
+                    <Button
+                      className="h-8 text-xs font-medium w-full mt-1"
+                      onClick={() => setRecordPaymentOpen(true)}
+                    >
+                      <i className="ti ti-cash" style={{ marginRight: '6px' }} />
+                      Record Final Payment
+                    </Button>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: 'var(--color-success-muted)',
+                    border: '0.5px solid var(--color-success)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-success)',
+                    fontWeight: 600
+                  }}>
+                    <i className="ti ti-circle-check" style={{ fontSize: '16px' }} />
+                    <span>
+                      {project?.status === 'completed'
+                        ? 'Event Completed · Handover Finished'
+                        : 'All payments cleared · Handover ready'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* GATE ITEMS */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {gate?.canAdvance ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-sm)', color: 'var(--color-success)' }}>
+                      <i className="ti ti-circle-check" style={{ fontSize: '16px', color: 'var(--color-success)' }} />
+                      All requirements met for {STAGE_LABELS[currentStage]}
+                    </div>
+                  ) : (
+                    gate?.reasons.map((reason, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+                        <i className="ti ti-circle" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)' }} />
+                        {reason}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* ADVANCE BUTTON */}
+                <button
+                  disabled={!gate?.canAdvance || advancingStage}
+                  onClick={handleAdvanceStage}
+                  style={{
+                    cursor: gate?.canAdvance && !advancingStage ? 'pointer' : 'default',
+                    fontFamily: 'var(--font-inter)',
+                    width: '100%',
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 600,
+                    background: gate?.canAdvance ? 'var(--color-primary)' : 'var(--color-surface-raised)',
+                    color: gate?.canAdvance ? '#ffffff' : 'var(--color-foreground-subtle)',
+                    transition: 'background 0.15s, opacity 0.15s',
+                    opacity: advancingStage ? 0.7 : 1,
+                  }}
+                >
+                  {advancingStage
+                    ? 'Advancing…'
+                    : gate?.canAdvance
+                    ? `Advance to ${NEXT_STAGE_LABEL[currentStage]}`
+                    : `Advance to ${NEXT_STAGE_LABEL[currentStage]} · ${pendingGateCount} gate${pendingGateCount > 1 ? 's' : ''} pending`}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* RECORD PAYMENT MODAL */}
-      {recordPaymentOpen && (
-        <div
-          onClick={() => setRecordPaymentOpen(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            background: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: 'var(--font-inter)',
-            padding: '16px',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: '420px',
-              background: 'var(--color-surface-overlay)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '12px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                Record payment
-              </div>
-              <button
-                type="button"
-                onClick={() => setRecordPaymentOpen(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--color-foreground-muted)',
-                  cursor: 'pointer',
-                  fontSize: '18px',
-                }}
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-
-            {paymentError && (
-              <div style={{
-                fontSize: 'var(--text-xs)',
-                color: 'var(--color-danger)',
-                background: 'var(--color-danger-muted)',
-                borderRadius: '8px',
-                padding: '8px 12px'
-              }}>
-                {paymentError}
-              </div>
-            )}
-
-            {allInstalmentsReceived && (
-              <div style={{
-                fontSize: 'var(--text-xs)',
-                color: 'var(--color-secondary)',
-                background: 'var(--color-secondary-muted)',
-                borderRadius: '8px',
-                padding: '8px 12px'
-              }}>
-                All instalments (1st, 2nd, 3rd) have already been marked as received.
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                  Instalment
-                </label>
-                <select
-                  value={instalment}
-                  onChange={e => setInstalment(e.target.value as '1st' | '2nd' | '3rd')}
-                  disabled={allInstalmentsReceived}
-                  style={{
-                    fontFamily: 'var(--font-inter)',
-                    height: '36px',
-                    width: '100%',
-                    background: 'var(--color-surface-raised)',
-                    border: '0.5px solid var(--color-border)',
-                    borderRadius: '8px',
-                    padding: '0 10px',
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--color-foreground)',
-                    outline: 'none',
-                    cursor: allInstalmentsReceived ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  <option value="1st" disabled={receivedInstalments.has('1st')}>
-                    1st Instalment {receivedInstalments.has('1st') ? '(Received)' : ''}
-                  </option>
-                  <option value="2nd" disabled={receivedInstalments.has('2nd')}>
-                    2nd Instalment {receivedInstalments.has('2nd') ? '(Received)' : ''}
-                  </option>
-                  <option value="3rd" disabled={receivedInstalments.has('3rd')}>
-                    3rd Instalment {receivedInstalments.has('3rd') ? '(Received)' : ''}
-                  </option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                  Amount
-                </label>
-                <Input
-                  type="number"
-                  placeholder="₹0"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                  Date
-                </label>
-                <Input
-                  type="date"
-                  value={paymentDate}
-                  onChange={e => setPaymentDate(e.target.value)}
-                  className="h-9"
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                  Method
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value as 'cash' | 'gpay' | 'bankTransfer' | 'cheque')}
-                  style={{
-                    fontFamily: 'var(--font-inter)',
-                    height: '36px',
-                    width: '100%',
-                    background: 'var(--color-surface-raised)',
-                    border: '0.5px solid var(--color-border)',
-                    borderRadius: '8px',
-                    padding: '0 10px',
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--color-foreground)',
-                    outline: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <option value="gpay">GPay</option>
-                  <option value="cash">Cash</option>
-                  <option value="bankTransfer">Bank Transfer</option>
-                  <option value="cheque">Cheque</option>
-                </select>
-              </div>
-
-              {paymentMethod !== 'cash' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                    Transaction ID <span style={{ color: 'var(--color-danger)' }}>*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. UPI Ref / UTR / Cheque No."
-                    value={transactionId}
-                    onChange={e => setTransactionId(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '10px',
-              borderTop: '0.5px solid var(--color-border)',
-              paddingTop: '16px',
-              marginTop: '4px'
-            }}>
-              <Button
-                variant="outline"
-                className="h-9"
-                onClick={() => setRecordPaymentOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="h-9 font-medium"
-                onClick={handleRecordPaymentSubmit}
-                disabled={submittingPayment || allInstalmentsReceived}
-              >
-                {submittingPayment ? 'Recording…' : 'Record'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RecordPaymentModal
+        isOpen={recordPaymentOpen}
+        onClose={() => setRecordPaymentOpen(false)}
+        clientId={client.clientId}
+        clientName={client.name}
+        totalAmount={totalAmount}
+        balanceDue={balanceDue}
+        onSuccess={handleEditSuccess}
+      />
 
       {/* EDIT PAYMENT MODAL */}
       {editingPayment && (

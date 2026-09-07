@@ -191,8 +191,10 @@ export interface AssignFreelancerInput {
 export async function assignFreelancerToProject(
   projectId: string,
   freelancerId: string,
-  assignment?: AssignFreelancerInput
+  assignment?: AssignFreelancerInput,
+  clientId?: string
 ): Promise<void> {
+  const projRef = doc(db, 'projects', projectId)
   const payload: Record<string, unknown> = {
     freelancerIds: arrayUnion(freelancerId),
     updatedAt: serverTimestamp(),
@@ -207,14 +209,40 @@ export async function assignFreelancerToProject(
     payload[`freelancerRates.${freelancerId}`] = Number(assignment.dayRate) || 0
   }
 
-  await updateDoc(doc(db, 'projects', projectId), payload)
+  await updateDoc(projRef, payload)
+
+  // Also sync to client document if available
+  let targetClientId = clientId
+  if (!targetClientId) {
+    try {
+      const snap = await getDoc(projRef)
+      if (snap.exists()) {
+        targetClientId = snap.data()?.clientId
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (targetClientId) {
+    try {
+      await updateDoc(doc(db, 'clients', targetClientId), {
+        freelancerIds: arrayUnion(freelancerId),
+        updatedAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.warn('Could not sync freelancer to client document:', err)
+    }
+  }
 }
 
 /** Unassign a freelancer from a project */
 export async function unassignFreelancerFromProject(
   projectId: string,
-  freelancerId: string
+  freelancerId: string,
+  clientId?: string
 ): Promise<void> {
+  const projRef = doc(db, 'projects', projectId)
   const payload: Record<string, unknown> = {
     freelancerIds: arrayRemove(freelancerId),
     [`freelancerAssignments.${freelancerId}`]: deleteField(),
@@ -222,7 +250,30 @@ export async function unassignFreelancerFromProject(
     updatedAt: serverTimestamp(),
   }
 
-  await updateDoc(doc(db, 'projects', projectId), payload)
+  await updateDoc(projRef, payload)
+
+  let targetClientId = clientId
+  if (!targetClientId) {
+    try {
+      const snap = await getDoc(projRef)
+      if (snap.exists()) {
+        targetClientId = snap.data()?.clientId
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (targetClientId) {
+    try {
+      await updateDoc(doc(db, 'clients', targetClientId), {
+        freelancerIds: arrayRemove(freelancerId),
+        updatedAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.warn('Could not sync freelancer removal to client document:', err)
+    }
+  }
 }
 
 export interface RecordPayoutInput {
