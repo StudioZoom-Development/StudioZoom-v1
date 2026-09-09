@@ -910,6 +910,46 @@ function EventsBoardContent() {
     return 'pending'
   }, [currentStageIndex, selectedProject])
 
+  const getDaySessionStatus = useCallback((day: EventDateEntry, _idx: number): 'completed' | 'active' | 'pending' => {
+    if (!selectedProject) return 'pending'
+
+    const eventDayIdx = STAGE_ORDER.indexOf('eventDay')
+    // If the project has not reached eventDay yet:
+    if (currentStageIndex < eventDayIdx) {
+      return 'pending'
+    }
+
+    // If the entire project is completed & delivered:
+    if (selectedProject.stage === 'delivered' && selectedProject.status === 'completed') {
+      return 'completed'
+    }
+
+    const dayDate = day.date instanceof Date ? day.date : new Date(day.date)
+    const startOfToday = new Date(now)
+    startOfToday.setHours(0, 0, 0, 0)
+    const endOfToday = new Date(now)
+    endOfToday.setHours(23, 59, 59, 999)
+
+    // Future date (e.g. 16 Sept, 23 Sept, 30 Sept when today is 9 Sept):
+    if (dayDate.getTime() > endOfToday.getTime()) {
+      return 'pending'
+    }
+
+    // Past date (before today):
+    if (dayDate.getTime() < startOfToday.getTime()) {
+      return 'completed'
+    }
+
+    // Today (same day as now):
+    // If the project has already moved to post-production or delivered, today's shoot has completed
+    if (currentStageIndex > eventDayIdx) {
+      return 'completed'
+    }
+
+    // Currently in eventDay on today's date:
+    return 'active'
+  }, [selectedProject, currentStageIndex, now])
+
   // Multi-day / Multi-event tracks detection
   const multiEventDays: EventDateEntry[] = useMemo(() => {
     if (!selectedProject) return []
@@ -1058,9 +1098,11 @@ function EventsBoardContent() {
     if (!selectedProject) {
       return { isCompleted: true, shootEndTime: new Date(), formattedTime: '' }
     }
-    const latestDay = multiEventDays.length > 0 ? multiEventDays[multiEventDays.length - 1] : null
-    const baseDate = latestDay?.date instanceof Date ? latestDay.date : new Date(latestDay?.date || selectedProject.eventDate)
-    const timeStr = latestDay?.endTime || selectedProject.endTime || '08:00 PM'
+    const currentDay = (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab])
+      ? multiEventDays[selectedDayTab]
+      : (multiEventDays.length > 0 ? multiEventDays[0] : null)
+    const baseDate = currentDay?.date instanceof Date ? currentDay.date : new Date(currentDay?.date || selectedProject.eventDate)
+    const timeStr = currentDay?.endTime || selectedProject.endTime || '08:00 PM'
     const shootEndTime = getShootEndDateTime(baseDate, timeStr)
     const isCompleted = now.getTime() >= shootEndTime.getTime()
     const formattedTime = shootEndTime.toLocaleTimeString('en-IN', {
@@ -1072,7 +1114,7 @@ function EventsBoardContent() {
       month: 'short',
     }) + ')'
     return { isCompleted, shootEndTime, formattedTime }
-  }, [selectedProject, multiEventDays, now])
+  }, [selectedProject, panelStageKey, multiEventDays, selectedDayTab, now])
 
   const isTeamAssignmentMandatory = useMemo(() => {
     if (!panelStageKey) return false
@@ -1180,8 +1222,11 @@ function EventsBoardContent() {
 
   const panelStageStatus = useMemo((): 'completed' | 'active' | 'pending' => {
     if (!panelStageKey) return 'pending'
+    if (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]) {
+      return getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
+    }
     return getStageStatus(panelStageKey)
-  }, [panelStageKey, getStageStatus])
+  }, [panelStageKey, getStageStatus, multiEventDays, selectedDayTab, getDaySessionStatus])
 
   // ─── ADVANCE STAGE HANDLER ──────────────────────────────────────────────
   const handleAdvanceStage = async () => {
@@ -2190,7 +2235,7 @@ function EventsBoardContent() {
               {/* STAGE 4: EVENT DAY(S) — MULTI-DATE / RECURRING EVENT TRACKS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {multiEventDays.map((day: EventDateEntry, idx: number) => {
-                  const dayStatus = getStageStatus('eventDay')
+                  const dayStatus = getDaySessionStatus(day, idx)
                   const isDaySelected = panelStageKey === 'eventDay' && selectedDayTab === idx
                   const dayNodeId = `eventDay-${idx}`
                   const isDayDragging = draggingNodeId === dayNodeId
@@ -2728,9 +2773,11 @@ function EventsBoardContent() {
             borderBottom: '0.5px solid var(--color-border)',
           }}>
             <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, flex: 1, color: 'var(--color-foreground)' }}>
-              {currentPanelConfig.name}
+              {panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]
+                ? `${currentPanelConfig.name} · ${multiEventDays[selectedDayTab].label || `Day ${selectedDayTab + 1}`}`
+                : currentPanelConfig.name}
             </span>
-            <StatusPill status={getStageStatus(panelStageKey)} />
+            <StatusPill status={panelStageStatus} />
             <span
               onClick={() => setPanelStageKey(null)}
               style={{ cursor: 'pointer', color: 'var(--color-foreground-muted)', display: 'flex', padding: '4px' }}
@@ -2789,6 +2836,10 @@ function EventsBoardContent() {
 
             {/* Stage Completed Timestamp (if stage completed) */}
             {(() => {
+              if (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]) {
+                const dayStatus = getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
+                if (dayStatus !== 'completed') return null
+              }
               const compDate = getStageCompletedDate(selectedProject, panelStageKey)
               if (!compDate) return null
               return (
@@ -3387,13 +3438,17 @@ function EventsBoardContent() {
                   background: 'var(--color-surface-raised)',
                   border: '0.5px solid var(--color-border)',
                 }}>
-                  <i className="ti ti-lock" style={{ fontSize: '20px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                  <i className={panelStageKey === 'eventDay' ? 'ti ti-calendar-time' : 'ti ti-lock'} style={{ fontSize: '20px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                      Upcoming Stage
+                      {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                        ? `${multiEventDays[selectedDayTab].label || 'Session'} Scheduled`
+                        : 'Upcoming Stage'}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                      Unlocks after {STAGE_CONFIGS[currentStageIndex]?.name} is completed.
+                      {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                        ? `Scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
+                        : `Unlocks after ${STAGE_CONFIGS[currentStageIndex]?.name} is completed.`}
                     </div>
                   </div>
                 </div>
