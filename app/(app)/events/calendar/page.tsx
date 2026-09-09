@@ -618,7 +618,7 @@ export default function CalendarPage() {
                     }}
                   >
                     {/* Day Number Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                       <span
                         style={{
                           fontSize: 'var(--text-xs)',
@@ -631,10 +631,41 @@ export default function CalendarPage() {
                           borderRadius: '50%',
                           color: numColor,
                           background: numBg,
+                          flexShrink: 0,
                         }}
                       >
                         {cell.dayNumber}
                       </span>
+                      {(cell.events.length > 0 || cell.isToday) && (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedDateStr(cell.dateStr)
+                          }}
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            color: cell.isSelected ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                            background: cell.isSelected ? 'var(--color-surface-raised)' : 'transparent',
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            border: '0.5px solid var(--color-border)',
+                            cursor: 'pointer',
+                            lineHeight: '14px',
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.color = 'var(--color-primary)'
+                            e.currentTarget.style.borderColor = 'var(--color-primary)'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.color = cell.isSelected ? 'var(--color-primary)' : 'var(--color-foreground-muted)'
+                            e.currentTarget.style.borderColor = 'var(--color-border)'
+                          }}
+                        >
+                          View
+                        </span>
+                      )}
                     </div>
 
                     {/* Event Chips */}
@@ -764,6 +795,37 @@ export default function CalendarPage() {
                     >
                       {col.dayNumber}
                     </span>
+                    {(col.events.length > 0 || col.isToday) && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedDateStr(col.dateStr)
+                        }}
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          color: col.isSelected ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                          background: col.isSelected ? 'var(--color-surface-raised)' : 'transparent',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          border: '0.5px solid var(--color-border)',
+                          cursor: 'pointer',
+                          lineHeight: '14px',
+                          marginTop: '2px',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.color = 'var(--color-primary)'
+                          e.currentTarget.style.borderColor = 'var(--color-primary)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.color = col.isSelected ? 'var(--color-primary)' : 'var(--color-foreground-muted)'
+                          e.currentTarget.style.borderColor = 'var(--color-border)'
+                        }}
+                      >
+                        View
+                      </span>
+                    )}
                   </div>
 
                   {/* Day Events Column */}
@@ -1031,9 +1093,12 @@ export default function CalendarPage() {
                       {stageConf.label}
                     </span>
 
-                    {ev.clientId && (
+                    {(ev.clientId || ev.projectId) && (
                       <span
-                        onClick={() => router.push(`/clients/${ev.clientId}`)}
+                        onClick={() => {
+                          if (ev.clientId) router.push(`/clients/${ev.clientId}`)
+                          else if (ev.projectId) router.push(`/events?project=${ev.projectId}`)
+                        }}
                         style={{
                           fontSize: 'var(--text-xs)',
                           fontWeight: 600,

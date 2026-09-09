@@ -367,10 +367,6 @@ function NewBookingPageContent(): React.JSX.Element {
     }
   }, [state, currentStep, activeDraftId, convertingLeadId, appUser, router, showToast])
 
-  const handleSaveDraft = useCallback(() => {
-    handleSubmit(true)
-  }, [handleSubmit])
-
   // ─── Render step content ─────────────────────────────────────────
 
   function renderStep(): React.JSX.Element {
@@ -517,8 +513,6 @@ function NewBookingPageContent(): React.JSX.Element {
           <StepIndicator
             currentStep={currentStep}
             onStepClick={goToStep}
-            onSaveDraft={handleSaveDraft}
-            isSaving={saving}
             completedSteps={completedSteps}
           />
         </div>
