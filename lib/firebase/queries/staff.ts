@@ -230,18 +230,114 @@ export async function getPayslipHistory(uid: string): Promise<Array<{
   }
 }
 
-/** Work history for detail page — via staffAssignments */
+const DEMO_STAFF_WORK: Record<string, Array<{ projectId: string; eventName: string; eventDate: string; role: string; stage: string }>> = {
+  'staff-kavya': [
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Wedding', eventDate: '2026-09-09', role: 'photographer', stage: 'preProduction' },
+    { projectId: 'demo-proj-5', eventName: 'Priya & Karthik Reception', eventDate: '2026-05-18', role: 'lead_photo', stage: 'delivered' },
+    { projectId: 'demo-proj-3', eventName: 'Sneha & Rahul Sangeet', eventDate: '2026-07-22', role: 'photographer', stage: 'delivered' },
+  ],
+  'staff-deepak': [
+    { projectId: 'demo-proj-6', eventName: 'Aishwarya & Naveen Wedding', eventDate: '2026-06-10', role: 'videographer', stage: 'preProduction' },
+    { projectId: 'demo-proj-1', eventName: 'Meera & Rohan Engagement', eventDate: '2026-08-15', role: 'lead_video', stage: 'eventDay' },
+  ],
+  'staff-siva': [
+    { projectId: 'demo-proj-3', eventName: 'Sneha & Rahul Sangeet', eventDate: '2026-07-22', role: 'videographer', stage: 'delivered' },
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Wedding', eventDate: '2026-09-09', role: 'drone', stage: 'preProduction' },
+  ],
+  'staff-ramesh': [
+    { projectId: 'demo-proj-4', eventName: 'Ananya & Vikram Wedding', eventDate: '2026-04-05', role: 'editor', stage: 'delivered' },
+    { projectId: 'demo-proj-1', eventName: 'Meera & Rohan Highlights', eventDate: '2026-08-20', role: 'videoEditing', stage: 'postProduction' },
+  ],
+  'staff-naresh': [
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Wedding', eventDate: '2026-09-09', role: 'lead_photo', stage: 'preProduction' },
+    { projectId: 'demo-proj-4', eventName: 'Ananya & Vikram Wedding', eventDate: '2026-04-05', role: 'lead_photo', stage: 'delivered' },
+  ],
+  'staff-anitha': [
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Album', eventDate: '2026-09-15', role: 'albumDesign', stage: 'postProduction' },
+    { projectId: 'demo-proj-5', eventName: 'Priya & Karthik Photo Edit', eventDate: '2026-05-25', role: 'photoEditing', stage: 'delivered' },
+  ],
+}
+
+/** Work history for detail page — via projects (staffUids), workItems (assignedToUid), and staffAssignments */
 export async function getWorkHistory(uid: string): Promise<Array<{
   projectId: string; eventName: string; eventDate: string; role: string; stage: string
 }>> {
   try {
-    const q = query(
-      collection(db, 'staffAssignments'),
-      where('staffUid', '==', uid)
-    )
-    const snap = await getDocs(q)
-    const list = await Promise.all(
-      snap.docs.map(async d => {
+    const historyMap = new Map<string, {
+      projectId: string; eventName: string; eventDate: string; role: string; stage: string
+    }>()
+
+    // 1. Query projects where staffUids contains uid
+    try {
+      const projQ = query(
+        collection(db, 'projects'),
+        where('staffUids', 'array-contains', uid)
+      )
+      const projSnap = await getDocs(projQ)
+      projSnap.docs.forEach(d => {
+        const p = d.data()
+        if (p.isDeleted) return
+        const evDate = p.eventDate
+          ? (typeof p.eventDate.toDate === 'function'
+              ? p.eventDate.toDate().toISOString().split('T')[0]
+              : new Date(p.eventDate).toISOString().split('T')[0])
+          : ''
+        historyMap.set(`proj-${d.id}`, {
+          projectId: d.id,
+          eventName: p.eventName || 'Unnamed Event',
+          eventDate: evDate,
+          role: 'staff',
+          stage: p.stage || 'booked',
+        })
+      })
+    } catch (err) {
+      console.warn('Could not query projects by staffUids:', err)
+    }
+
+    // 2. Query workItems where assignedToUid == uid
+    try {
+      const workQ = query(
+        collection(db, 'workItems'),
+        where('assignedToUid', '==', uid)
+      )
+      const workSnap = await getDocs(workQ)
+      workSnap.docs.forEach(d => {
+        const w = d.data()
+        if (w.isDeleted) return
+        const evDate = w.eventDate
+          ? (typeof w.eventDate.toDate === 'function'
+              ? w.eventDate.toDate().toISOString().split('T')[0]
+              : new Date(w.eventDate).toISOString().split('T')[0])
+          : ''
+        const stage = w.status === 'done'
+          ? 'delivered'
+          : w.status === 'review'
+          ? 'postProduction'
+          : w.status === 'inProgress'
+          ? 'eventDay'
+          : 'planning'
+
+        const key = `work-${w.projectId || d.id}-${w.type || 'task'}`
+        historyMap.set(key, {
+          projectId: w.projectId || d.id,
+          eventName: w.eventName || 'Unnamed Work',
+          eventDate: evDate,
+          role: w.type || 'editor',
+          stage,
+        })
+      })
+    } catch (err) {
+      console.warn('Could not query workItems by assignedToUid:', err)
+    }
+
+    // 3. Query staffAssignments (legacy / direct assignments)
+    try {
+      const assignQ = query(
+        collection(db, 'staffAssignments'),
+        where('staffUid', '==', uid)
+      )
+      const assignSnap = await getDocs(assignQ)
+      for (const d of assignSnap.docs) {
         const a = d.data()
         let eventName = '—'
         let stage = '—'
@@ -254,22 +350,33 @@ export async function getWorkHistory(uid: string): Promise<Array<{
               stage = p?.stage ?? '—'
             }
           } catch {
-            // fallback if project not found
+            // fallback
           }
         }
-        return {
+        const key = `assign-${d.id}`
+        historyMap.set(key, {
           projectId: a.projectId ?? '',
           eventName,
-          eventDate: a.eventDate as string,    // "YYYY-MM-DD" string
-          role:      a.role as string,
+          eventDate: (a.eventDate as string) || '',
+          role: (a.role as string) || 'staff',
           stage,
-        }
-      })
-    )
+        })
+      }
+    } catch (err) {
+      console.warn('Could not query staffAssignments:', err)
+    }
+
+    const list = Array.from(historyMap.values())
+
+    // If no records found in database, check demo fallback for mock staff members
+    if (list.length === 0 && DEMO_STAFF_WORK[uid]) {
+      return DEMO_STAFF_WORK[uid]
+    }
+
     list.sort((a, b) => (b.eventDate || '').localeCompare(a.eventDate || ''))
-    return list.slice(0, 20)
+    return list.slice(0, 30)
   } catch (err) {
     console.error('Failed to get work history:', err)
-    return []
+    return DEMO_STAFF_WORK[uid] || []
   }
 }

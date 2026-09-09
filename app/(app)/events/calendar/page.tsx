@@ -636,7 +636,7 @@ export default function CalendarPage() {
                       >
                         {cell.dayNumber}
                       </span>
-                      {cell.events.length > 0 && (
+                      {(cell.events.length > 0 || cell.isToday) && (
                         <span
                           onClick={(e) => {
                             e.stopPropagation()
@@ -795,7 +795,7 @@ export default function CalendarPage() {
                     >
                       {col.dayNumber}
                     </span>
-                    {col.events.length > 0 && (
+                    {(col.events.length > 0 || col.isToday) && (
                       <span
                         onClick={(e) => {
                           e.stopPropagation()

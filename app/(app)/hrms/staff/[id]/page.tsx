@@ -18,24 +18,40 @@ import {
 
 const ROLE_ICONS: Record<string, string> = {
   photographer: 'ti-camera',
+  photography:  'ti-camera',
   videographer: 'ti-video',
+  videography:  'ti-video',
   editor:       'ti-wand',
+  photoEditing: 'ti-camera',
+  videoEditing: 'ti-video',
+  albumDesign:  'ti-book',
+  highlights:   'ti-sparkles',
+  fullFilm:     'ti-film',
   designer:     'ti-pencil',
   drone:        'ti-drone',
   assistant:    'ti-user',
   lead_photo:   'ti-camera',
-  lead_video:   'ti-video'
+  lead_video:   'ti-video',
+  staff:        'ti-user-check',
 }
 
 const ROLE_LABELS: Record<string, string> = {
   photographer: 'Photographer',
+  photography:  'Photographer',
   videographer: 'Videographer',
+  videography:  'Videographer',
   editor:       'Editor',
+  photoEditing: 'Photo Editor',
+  videoEditing: 'Video Editor',
+  albumDesign:  'Album Designer',
+  highlights:   'Highlights Editor',
+  fullFilm:     'Full Film Editor',
   designer:     'Designer',
   drone:        'Drone Operator',
   assistant:    'Assistant',
   lead_photo:   'Lead Photo',
-  lead_video:   'Lead Video'
+  lead_video:   'Lead Video',
+  staff:        'Staff Member',
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -69,7 +85,9 @@ function formatEventDate(dateStr: string): string {
   if (!dateStr) return '—'
   try {
     const parsed = parseISO(dateStr)
-    if (isValid(parsed)) return format(parsed, 'd MMM')
+    if (isValid(parsed)) return format(parsed, 'd MMM yyyy')
+    const d = new Date(dateStr)
+    if (isValid(d)) return format(d, 'd MMM yyyy')
     return dateStr
   } catch {
     return dateStr
