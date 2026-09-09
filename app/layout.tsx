@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -31,6 +33,8 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
+        <Analytics />
+        <SpeedInsights />
         {/* Load the Design System bundle using Next.js Script */}
         <Script
           src="/_ds/nova-design-system-8ef438d5-a323-412b-8d58-405071468e1d/_ds_bundle.js"
