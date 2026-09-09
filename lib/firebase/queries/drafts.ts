@@ -7,17 +7,53 @@ import { db } from '@/lib/firebase/config'
 import { BookingDraft } from '@/types'
 import { BookingWizardState } from '@/app/(app)/clients/new/bookingReducer'
 
-// In-memory fallback
+const LOCAL_STORAGE_KEY = 'studio_zoom_booking_drafts'
+
+function readLocalDrafts(): BookingDraft[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((d: Record<string, unknown>) => ({
+      ...d,
+      createdAt: d.createdAt ? new Date(d.createdAt as string | number | Date) : new Date(),
+      updatedAt: d.updatedAt ? new Date(d.updatedAt as string | number | Date) : new Date(),
+    })) as BookingDraft[]
+  } catch {
+    return []
+  }
+}
+
+function writeLocalDrafts(drafts: BookingDraft[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(drafts))
+  } catch (err) {
+    console.warn('Failed to save booking drafts to localStorage:', err)
+  }
+}
+
+// In-memory fallback (initialized from localStorage if in browser)
 let MEMORY_DRAFTS: BookingDraft[] = []
 
 /** Real-time subscription to booking drafts */
 export function subscribeToDrafts(
   callback: (drafts: BookingDraft[]) => void
 ): () => void {
+  // Prime memory from localStorage immediately so UI never starts empty on page load/refresh
+  if (MEMORY_DRAFTS.length === 0) {
+    MEMORY_DRAFTS = readLocalDrafts()
+  }
+  if (MEMORY_DRAFTS.length > 0) {
+    callback(MEMORY_DRAFTS)
+  }
+
   const q = query(collection(db, 'bookingDrafts'), orderBy('updatedAt', 'desc'))
 
   return onSnapshot(q, snap => {
-    const list = snap.docs.map(d => {
+    const firestoreList = snap.docs.map(d => {
       const data = d.data()
       return {
         ...data,
@@ -26,11 +62,29 @@ export function subscribeToDrafts(
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
       } as BookingDraft
     })
-    MEMORY_DRAFTS = list
-    callback(list)
+
+    // Merge Firestore drafts with local-only drafts so unsynced drafts are preserved
+    const localDrafts = readLocalDrafts()
+    const mergedMap = new Map<string, BookingDraft>()
+
+    for (const d of localDrafts) {
+      mergedMap.set(d.draftId, d)
+    }
+    for (const d of firestoreList) {
+      mergedMap.set(d.draftId, d)
+    }
+
+    const merged = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
+
+    MEMORY_DRAFTS = merged
+    writeLocalDrafts(merged)
+    callback(merged)
   }, error => {
-    console.warn('subscribeToDrafts error, using fallback:', error)
-    callback(MEMORY_DRAFTS)
+    console.warn('subscribeToDrafts Firestore error, using local/memory fallback:', error)
+    const fallback = MEMORY_DRAFTS.length > 0 ? MEMORY_DRAFTS : readLocalDrafts()
+    callback(fallback)
   })
 }
 
@@ -38,6 +92,10 @@ export function subscribeToDrafts(
 export async function getDraftById(draftId: string): Promise<BookingDraft | null> {
   const mem = MEMORY_DRAFTS.find(d => d.draftId === draftId)
   if (mem) return mem
+
+  const localList = readLocalDrafts()
+  const localMatch = localList.find(d => d.draftId === draftId)
+  if (localMatch) return localMatch
 
   try {
     const snap = await getDoc(doc(db, 'bookingDrafts', draftId))
@@ -50,7 +108,7 @@ export async function getDraftById(draftId: string): Promise<BookingDraft | null
       updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
     } as BookingDraft
   } catch (err) {
-    console.warn('Failed to fetch draft by id:', err)
+    console.warn('Failed to fetch draft by id from firestore:', err)
     return null
   }
 }
@@ -69,6 +127,7 @@ export async function saveBookingDraft(
   const eventName = state.eventName.trim() || state.clientName.trim() || 'Untitled Event'
   const name = `${clientName}${state.eventName ? ` · ${state.eventName}` : ''}`
 
+  const now = new Date()
   const payload: BookingDraft = {
     draftId:     targetId,
     name,
@@ -79,11 +138,11 @@ export async function saveBookingDraft(
     currentStep,
     state,
     createdBy:   userId || 'system',
-    createdAt:   new Date(),
-    updatedAt:   new Date(),
+    createdAt:   now,
+    updatedAt:   now,
   }
 
-  // Update in-memory
+  // 1. Update in-memory
   const existingIdx = MEMORY_DRAFTS.findIndex(d => d.draftId === targetId)
   if (existingIdx >= 0) {
     MEMORY_DRAFTS[existingIdx] = payload
@@ -91,7 +150,10 @@ export async function saveBookingDraft(
     MEMORY_DRAFTS = [payload, ...MEMORY_DRAFTS]
   }
 
-  // Persist to Firestore
+  // 2. Persist immediately to localStorage so page refresh will NEVER lose the draft
+  writeLocalDrafts(MEMORY_DRAFTS)
+
+  // 3. Persist to Firestore (remote sync)
   try {
     await setDoc(draftRef, {
       ...payload,
@@ -99,7 +161,7 @@ export async function saveBookingDraft(
       updatedAt: serverTimestamp(),
     }, { merge: true })
   } catch (err) {
-    console.warn('Failed to write draft to firestore:', err)
+    console.warn('Failed to write draft to firestore (saved locally to browser storage):', err)
   }
 
   return targetId
@@ -108,9 +170,10 @@ export async function saveBookingDraft(
 /** Delete a draft */
 export async function deleteBookingDraft(draftId: string): Promise<void> {
   MEMORY_DRAFTS = MEMORY_DRAFTS.filter(d => d.draftId !== draftId)
+  writeLocalDrafts(MEMORY_DRAFTS)
   try {
     await deleteDoc(doc(db, 'bookingDrafts', draftId))
   } catch (err) {
-    console.warn('Failed to delete draft:', err)
+    console.warn('Failed to delete draft from firestore:', err)
   }
 }
