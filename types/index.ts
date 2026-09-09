@@ -129,6 +129,7 @@ export interface Project {
   bookingGroupId?:        string             // links sibling projects in multi-date bookings
   dateLabel?:             string             // "Engagement", "Reception", etc.
   eventDates?:            EventDateEntry[]
+  stageCompletedAt?:      Partial<Record<ProjectStage, Date>>
   isDeleted?:             boolean
   createdBy:              string
   createdAt:              Date
