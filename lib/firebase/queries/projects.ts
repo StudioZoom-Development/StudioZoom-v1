@@ -250,6 +250,35 @@ export async function updateTrackMilestone(
   })
 }
 
+/** Toggle or update a specific session's track milestone in recurring events */
+export async function updateSessionTrackMilestone(
+  projectId: string,
+  sessionIdx: number,
+  track: 'photo' | 'video',
+  milestone: string,
+  done: boolean
+): Promise<void> {
+  const projectRef = doc(db, 'projects', projectId)
+  await updateDoc(projectRef, {
+    [`sessionMilestones.${sessionIdx}.${track}Milestones.${milestone}`]: done,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+/** Update a specific session's delivery status in recurring events */
+export async function updateSessionDelivery(
+  projectId: string,
+  sessionIdx: number,
+  delivered: boolean
+): Promise<void> {
+  const projectRef = doc(db, 'projects', projectId)
+  await updateDoc(projectRef, {
+    [`sessionMilestones.${sessionIdx}.delivered`]: delivered,
+    [`sessionMilestones.${sessionIdx}.deliveredAt`]: delivered ? serverTimestamp() : null,
+    updatedAt: serverTimestamp(),
+  })
+}
+
 /** Assign a staff member to a project */
 export async function assignStaffToProject(
   projectId: string,

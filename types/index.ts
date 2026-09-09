@@ -131,11 +131,20 @@ export interface Project {
   location?:              string
   eventDates?:            EventDateEntry[]
   recurringSchedule?:     RecurringSchedule
+  sessionMilestones?:     Record<string, SessionMilestoneState>
   stageCompletedAt?:      Partial<Record<ProjectStage, Date>>
   isDeleted?:             boolean
   createdBy:              string
   createdAt:              Date
   updatedAt:              Date
+}
+
+export interface SessionMilestoneState {
+  photoMilestones?: Record<string, boolean>
+  videoMilestones?: Record<string, boolean>
+  delivered?: boolean
+  deliveredAt?: Date
+  stageCompletedAt?: Partial<Record<ProjectStage, Date>>
 }
 
 export type MilestoneKey =
