@@ -10,6 +10,8 @@ import {
   updateProjectStage,
   updateProjectStageGates,
   updateTrackMilestone,
+  updateSessionTrackMilestone,
+  updateSessionDelivery,
   assignStaffToProject,
   removeStaffFromProject,
 } from '@/lib/firebase/queries/projects'
@@ -1021,14 +1023,36 @@ function EventsBoardContent() {
   }, [selectedProject])
 
   const isMultiEvent = multiEventDays.length > 1
+  const isRecurring = selectedProject?.bookingType === 'recurring'
 
   // ─── TRACK MILESTONE HELPERS ────────────────────────────────────────────
-  const isTrackMilestoneDone = useCallback((track: 'photo' | 'video', milestone: string): boolean => {
+  const isTrackMilestoneDone = useCallback((track: 'photo' | 'video', milestone: string, sessionIdx?: number): boolean => {
     if (!selectedProject) return false
-    const overrideKey = `${selectedProject.projectId}_${track}_${milestone}`
+    const isProjectRecurring = selectedProject.bookingType === 'recurring'
+    const actualSessionIdx = isProjectRecurring ? (sessionIdx !== undefined ? sessionIdx : selectedDayTab) : undefined
+
+    const overrideKey = actualSessionIdx !== undefined
+      ? `${selectedProject.projectId}_session_${actualSessionIdx}_${track}_${milestone}`
+      : `${selectedProject.projectId}_${track}_${milestone}`
+
     if (trackMilestoneOverrides[overrideKey] !== undefined) {
       return trackMilestoneOverrides[overrideKey]
     }
+
+    if (actualSessionIdx !== undefined) {
+      const sessionState = selectedProject.sessionMilestones?.[actualSessionIdx]
+      const sessionField = track === 'photo' ? sessionState?.photoMilestones : sessionState?.videoMilestones
+      if (sessionField && sessionField[milestone] !== undefined) {
+        return sessionField[milestone]
+      }
+      // If recurring session shoot is not completed yet, milestones are not done by default
+      const day = multiEventDays[actualSessionIdx]
+      const dayStatus = day ? getDaySessionStatus(day, actualSessionIdx) : 'pending'
+      if (dayStatus !== 'completed') {
+        return false
+      }
+    }
+
     const projectMilestones = track === 'photo' ? selectedProject.photoMilestones : selectedProject.videoMilestones
     if (projectMilestones && projectMilestones[milestone] !== undefined) {
       return projectMilestones[milestone]
@@ -1036,34 +1060,59 @@ function EventsBoardContent() {
     const stageIdx = STAGE_ORDER.indexOf(selectedProject.stage)
     if (stageIdx > 4) return true
     return false
-  }, [selectedProject, trackMilestoneOverrides])
+  }, [selectedProject, selectedDayTab, multiEventDays, trackMilestoneOverrides, getDaySessionStatus])
 
   const photoTrackDoneCount = useMemo(() => {
-    return PHOTO_TRACK_MILESTONES.filter(m => isTrackMilestoneDone('photo', m)).length
-  }, [isTrackMilestoneDone])
+    const isProjectRecurring = selectedProject?.bookingType === 'recurring'
+    return PHOTO_TRACK_MILESTONES.filter(m => isTrackMilestoneDone('photo', m, isProjectRecurring ? selectedDayTab : undefined)).length
+  }, [isTrackMilestoneDone, selectedProject, selectedDayTab])
 
   const isPhotoTrackAllDone = photoTrackDoneCount === PHOTO_TRACK_MILESTONES.length
 
   const videoTrackDoneCount = useMemo(() => {
-    return VIDEO_TRACK_MILESTONES.filter(m => isTrackMilestoneDone('video', m)).length
-  }, [isTrackMilestoneDone])
+    const isProjectRecurring = selectedProject?.bookingType === 'recurring'
+    return VIDEO_TRACK_MILESTONES.filter(m => isTrackMilestoneDone('video', m, isProjectRecurring ? selectedDayTab : undefined)).length
+  }, [isTrackMilestoneDone, selectedProject, selectedDayTab])
 
   const isVideoTrackAllDone = videoTrackDoneCount === VIDEO_TRACK_MILESTONES.length
 
-  const toggleTrackMilestone = async (track: 'photo' | 'video', milestone: string, e?: React.MouseEvent) => {
+  const toggleTrackMilestone = async (track: 'photo' | 'video', milestone: string, e?: React.MouseEvent, sessionIdx?: number) => {
     if (e) {
       e.stopPropagation()
     }
     if (!selectedProject) return
 
-    const currentlyDone = isTrackMilestoneDone(track, milestone)
+    const isProjectRecurring = selectedProject.bookingType === 'recurring'
+    const actualSessionIdx = isProjectRecurring ? (sessionIdx !== undefined ? sessionIdx : selectedDayTab) : undefined
+
+    const currentlyDone = isTrackMilestoneDone(track, milestone, actualSessionIdx)
     const newVal = !currentlyDone
-    const key = `${selectedProject.projectId}_${track}_${milestone}`
+    const key = actualSessionIdx !== undefined
+      ? `${selectedProject.projectId}_session_${actualSessionIdx}_${track}_${milestone}`
+      : `${selectedProject.projectId}_${track}_${milestone}`
 
     setTrackMilestoneOverrides(prev => ({ ...prev, [key]: newVal }))
 
     setProjects(prev => prev.map(p => {
       if (p.projectId === selectedProject.projectId) {
+        if (actualSessionIdx !== undefined) {
+          const currentSessions = p.sessionMilestones || {}
+          const currentSession = currentSessions[actualSessionIdx] || {}
+          const field = track === 'photo' ? 'photoMilestones' : 'videoMilestones'
+          return {
+            ...p,
+            sessionMilestones: {
+              ...currentSessions,
+              [actualSessionIdx]: {
+                ...currentSession,
+                [field]: {
+                  ...(currentSession[field] || {}),
+                  [milestone]: newVal,
+                },
+              },
+            },
+          }
+        }
         const field = track === 'photo' ? 'photoMilestones' : 'videoMilestones'
         return {
           ...p,
@@ -1075,6 +1124,17 @@ function EventsBoardContent() {
       }
       return p
     }))
+
+    if (actualSessionIdx !== undefined) {
+      if (!selectedProject.projectId.startsWith('demo-')) {
+        try {
+          await updateSessionTrackMilestone(selectedProject.projectId, actualSessionIdx, track, milestone, newVal)
+        } catch (err) {
+          console.error(`Failed to update session ${actualSessionIdx} ${track} milestone ${milestone}:`, err)
+        }
+      }
+      return
+    }
 
     const milestones = track === 'photo' ? PHOTO_TRACK_MILESTONES : VIDEO_TRACK_MILESTONES
     const allOthersDone = milestones.filter(m => m !== milestone).every(m => isTrackMilestoneDone(track, m))
@@ -1090,6 +1150,70 @@ function EventsBoardContent() {
       } catch (err) {
         console.error(`Failed to update ${track} milestone ${milestone}:`, err)
       }
+    }
+  }
+
+  // ─── RECURRING SESSION STATUS HELPERS ──────────────────────────────────
+  const getSessionPostProdStatus = useCallback((idx: number): 'completed' | 'active' | 'pending' => {
+    if (!selectedProject) return 'pending'
+    const day = multiEventDays[idx]
+    if (!day) return 'pending'
+    const dayStatus = getDaySessionStatus(day, idx)
+    if (dayStatus === 'pending') return 'pending'
+
+    const photoDone = PHOTO_TRACK_MILESTONES.every(m => isTrackMilestoneDone('photo', m, idx))
+    const videoDone = VIDEO_TRACK_MILESTONES.every(m => isTrackMilestoneDone('video', m, idx))
+
+    if (photoDone && videoDone) return 'completed'
+    return 'active'
+  }, [selectedProject, multiEventDays, getDaySessionStatus, isTrackMilestoneDone])
+
+  const getSessionDeliveryStatus = useCallback((idx: number): 'completed' | 'active' | 'pending' => {
+    if (!selectedProject) return 'pending'
+    const postStatus = getSessionPostProdStatus(idx)
+    if (postStatus !== 'completed') return 'pending'
+
+    const isDelivered = selectedProject.sessionMilestones?.[idx]?.delivered ?? false
+    if (isDelivered) return 'completed'
+    return 'active'
+  }, [selectedProject, getSessionPostProdStatus])
+
+  const allSessionsDelivered = useMemo(() => {
+    if (!selectedProject || selectedProject.bookingType !== 'recurring' || multiEventDays.length === 0) return false
+    return multiEventDays.every((_, idx) => getSessionDeliveryStatus(idx) === 'completed')
+  }, [selectedProject, multiEventDays, getSessionDeliveryStatus])
+
+  const handleDeliverSession = async (sessionIdx: number) => {
+    if (!selectedProject) return
+    setIsAdvancing(true)
+    const nowCompleted = new Date()
+    try {
+      setProjects(prev => prev.map(p => {
+        if (p.projectId === selectedProject.projectId) {
+          const currentSessions = p.sessionMilestones || {}
+          const currentSession = currentSessions[sessionIdx] || {}
+          return {
+            ...p,
+            sessionMilestones: {
+              ...currentSessions,
+              [sessionIdx]: {
+                ...currentSession,
+                delivered: true,
+                deliveredAt: nowCompleted,
+              },
+            },
+          }
+        }
+        return p
+      }))
+
+      if (!selectedProject.projectId.startsWith('demo-')) {
+        await updateSessionDelivery(selectedProject.projectId, sessionIdx, true)
+      }
+    } catch (err) {
+      console.error(`Failed to deliver session ${sessionIdx}:`, err)
+    } finally {
+      setIsAdvancing(false)
     }
   }
 
@@ -1222,11 +1346,22 @@ function EventsBoardContent() {
 
   const panelStageStatus = useMemo((): 'completed' | 'active' | 'pending' => {
     if (!panelStageKey) return 'pending'
+    if (selectedProject?.bookingType === 'recurring') {
+      if (panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]) {
+        return getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
+      }
+      if (panelStageKey === 'postProduction') {
+        return getSessionPostProdStatus(selectedDayTab)
+      }
+      if (panelStageKey === 'delivered') {
+        return getSessionDeliveryStatus(selectedDayTab)
+      }
+    }
     if (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]) {
       return getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
     }
     return getStageStatus(panelStageKey)
-  }, [panelStageKey, getStageStatus, multiEventDays, selectedDayTab, getDaySessionStatus])
+  }, [panelStageKey, selectedProject, getDaySessionStatus, getSessionPostProdStatus, getSessionDeliveryStatus, multiEventDays, selectedDayTab, getStageStatus])
 
   // ─── ADVANCE STAGE HANDLER ──────────────────────────────────────────────
   const handleAdvanceStage = async () => {
@@ -2086,37 +2221,90 @@ function EventsBoardContent() {
               {/* Wire 3: Planning -> Pre-Prod */}
               {renderWire('planning-out', 'preprod-in', currentStageIndex >= 2, currentStageIndex > 2)}
 
-              {/* Wire 4: Pre-Prod -> Event Day(s) tracks */}
-              {multiEventDays.map((_: EventDateEntry, idx: number) => {
-                return renderWire(
-                  'preprod-out',
-                  `day-in-${idx}`,
-                  currentStageIndex >= 3,
-                  currentStageIndex > 3,
-                  isMultiEvent ? `${idx + 1}` : undefined
-                )
-              })}
+              {/* Wire 4+ depending on flow */}
+              {isRecurring ? (
+                <>
+                  {/* Wire 4: Pre-Prod -> Session Event Days */}
+                  {multiEventDays.map((day: EventDateEntry, idx: number) => {
+                    const dayStatus = getDaySessionStatus(day, idx)
+                    return renderWire(
+                      'preprod-out',
+                      `day-in-${idx}`,
+                      dayStatus === 'active' || dayStatus === 'completed',
+                      dayStatus === 'completed',
+                      `${idx + 1}`
+                    )
+                  })}
 
-              {/* Wire 5: Event Day(s) tracks -> Post-Prod */}
-              {multiEventDays.map((_: EventDateEntry, idx: number) => {
-                return renderWire(
-                  `day-out-${idx}`,
-                  'postprod-in',
-                  currentStageIndex >= 4,
-                  currentStageIndex > 4
-                )
-              })}
+                  {/* Wire 5: Session Event Day -> Session Post-Prod */}
+                  {multiEventDays.map((day: EventDateEntry, idx: number) => {
+                    const postStatus = getSessionPostProdStatus(idx)
+                    return renderWire(
+                      `day-out-${idx}`,
+                      `postprod-in-${idx}`,
+                      postStatus === 'active' || postStatus === 'completed',
+                      postStatus === 'completed'
+                    )
+                  })}
 
-              {/* Wire 6: Post-Prod -> Photo Track & Video Track */}
-              {renderWire('postprod-out-photo', 'photo-in', isPostProdActive, isPostProdComplete || isPhotoTrackAllDone)}
-              {renderWire('postprod-out-video', 'video-in', isPostProdActive, isPostProdComplete || isVideoTrackAllDone)}
+                  {/* Wire 6: Session Post-Prod -> Session Delivered */}
+                  {multiEventDays.map((_: EventDateEntry, idx: number) => {
+                    const postStatus = getSessionPostProdStatus(idx)
+                    const delStatus = getSessionDeliveryStatus(idx)
+                    return renderWire(
+                      `postprod-out-${idx}`,
+                      `delivered-in-${idx}`,
+                      delStatus === 'active' || delStatus === 'completed',
+                      delStatus === 'completed'
+                    )
+                  })}
 
-              {/* Wire 7: Photo Track & Video Track -> Delivered */}
-              {renderWire('photo-out', 'delivered-in', isPhotoTrackAllDone || currentStageIndex >= 5, (isPhotoTrackAllDone && isVideoTrackAllDone) || currentStageIndex >= 5)}
-              {renderWire('video-out', 'delivered-in', isVideoTrackAllDone || currentStageIndex >= 5, (isPhotoTrackAllDone && isVideoTrackAllDone) || currentStageIndex >= 5)}
+                  {/* Wire 7: Session Delivered -> Contract Complete Pill */}
+                  {multiEventDays.map((_: EventDateEntry, idx: number) => {
+                    const delStatus = getSessionDeliveryStatus(idx)
+                    return renderWire(
+                      `delivered-out-${idx}`,
+                      'end-in',
+                      delStatus === 'completed',
+                      allSessionsDelivered
+                    )
+                  })}
+                </>
+              ) : (
+                <>
+                  {/* Wire 4: Pre-Prod -> Event Day(s) tracks */}
+                  {multiEventDays.map((_: EventDateEntry, idx: number) => {
+                    return renderWire(
+                      'preprod-out',
+                      `day-in-${idx}`,
+                      currentStageIndex >= 3,
+                      currentStageIndex > 3,
+                      isMultiEvent ? `${idx + 1}` : undefined
+                    )
+                  })}
 
-              {/* Wire 8: Delivered -> End Completed Pill */}
-              {renderWire('delivered-out', 'end-in', currentStageIndex === 5, currentStageIndex === 5 && selectedProject?.status === 'completed')}
+                  {/* Wire 5: Event Day(s) tracks -> Post-Prod */}
+                  {multiEventDays.map((_: EventDateEntry, idx: number) => {
+                    return renderWire(
+                      `day-out-${idx}`,
+                      'postprod-in',
+                      currentStageIndex >= 4,
+                      currentStageIndex > 4
+                    )
+                  })}
+
+                  {/* Wire 6: Post-Prod -> Photo Track & Video Track */}
+                  {renderWire('postprod-out-photo', 'photo-in', isPostProdActive, isPostProdComplete || isPhotoTrackAllDone)}
+                  {renderWire('postprod-out-video', 'video-in', isPostProdActive, isPostProdComplete || isVideoTrackAllDone)}
+
+                  {/* Wire 7: Photo Track & Video Track -> Delivered */}
+                  {renderWire('photo-out', 'delivered-in', isPhotoTrackAllDone || currentStageIndex >= 5, (isPhotoTrackAllDone && isVideoTrackAllDone) || currentStageIndex >= 5)}
+                  {renderWire('video-out', 'delivered-in', isVideoTrackAllDone || currentStageIndex >= 5, (isPhotoTrackAllDone && isVideoTrackAllDone) || currentStageIndex >= 5)}
+
+                  {/* Wire 8: Delivered -> End Completed Pill */}
+                  {renderWire('delivered-out', 'end-in', currentStageIndex === 5, currentStageIndex === 5 && selectedProject?.status === 'completed')}
+                </>
+              )}
             </svg>
 
             {/* ─── NODE CARDS LAYOUT ─── */}
@@ -2368,379 +2556,715 @@ function EventsBoardContent() {
                 })}
               </div>
 
-              {/* STAGE 5: POST-PROD (Main node + parallel photo & video tracks) */}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '20px',
-                  width: '310px',
-                  transform: `translate3d(${nodeOffsets['postProduction']?.x || 0}px, ${nodeOffsets['postProduction']?.y || 0}px, 0)`,
-                  zIndex: draggingNodeId === 'postProduction' || draggingNodeId === 'photoTrack' || draggingNodeId === 'videoTrack' ? 10 : 2,
-                  position: 'relative',
-                }}
-              >
-                <div style={{ position: 'relative' }}>
-                  <StageNodeCard
-                    config={STAGE_CONFIGS[4]}
-                    status={getStageStatus('postProduction')}
-                    schedule="Post-event processing"
-                    isSelected={panelStageKey === 'postProduction'}
-                    onClick={() => handleStageCardClick('postProduction')}
-                    onMouseDown={(e) => handleNodeMouseDown(e, 'postProduction')}
-                    isNodeDragging={draggingNodeId === 'postProduction'}
-                    inPortId="postprod-in"
-                    gates={['Photo track completed', 'Video track completed']}
-                    assignedNames={assignedTeamMembers.map(s => s.name)}
-                    isDragging={isDragging}
-                  />
-                  {/* Branching ports at bottom to Photo and Video tracks */}
-                  <span
-                    data-port-id="postprod-out-photo"
-                    style={{
-                      position: 'absolute',
-                      left: '80px',
-                      bottom: '-6px',
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      background: 'var(--color-surface)',
-                      border: '2px solid var(--color-accent)',
-                      zIndex: 3,
-                    }}
-                  />
-                  <span
-                    data-port-id="postprod-out-video"
-                    style={{
-                      position: 'absolute',
-                      right: '80px',
-                      bottom: '-6px',
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      background: 'var(--color-surface)',
-                      border: '2px solid var(--color-secondary)',
-                      zIndex: 3,
-                    }}
-                  />
-                </div>
+              {/* STAGE 5 & 6 BRANCH: RECURRING SESSIONS VS STANDARD PIPELINE */}
+              {isRecurring ? (
+                <>
+                  {/* RECURRING MODE: COLUMN 6 (POST-PROD PER SESSION) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {multiEventDays.map((day: EventDateEntry, idx: number) => {
+                      const postStatus = getSessionPostProdStatus(idx)
+                      const isPostSelected = panelStageKey === 'postProduction' && selectedDayTab === idx
+                      const postNodeId = `postprod-${idx}`
+                      const isPostDragging = draggingNodeId === postNodeId
+                      const photoDoneCount = PHOTO_TRACK_MILESTONES.filter(m => isTrackMilestoneDone('photo', m, idx)).length
+                      const videoDoneCount = VIDEO_TRACK_MILESTONES.filter(m => isTrackMilestoneDone('video', m, idx)).length
+                      const isAllDone = postStatus === 'completed'
 
-                {/* Parallel Tracks visual cards */}
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  
-                  {/* Photo Track Card */}
-                  <div
-                    onClick={() => {
-                      if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
-                    }}
-                    onMouseDown={(e) => handleNodeMouseDown(e, 'photoTrack')}
-                    style={{
-                      flex: 1,
-                      background: 'var(--color-surface)',
-                      border: '0.5px solid var(--color-border)',
-                      borderTop: '2.5px solid var(--color-accent)',
-                      borderRadius: '10px',
-                      padding: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      position: 'relative',
-                      cursor: draggingNodeId === 'photoTrack' ? 'grabbing' : 'pointer',
-                      transform: `translate3d(${nodeOffsets['photoTrack']?.x || 0}px, ${nodeOffsets['photoTrack']?.y || 0}px, 0)`,
-                      zIndex: draggingNodeId === 'photoTrack' ? 10 : 2,
-                      boxShadow: draggingNodeId === 'photoTrack'
-                        ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-accent)'
-                        : panelStageKey === 'postProduction'
-                        ? '0 0 0 1px var(--color-accent)'
-                        : 'none',
-                      transition: draggingNodeId === 'photoTrack' ? 'none' : 'all 0.15s ease',
-                      userSelect: 'none',
-                    }}
-                  >
-                    {/* Ports */}
-                    <span
-                      data-port-id="photo-in"
-                      style={{
-                        position: 'absolute',
-                        top: '-6px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        background: 'var(--color-surface)',
-                        border: '2px solid var(--color-accent)',
-                      }}
-                    />
-                    <span
-                      data-port-id="photo-out"
-                      style={{
-                        position: 'absolute',
-                        right: '-6px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        background: 'var(--color-surface)',
-                        border: `2px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-accent)'}`,
-                      }}
-                    />
+                      const postBorderColor =
+                        postStatus === 'completed'
+                          ? 'var(--color-success)'
+                          : postStatus === 'active'
+                          ? 'var(--color-primary)'
+                          : 'var(--color-border)'
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
-                        <i className="ti ti-camera" style={{ fontSize: '14px', color: 'var(--color-accent)' }} />
-                        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                          Photo Track
-                        </span>
-                      </div>
-                      <span style={{
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        padding: '1px 6px',
-                        borderRadius: '10px',
-                        background: isPhotoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
-                        color: isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
-                        border: `0.5px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
-                      }}>
-                        {photoTrackDoneCount}/{PHOTO_TRACK_MILESTONES.length}
-                      </span>
-                    </div>
+                      const postRingColor =
+                        postStatus === 'completed'
+                          ? 'var(--color-success)'
+                          : postStatus === 'active'
+                          ? 'var(--color-primary)'
+                          : 'var(--color-border-strong)'
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
-                      {PHOTO_TRACK_MILESTONES.map((step) => {
-                        const isDone = isTrackMilestoneDone('photo', step)
-                        return (
-                          <div
-                            key={step}
+                      return (
+                        <div
+                          key={postNodeId}
+                          onClick={() => handleStageCardClick('postProduction', idx)}
+                          onMouseDown={(e) => handleNodeMouseDown(e, postNodeId)}
+                          style={{
+                            width: '270px',
+                            cursor: isPostDragging ? 'grabbing' : 'pointer',
+                            background: isPostSelected ? 'var(--color-surface-raised)' : 'var(--color-surface)',
+                            border: '0.5px solid var(--color-border)',
+                            borderLeft: `${isPostSelected ? '4px' : '3px'} solid ${postBorderColor}`,
+                            borderRadius: '12px',
+                            padding: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            boxShadow: isPostDragging
+                              ? `0 12px 28px rgba(0,0,0,0.35), 0 0 0 2px ${postRingColor}`
+                              : isPostSelected
+                              ? `0 0 0 2px ${postRingColor}, 0 6px 20px rgba(0,0,0,0.22)`
+                              : '0 2px 8px rgba(0,0,0,0.1)',
+                            position: 'relative',
+                            transform: `translate3d(${nodeOffsets[postNodeId]?.x || 0}px, ${nodeOffsets[postNodeId]?.y || 0}px, 0)`,
+                            zIndex: isPostDragging ? 10 : 2,
+                            transition: isPostDragging ? 'none' : 'box-shadow 0.15s ease, background-color 0.15s ease',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {/* Left & Right Ports */}
+                          <span
+                            data-port-id={`postprod-in-${idx}`}
                             style={{
+                              position: 'absolute',
+                              left: '-6px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              background: 'var(--color-surface)',
+                              border: '2px solid var(--color-accent)',
+                            }}
+                          />
+                          <span
+                            data-port-id={`postprod-out-${idx}`}
+                            style={{
+                              position: 'absolute',
+                              right: '-6px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              background: 'var(--color-surface)',
+                              border: `2px solid ${isAllDone ? 'var(--color-success)' : 'var(--color-primary)'}`,
+                            }}
+                          />
+
+                          {/* Header */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <i
+                                className="ti ti-grip-vertical"
+                                style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }}
+                                title="Drag node"
+                              />
+                              <i className="ti ti-palette" style={{ fontSize: '15px', color: 'var(--color-primary)' }} />
+                              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                                Post-Prod · Session {idx + 1}
+                              </span>
+                            </div>
+                            <StatusPill status={postStatus} />
+                          </div>
+
+                          {/* Track progress pills */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                              background: photoDoneCount === PHOTO_TRACK_MILESTONES.length ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                              color: photoDoneCount === PHOTO_TRACK_MILESTONES.length ? 'var(--color-success)' : 'var(--color-accent)',
+                              border: '0.5px solid var(--color-border)',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '6px',
-                              padding: '2px 4px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <i
-                              className={isDone ? 'ti ti-checkbox' : 'ti ti-square'}
-                              style={{
-                                fontSize: '13px',
-                                color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                                flexShrink: 0,
-                              }}
-                            />
-                            <span style={{
-                              fontSize: '11px',
-                              color: isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
-                              textDecoration: isDone ? 'line-through' : 'none',
-                              fontWeight: isDone ? 400 : 500,
-                              userSelect: 'none',
+                              gap: '4px',
                             }}>
-                              {step}
+                              <i className="ti ti-camera" style={{ fontSize: '12px' }} />
+                              Photo: {photoDoneCount}/{PHOTO_TRACK_MILESTONES.length}
+                            </span>
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                              background: videoDoneCount === VIDEO_TRACK_MILESTONES.length ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                              color: videoDoneCount === VIDEO_TRACK_MILESTONES.length ? 'var(--color-success)' : 'var(--color-secondary)',
+                              border: '0.5px solid var(--color-border)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}>
+                              <i className="ti ti-video" style={{ fontSize: '12px' }} />
+                              Video: {videoDoneCount}/{VIDEO_TRACK_MILESTONES.length}
                             </span>
                           </div>
-                        )
-                      })}
+
+                          {/* Exit gate summary */}
+                          <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i
+                              className={isAllDone ? 'ti ti-circle-check' : 'ti ti-circle'}
+                              style={{
+                                fontSize: '14px',
+                                color: isAllDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                              }}
+                            />
+                            <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                              Client review &amp; master export
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* RECURRING MODE: COLUMN 7 (DELIVERED PER SESSION) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {multiEventDays.map((day: EventDateEntry, idx: number) => {
+                      const delStatus = getSessionDeliveryStatus(idx)
+                      const isDelSelected = panelStageKey === 'delivered' && selectedDayTab === idx
+                      const delNodeId = `delivered-${idx}`
+                      const isDelDragging = draggingNodeId === delNodeId
+                      const isDelDone = delStatus === 'completed'
+
+                      const delBorderColor =
+                        delStatus === 'completed'
+                          ? 'var(--color-success)'
+                          : delStatus === 'active'
+                          ? 'var(--color-primary)'
+                          : 'var(--color-border)'
+
+                      const delRingColor =
+                        delStatus === 'completed'
+                          ? 'var(--color-success)'
+                          : delStatus === 'active'
+                          ? 'var(--color-primary)'
+                          : 'var(--color-border-strong)'
+
+                      return (
+                        <div
+                          key={delNodeId}
+                          onClick={() => handleStageCardClick('delivered', idx)}
+                          onMouseDown={(e) => handleNodeMouseDown(e, delNodeId)}
+                          style={{
+                            width: '250px',
+                            cursor: isDelDragging ? 'grabbing' : 'pointer',
+                            background: isDelSelected ? 'var(--color-surface-raised)' : 'var(--color-surface)',
+                            border: '0.5px solid var(--color-border)',
+                            borderLeft: `${isDelSelected ? '4px' : '3px'} solid ${delBorderColor}`,
+                            borderRadius: '12px',
+                            padding: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            boxShadow: isDelDragging
+                              ? `0 12px 28px rgba(0,0,0,0.35), 0 0 0 2px ${delRingColor}`
+                              : isDelSelected
+                              ? `0 0 0 2px ${delRingColor}, 0 6px 20px rgba(0,0,0,0.22)`
+                              : '0 2px 8px rgba(0,0,0,0.1)',
+                            position: 'relative',
+                            transform: `translate3d(${nodeOffsets[delNodeId]?.x || 0}px, ${nodeOffsets[delNodeId]?.y || 0}px, 0)`,
+                            zIndex: isDelDragging ? 10 : 2,
+                            transition: isDelDragging ? 'none' : 'box-shadow 0.15s ease, background-color 0.15s ease',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {/* Left & Right Ports */}
+                          <span
+                            data-port-id={`delivered-in-${idx}`}
+                            style={{
+                              position: 'absolute',
+                              left: '-6px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              background: 'var(--color-surface)',
+                              border: '2px solid var(--color-accent)',
+                            }}
+                          />
+                          <span
+                            data-port-id={`delivered-out-${idx}`}
+                            style={{
+                              position: 'absolute',
+                              right: '-6px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              background: 'var(--color-surface)',
+                              border: `2px solid ${isDelDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            }}
+                          />
+
+                          {/* Header */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <i
+                                className="ti ti-grip-vertical"
+                                style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }}
+                                title="Drag node"
+                              />
+                              <i className="ti ti-package" style={{ fontSize: '15px', color: 'var(--color-success)' }} />
+                              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                                Delivered · Session {idx + 1}
+                              </span>
+                            </div>
+                            <StatusPill status={delStatus} />
+                          </div>
+
+                          {/* Details */}
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span><i className="ti ti-calendar-check" style={{ marginRight: '4px' }} />Deliverables Handover</span>
+                            <span><i className="ti ti-user-check" style={{ marginRight: '4px' }} />Client Sign-off</span>
+                          </div>
+
+                          {/* Exit gate summary */}
+                          <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i
+                              className={isDelDone ? 'ti ti-circle-check' : 'ti ti-circle'}
+                              style={{
+                                fontSize: '14px',
+                                color: isDelDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                              }}
+                            />
+                            <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                              {isDelDone ? 'Session Handover Complete' : 'Pending Deliverables Sign-off'}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* RECURRING MODE: COLUMN 8 (CONTRACT COMPLETION PILL) */}
+                  <div style={{ display: 'flex', alignItems: 'center', marginTop: '68px' }}>
+                    <div
+                      onMouseDown={(e) => handleNodeMouseDown(e, 'end')}
+                      style={{
+                        width: '150px',
+                        flexShrink: 0,
+                        background: 'var(--color-surface)',
+                        border: `1.5px solid ${allSessionsDelivered ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        borderRadius: '20px',
+                        padding: '8px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: draggingNodeId === 'end'
+                          ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-success)'
+                          : '0 2px 8px rgba(0,0,0,0.15)',
+                        position: 'relative',
+                        cursor: draggingNodeId === 'end' ? 'grabbing' : 'grab',
+                        transform: `translate3d(${nodeOffsets['end']?.x || 0}px, ${nodeOffsets['end']?.y || 0}px, 0)`,
+                        zIndex: draggingNodeId === 'end' ? 10 : 2,
+                        transition: draggingNodeId === 'end' ? 'none' : 'box-shadow 0.15s ease',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <span
+                        data-port-id="end-in"
+                        style={{
+                          position: 'absolute',
+                          left: '-6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: 'var(--color-surface)',
+                          border: `2px solid ${allSessionsDelivered ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        }}
+                      />
+                      <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: allSessionsDelivered ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                        flexShrink: 0,
+                      }} />
+                      <span style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        color: allSessionsDelivered ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                      }}>
+                        Contract Done
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* STAGE 5: POST-PROD (Main node + parallel photo & video tracks) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '20px',
+                      width: '310px',
+                      transform: `translate3d(${nodeOffsets['postProduction']?.x || 0}px, ${nodeOffsets['postProduction']?.y || 0}px, 0)`,
+                      zIndex: draggingNodeId === 'postProduction' || draggingNodeId === 'photoTrack' || draggingNodeId === 'videoTrack' ? 10 : 2,
+                      position: 'relative',
+                    }}
+                  >
+                    <div style={{ position: 'relative' }}>
+                      <StageNodeCard
+                        config={STAGE_CONFIGS[4]}
+                        status={getStageStatus('postProduction')}
+                        schedule="Post-event processing"
+                        isSelected={panelStageKey === 'postProduction'}
+                        onClick={() => handleStageCardClick('postProduction')}
+                        onMouseDown={(e) => handleNodeMouseDown(e, 'postProduction')}
+                        isNodeDragging={draggingNodeId === 'postProduction'}
+                        inPortId="postprod-in"
+                        gates={['Photo track completed', 'Video track completed']}
+                        assignedNames={assignedTeamMembers.map(s => s.name)}
+                        isDragging={isDragging}
+                      />
+                      {/* Branching ports at bottom to Photo and Video tracks */}
+                      <span
+                        data-port-id="postprod-out-photo"
+                        style={{
+                          position: 'absolute',
+                          left: '80px',
+                          bottom: '-6px',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: 'var(--color-surface)',
+                          border: '2px solid var(--color-accent)',
+                          zIndex: 3,
+                        }}
+                      />
+                      <span
+                        data-port-id="postprod-out-video"
+                        style={{
+                          position: 'absolute',
+                          right: '80px',
+                          bottom: '-6px',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: 'var(--color-surface)',
+                          border: '2px solid var(--color-secondary)',
+                          zIndex: 3,
+                        }}
+                      />
+                    </div>
+
+                    {/* Parallel Tracks visual cards */}
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      
+                      {/* Photo Track Card */}
+                      <div
+                        onClick={() => {
+                          if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
+                        }}
+                        onMouseDown={(e) => handleNodeMouseDown(e, 'photoTrack')}
+                        style={{
+                          flex: 1,
+                          background: 'var(--color-surface)',
+                          border: '0.5px solid var(--color-border)',
+                          borderTop: '2.5px solid var(--color-accent)',
+                          borderRadius: '10px',
+                          padding: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          position: 'relative',
+                          cursor: draggingNodeId === 'photoTrack' ? 'grabbing' : 'pointer',
+                          transform: `translate3d(${nodeOffsets['photoTrack']?.x || 0}px, ${nodeOffsets['photoTrack']?.y || 0}px, 0)`,
+                          zIndex: draggingNodeId === 'photoTrack' ? 10 : 2,
+                          boxShadow: draggingNodeId === 'photoTrack'
+                            ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-accent)'
+                            : panelStageKey === 'postProduction'
+                            ? '0 0 0 1px var(--color-accent)'
+                            : 'none',
+                          transition: draggingNodeId === 'photoTrack' ? 'none' : 'all 0.15s ease',
+                          userSelect: 'none',
+                        }}
+                      >
+                        {/* Ports */}
+                        <span
+                          data-port-id="photo-in"
+                          style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: 'var(--color-surface)',
+                            border: '2px solid var(--color-accent)',
+                          }}
+                        />
+                        <span
+                          data-port-id="photo-out"
+                          style={{
+                            position: 'absolute',
+                            right: '-6px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: 'var(--color-surface)',
+                            border: `2px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-accent)'}`,
+                          }}
+                        />
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
+                            <i className="ti ti-camera" style={{ fontSize: '14px', color: 'var(--color-accent)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Photo Track
+                            </span>
+                          </div>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            background: isPhotoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                            color: isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+                            border: `0.5px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                          }}>
+                            {photoTrackDoneCount}/{PHOTO_TRACK_MILESTONES.length}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
+                          {PHOTO_TRACK_MILESTONES.map((step) => {
+                            const isDone = isTrackMilestoneDone('photo', step)
+                            return (
+                              <div
+                                key={step}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '2px 4px',
+                                  borderRadius: '4px',
+                                }}
+                              >
+                                <i
+                                  className={isDone ? 'ti ti-checkbox' : 'ti ti-square'}
+                                  style={{
+                                    fontSize: '13px',
+                                    color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <span style={{
+                                  fontSize: '11px',
+                                  color: isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
+                                  textDecoration: isDone ? 'line-through' : 'none',
+                                  fontWeight: isDone ? 400 : 500,
+                                  userSelect: 'none',
+                                }}>
+                                  {step}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Video Track Card */}
+                      <div
+                        onClick={() => {
+                          if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
+                        }}
+                        onMouseDown={(e) => handleNodeMouseDown(e, 'videoTrack')}
+                        style={{
+                          flex: 1,
+                          background: 'var(--color-surface)',
+                          border: '0.5px solid var(--color-border)',
+                          borderTop: '2.5px solid var(--color-secondary)',
+                          borderRadius: '10px',
+                          padding: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          position: 'relative',
+                          cursor: draggingNodeId === 'videoTrack' ? 'grabbing' : 'pointer',
+                          transform: `translate3d(${nodeOffsets['videoTrack']?.x || 0}px, ${nodeOffsets['videoTrack']?.y || 0}px, 0)`,
+                          zIndex: draggingNodeId === 'videoTrack' ? 10 : 2,
+                          boxShadow: draggingNodeId === 'videoTrack'
+                            ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-secondary)'
+                            : panelStageKey === 'postProduction'
+                            ? '0 0 0 1px var(--color-secondary)'
+                            : 'none',
+                          transition: draggingNodeId === 'videoTrack' ? 'none' : 'all 0.15s ease',
+                          userSelect: 'none',
+                        }}
+                      >
+                        {/* Ports */}
+                        <span
+                          data-port-id="video-in"
+                          style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: 'var(--color-surface)',
+                            border: '2px solid var(--color-secondary)',
+                          }}
+                        />
+                        <span
+                          data-port-id="video-out"
+                          style={{
+                            position: 'absolute',
+                            right: '-6px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: 'var(--color-surface)',
+                            border: `2px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-secondary)'}`,
+                          }}
+                        />
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
+                            <i className="ti ti-video" style={{ fontSize: '14px', color: 'var(--color-secondary)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Video Track
+                            </span>
+                          </div>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            background: isVideoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                            color: isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+                            border: `0.5px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                          }}>
+                            {videoTrackDoneCount}/{VIDEO_TRACK_MILESTONES.length}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
+                          {VIDEO_TRACK_MILESTONES.map((step) => {
+                            const isDone = isTrackMilestoneDone('video', step)
+                            return (
+                              <div
+                                key={step}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '2px 4px',
+                                  borderRadius: '4px',
+                                }}
+                              >
+                                <i
+                                  className={isDone ? 'ti ti-checkbox' : 'ti ti-square'}
+                                  style={{
+                                    fontSize: '13px',
+                                    color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <span style={{
+                                  fontSize: '11px',
+                                  color: isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
+                                  textDecoration: isDone ? 'line-through' : 'none',
+                                  fontWeight: isDone ? 400 : 500,
+                                  userSelect: 'none',
+                                }}>
+                                  {step}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
                     </div>
                   </div>
 
-                  {/* Video Track Card */}
-                  <div
-                    onClick={() => {
-                      if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
-                    }}
-                    onMouseDown={(e) => handleNodeMouseDown(e, 'videoTrack')}
-                    style={{
-                      flex: 1,
-                      background: 'var(--color-surface)',
-                      border: '0.5px solid var(--color-border)',
-                      borderTop: '2.5px solid var(--color-secondary)',
-                      borderRadius: '10px',
-                      padding: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      position: 'relative',
-                      cursor: draggingNodeId === 'videoTrack' ? 'grabbing' : 'pointer',
-                      transform: `translate3d(${nodeOffsets['videoTrack']?.x || 0}px, ${nodeOffsets['videoTrack']?.y || 0}px, 0)`,
-                      zIndex: draggingNodeId === 'videoTrack' ? 10 : 2,
-                      boxShadow: draggingNodeId === 'videoTrack'
-                        ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-secondary)'
-                        : panelStageKey === 'postProduction'
-                        ? '0 0 0 1px var(--color-secondary)'
-                        : 'none',
-                      transition: draggingNodeId === 'videoTrack' ? 'none' : 'all 0.15s ease',
-                      userSelect: 'none',
-                    }}
-                  >
-                    {/* Ports */}
-                    <span
-                      data-port-id="video-in"
+                  {/* STAGE 6: DELIVERED */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <StageNodeCard
+                      config={STAGE_CONFIGS[5]}
+                      status={getStageStatus('delivered')}
+                      schedule="Final handover"
+                      isSelected={panelStageKey === 'delivered'}
+                      onClick={() => handleStageCardClick('delivered')}
+                      onMouseDown={(e) => handleNodeMouseDown(e, 'delivered')}
                       style={{
-                        position: 'absolute',
-                        top: '-6px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        background: 'var(--color-surface)',
-                        border: '2px solid var(--color-secondary)',
+                        transform: `translate3d(${nodeOffsets['delivered']?.x || 0}px, ${nodeOffsets['delivered']?.y || 0}px, 0)`,
+                        zIndex: draggingNodeId === 'delivered' ? 10 : 2,
                       }}
-                    />
-                    <span
-                      data-port-id="video-out"
-                      style={{
-                        position: 'absolute',
-                        right: '-6px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        background: 'var(--color-surface)',
-                        border: `2px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-secondary)'}`,
-                      }}
+                      isNodeDragging={draggingNodeId === 'delivered'}
+                      inPortId="delivered-in"
+                      outPortId="delivered-out"
+                      gates={['Outstanding balance = ₹0', 'Client sign-off received']}
+                      assignedNames={assignedTeamMembers.slice(0, 1).map(s => s.name)}
+                      isDragging={isDragging}
                     />
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
-                        <i className="ti ti-video" style={{ fontSize: '14px', color: 'var(--color-secondary)' }} />
-                        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                          Video Track
-                        </span>
-                      </div>
+                    {/* Handover Complete Pill */}
+                    <div
+                      onMouseDown={(e) => handleNodeMouseDown(e, 'end')}
+                      style={{
+                        width: '140px',
+                        flexShrink: 0,
+                        background: 'var(--color-surface)',
+                        border: `1.5px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        borderRadius: '20px',
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: draggingNodeId === 'end'
+                          ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-success)'
+                          : '0 2px 8px rgba(0,0,0,0.15)',
+                        position: 'relative',
+                        cursor: draggingNodeId === 'end' ? 'grabbing' : 'grab',
+                        transform: `translate3d(${nodeOffsets['end']?.x || 0}px, ${nodeOffsets['end']?.y || 0}px, 0)`,
+                        zIndex: draggingNodeId === 'end' ? 10 : 2,
+                        transition: draggingNodeId === 'end' ? 'none' : 'box-shadow 0.15s ease',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {/* Left Port */}
+                      <span
+                        data-port-id="end-in"
+                        style={{
+                          position: 'absolute',
+                          left: '-6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: 'var(--color-surface)',
+                          border: `2px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        }}
+                      />
+                      <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
                       <span style={{
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        padding: '1px 6px',
-                        borderRadius: '10px',
-                        background: isVideoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
-                        color: isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
-                        border: `0.5px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                      }} />
+                      <span style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        color: currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
                       }}>
-                        {videoTrackDoneCount}/{VIDEO_TRACK_MILESTONES.length}
+                        Completed
                       </span>
                     </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
-                      {VIDEO_TRACK_MILESTONES.map((step) => {
-                        const isDone = isTrackMilestoneDone('video', step)
-                        return (
-                          <div
-                            key={step}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '2px 4px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <i
-                              className={isDone ? 'ti ti-checkbox' : 'ti ti-square'}
-                              style={{
-                                fontSize: '13px',
-                                color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                                flexShrink: 0,
-                              }}
-                            />
-                            <span style={{
-                              fontSize: '11px',
-                              color: isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
-                              textDecoration: isDone ? 'line-through' : 'none',
-                              fontWeight: isDone ? 400 : 500,
-                              userSelect: 'none',
-                            }}>
-                              {step}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
                   </div>
-
-                </div>
-              </div>
-
-              {/* STAGE 6: DELIVERED */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                <StageNodeCard
-                  config={STAGE_CONFIGS[5]}
-                  status={getStageStatus('delivered')}
-                  schedule="Final handover"
-                  isSelected={panelStageKey === 'delivered'}
-                  onClick={() => handleStageCardClick('delivered')}
-                  onMouseDown={(e) => handleNodeMouseDown(e, 'delivered')}
-                  style={{
-                    transform: `translate3d(${nodeOffsets['delivered']?.x || 0}px, ${nodeOffsets['delivered']?.y || 0}px, 0)`,
-                    zIndex: draggingNodeId === 'delivered' ? 10 : 2,
-                  }}
-                  isNodeDragging={draggingNodeId === 'delivered'}
-                  inPortId="delivered-in"
-                  outPortId="delivered-out"
-                  gates={['Outstanding balance = ₹0', 'Client sign-off received']}
-                  assignedNames={assignedTeamMembers.slice(0, 1).map(s => s.name)}
-                  isDragging={isDragging}
-                />
-
-                {/* Handover Complete Pill */}
-                <div
-                  onMouseDown={(e) => handleNodeMouseDown(e, 'end')}
-                  style={{
-                    width: '140px',
-                    flexShrink: 0,
-                    background: 'var(--color-surface)',
-                    border: `1.5px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
-                    borderRadius: '20px',
-                    padding: '8px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: draggingNodeId === 'end'
-                      ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-success)'
-                      : '0 2px 8px rgba(0,0,0,0.15)',
-                    position: 'relative',
-                    cursor: draggingNodeId === 'end' ? 'grabbing' : 'grab',
-                    transform: `translate3d(${nodeOffsets['end']?.x || 0}px, ${nodeOffsets['end']?.y || 0}px, 0)`,
-                    zIndex: draggingNodeId === 'end' ? 10 : 2,
-                    transition: draggingNodeId === 'end' ? 'none' : 'box-shadow 0.15s ease',
-                    userSelect: 'none',
-                  }}
-                >
-                  {/* Left Port */}
-                  <span
-                    data-port-id="end-in"
-                    style={{
-                      position: 'absolute',
-                      left: '-6px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      background: 'var(--color-surface)',
-                      border: `2px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
-                    }}
-                  />
-                  <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
-                  <span style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                  }} />
-                  <span style={{
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 700,
-                    color: currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                  }}>
-                    Completed
-                  </span>
-                </div>
-              </div>
+                </>
+              )}
 
             </div>
 
@@ -2773,7 +3297,9 @@ function EventsBoardContent() {
             borderBottom: '0.5px solid var(--color-border)',
           }}>
             <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, flex: 1, color: 'var(--color-foreground)' }}>
-              {panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]
+              {isRecurring && multiEventDays[selectedDayTab]
+                ? `${currentPanelConfig.name} · ${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`}`
+                : panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]
                 ? `${currentPanelConfig.name} · ${multiEventDays[selectedDayTab].label || `Day ${selectedDayTab + 1}`}`
                 : currentPanelConfig.name}
             </span>
@@ -2800,7 +3326,9 @@ function EventsBoardContent() {
                 Schedule
               </span>
               <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
-                {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                {isRecurring && multiEventDays[selectedDayTab]
+                  ? `${formatShortDate(multiEventDays[selectedDayTab].date)} · ${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`}`
+                  : panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
                   ? `${formatShortDate(multiEventDays[selectedDayTab].date)} · ${multiEventDays[selectedDayTab].label || 'Shoot day'}`
                   : selectedProject
                   ? `${formatShortDate(selectedProject.eventDate)} · ${currentPanelConfig.whenOffset}`
@@ -2836,7 +3364,11 @@ function EventsBoardContent() {
 
             {/* Stage Completed Timestamp (if stage completed) */}
             {(() => {
-              if (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]) {
+              if (isRecurring && multiEventDays[selectedDayTab]) {
+                if (panelStageKey === 'eventDay' && getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab) !== 'completed') return null
+                if (panelStageKey === 'postProduction' && getSessionPostProdStatus(selectedDayTab) !== 'completed') return null
+                if (panelStageKey === 'delivered' && getSessionDeliveryStatus(selectedDayTab) !== 'completed') return null
+              } else if (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]) {
                 const dayStatus = getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
                 if (dayStatus !== 'completed') return null
               }
@@ -2955,6 +3487,39 @@ function EventsBoardContent() {
             {/* Post-Production Parallel Tracks Checklists */}
             {panelStageKey === 'postProduction' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {isRecurring && multiEventDays.length > 1 && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px',
+                    background: 'var(--color-surface-raised)',
+                    borderRadius: '8px',
+                    overflowX: 'auto',
+                  }}>
+                    {multiEventDays.map((d, i) => (
+                      <button
+                        key={d.id || i}
+                        onClick={() => setSelectedDayTab(i)}
+                        style={{
+                          flex: 1,
+                          padding: '5px 8px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: selectedDayTab === i ? 'var(--color-primary)' : 'transparent',
+                          color: selectedDayTab === i ? '#ffffff' : 'var(--color-foreground-muted)',
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Session {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Photo Track Card in Side Panel */}
                 <div style={{
                   background: 'var(--color-surface-raised)',
@@ -3441,13 +4006,17 @@ function EventsBoardContent() {
                   <i className={panelStageKey === 'eventDay' ? 'ti ti-calendar-time' : 'ti ti-lock'} style={{ fontSize: '20px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                      {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                      {isRecurring && multiEventDays[selectedDayTab]
+                        ? `${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`} ${STAGE_CONFIGS.find(s => s.stageKey === panelStageKey)?.name || 'Stage'}`
+                        : panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
                         ? `${multiEventDays[selectedDayTab].label || 'Session'} Scheduled`
                         : 'Upcoming Stage'}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
                       {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
                         ? `Scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
+                        : isRecurring && multiEventDays[selectedDayTab]
+                        ? `Session shoot is scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
                         : `Unlocks after ${STAGE_CONFIGS[currentStageIndex]?.name} is completed.`}
                     </div>
                   </div>
@@ -3469,7 +4038,39 @@ function EventsBoardContent() {
                 return (
                   <>
                     {panelStageKey === 'delivered' ? (
-                      selectedProject?.status === 'completed' ? (
+                      isRecurring ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {getSessionDeliveryStatus(selectedDayTab) === 'completed' ? (
+                            <div style={{
+                              padding: '12px',
+                              borderRadius: '8px',
+                              background: 'var(--color-success-muted)',
+                              border: '0.5px solid var(--color-success)',
+                              color: 'var(--color-success)',
+                              fontSize: 'var(--text-sm)',
+                              fontWeight: 600,
+                              textAlign: 'center',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                            }}>
+                              <i className="ti ti-circle-check" style={{ fontSize: '16px' }} />
+                              <span>Session {selectedDayTab + 1} Handover Complete</span>
+                            </div>
+                          ) : (
+                            <Button
+                              onClick={() => handleDeliverSession(selectedDayTab)}
+                              disabled={isAdvancing}
+                              className="w-full h-9 text-xs font-semibold"
+                              style={{ background: 'var(--color-success)', color: '#ffffff' }}
+                            >
+                              <i className="ti ti-package" style={{ marginRight: '6px' }} />
+                              Deliver Session {selectedDayTab + 1}
+                            </Button>
+                          )}
+                        </div>
+                      ) : selectedProject?.status === 'completed' ? (
                         <div style={{
                           padding: '12px',
                           borderRadius: '8px',
