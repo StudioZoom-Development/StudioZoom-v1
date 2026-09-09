@@ -17,18 +17,14 @@ const STEPS: StepDef[] = [
 ]
 
 interface StepIndicatorProps {
-  currentStep:  number
-  onStepClick:  (step: number) => void
-  onSaveDraft:  () => void
-  isSaving:     boolean
+  currentStep:    number
+  onStepClick:    (step: number) => void
   completedSteps: Set<number>
 }
 
 export default function StepIndicator({
   currentStep,
   onStepClick,
-  onSaveDraft,
-  isSaving,
   completedSteps,
 }: StepIndicatorProps): React.JSX.Element {
   return (
@@ -134,32 +130,6 @@ export default function StepIndicator({
           )
         })}
       </div>
-
-      {/* Save Draft */}
-      <button
-        onClick={onSaveDraft}
-        disabled={isSaving}
-        style={{
-          fontFamily: 'var(--font-inter)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '6px',
-          padding: '10px 16px',
-          margin: '0 16px',
-          background: 'transparent',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '8px',
-          fontSize: 'var(--text-sm)',
-          color: 'var(--color-foreground-muted)',
-          cursor: isSaving ? 'not-allowed' : 'pointer',
-          opacity: isSaving ? 0.5 : 1,
-          transition: 'all 0.2s ease',
-        }}
-      >
-        <i className="ti ti-device-floppy" style={{ fontSize: '16px' }} />
-        {isSaving ? 'Saving…' : 'Save as draft'}
-      </button>
     </div>
   )
 }

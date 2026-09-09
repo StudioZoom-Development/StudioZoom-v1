@@ -1245,11 +1245,11 @@ interface TeamRowProps {
 }
 
 function TeamMemberRow({ personId, name, roleSubtitle, isFreelancer, items }: TeamRowProps) {
-  const myItems  = items.filter(w => w.assignedToUid === personId && w.status !== 'done')
-  const current  = myItems.find(w => w.status === 'inProgress') ?? myItems[0]
-  const upcoming = myItems.filter(w => w.workItemId !== current?.workItemId)[0]
+  const myActiveItems = items.filter(w => w.assignedToUid === personId && w.status !== 'done')
+  const current       = myActiveItems.find(w => w.status === 'inProgress') ?? myActiveItems[0] ?? items.find(w => w.assignedToUid === personId)
+  const upcoming      = myActiveItems.filter(w => w.workItemId !== current?.workItemId)[0]
 
-  const workloadScore = myItems.length
+  const workloadScore = myActiveItems.length
   const workload = workloadScore === 0 ? 'Low' : workloadScore <= 2 ? 'Low' : workloadScore <= 4 ? 'Normal' : 'High'
   const wlColor  = workload === 'High' ? 'var(--color-danger)' : workload === 'Normal' ? 'var(--color-accent)' : 'var(--color-success)'
 
@@ -1295,7 +1295,7 @@ function TeamMemberRow({ personId, name, roleSubtitle, isFreelancer, items }: Te
               {WORK_TYPE_META[current.type]?.label ?? current.type}
             </div>
             <div style={{ fontSize: 'var(--text-xs)', color: isOverdue(current) ? 'var(--color-danger)' : 'var(--color-foreground-muted)' }}>
-              {current.progressPercent ?? 0}% · due {formatDate(current.dueDate)}
+              {current.status === 'done' ? 'Completed' : `${current.progressPercent ?? 0}% · due ${formatDate(current.dueDate)}`}
               {isOverdue(current) && ' (overdue)'}
             </div>
           </div>
@@ -1334,10 +1334,10 @@ function TeamMemberRow({ personId, name, roleSubtitle, isFreelancer, items }: Te
       <td style={{ padding: '12px 16px' }}>
         <span style={{
           fontSize: 'var(--text-xs)',
-          color: myItems.length === 0 ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+          color: myActiveItems.length === 0 ? 'var(--color-success)' : 'var(--color-foreground-muted)',
           fontWeight: 500,
         }}>
-          {myItems.length === 0 ? 'Available now' : 'Busy'}
+          {myActiveItems.length === 0 ? 'Available now' : 'Busy'}
         </span>
       </td>
     </tr>
@@ -1714,6 +1714,145 @@ export default function WorkBoardPage() {
     freelancers.filter(f => !allWorkItems.some(w => w.assignedToUid === f.freelancerId && w.status !== 'done'))
   , [freelancers, allWorkItems])
 
+  // Helper to match a team member against the skill/type filter
+  const matchesSkill = (type: WorkItemType, isFreelancer: boolean, skillOrJob?: string, items: WorkItem[] = []): boolean => {
+    if (items.some(w => w.type === type)) return true
+    const normalized = (skillOrJob || '').toLowerCase()
+    if (isFreelancer) {
+      if (normalized === 'photographer' && type === 'photography') return true
+      if (normalized === 'videographer' && ['videography', 'highlights', 'fullFilm'].includes(type)) return true
+      if (normalized === 'editor' && ['photoEditing', 'videoEditing'].includes(type)) return true
+      if (normalized === 'designer' && type === 'albumDesign') return true
+      return false
+    } else {
+      if (type === 'photography' && (normalized.includes('photo') || normalized.includes('camera'))) return true
+      if (['videography', 'highlights', 'fullFilm'].includes(type) && (normalized.includes('video') || normalized.includes('cinematograph') || normalized.includes('film'))) return true
+      if (['photoEditing', 'videoEditing'].includes(type) && (normalized.includes('edit') || normalized.includes('post'))) return true
+      if (type === 'albumDesign' && (normalized.includes('design') || normalized.includes('album'))) return true
+      return false
+    }
+  }
+
+  // Filtered staff list for Staff tab
+  const filteredStaffList = useMemo(() => {
+    return staff.filter(s => {
+      if (filterStaff && s.uid !== filterStaff) return false
+      const sItems = allWorkItems.filter(w => w.assignedToUid === s.uid)
+
+      if (filterType && !matchesSkill(filterType, false, s.jobTitle, sItems)) return false
+
+      if (filterStatus) {
+        const hasStatus = sItems.some(w =>
+          w.status === filterStatus &&
+          (!filterType || w.type === filterType) &&
+          (!filterPriority || w.priority === filterPriority)
+        )
+        if (!hasStatus) return false
+      }
+
+      if (filterPriority) {
+        const hasPriority = sItems.some(w =>
+          w.priority === filterPriority &&
+          (!filterType || w.type === filterType) &&
+          (!filterStatus || w.status === filterStatus)
+        )
+        if (!hasPriority) return false
+      }
+
+      return true
+    })
+  }, [staff, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+
+  // Filtered freelancers list for Staff tab
+  const filteredFreelancersList = useMemo(() => {
+    return freelancers.filter(f => {
+      if (filterStaff && f.freelancerId !== filterStaff) return false
+      const fItems = allWorkItems.filter(w => w.assignedToUid === f.freelancerId)
+
+      if (filterType && !matchesSkill(filterType, true, f.skill, fItems)) return false
+
+      if (filterStatus) {
+        const hasStatus = fItems.some(w =>
+          w.status === filterStatus &&
+          (!filterType || w.type === filterType) &&
+          (!filterPriority || w.priority === filterPriority)
+        )
+        if (!hasStatus) return false
+      }
+
+      if (filterPriority) {
+        const hasPriority = fItems.some(w =>
+          w.priority === filterPriority &&
+          (!filterType || w.type === filterType) &&
+          (!filterStatus || w.status === filterStatus)
+        )
+        if (!hasPriority) return false
+      }
+
+      return true
+    })
+  }, [freelancers, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+
+  // Filtered available staff for Available tab
+  const filteredAvailableStaff = useMemo(() => {
+    return availableStaff.filter(s => {
+      if (filterStaff && s.uid !== filterStaff) return false
+      const sItems = allWorkItems.filter(w => w.assignedToUid === s.uid)
+
+      if (filterType && !matchesSkill(filterType, false, s.jobTitle, sItems)) return false
+
+      if (filterStatus) {
+        const hasStatus = sItems.some(w =>
+          w.status === filterStatus &&
+          (!filterType || w.type === filterType) &&
+          (!filterPriority || w.priority === filterPriority)
+        )
+        if (!hasStatus) return false
+      }
+
+      if (filterPriority) {
+        const hasPriority = sItems.some(w =>
+          w.priority === filterPriority &&
+          (!filterType || w.type === filterType) &&
+          (!filterStatus || w.status === filterStatus)
+        )
+        if (!hasPriority) return false
+      }
+
+      return true
+    })
+  }, [availableStaff, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+
+  // Filtered available freelancers for Available tab
+  const filteredAvailableFreelancers = useMemo(() => {
+    return availableFreelancers.filter(f => {
+      if (filterStaff && f.freelancerId !== filterStaff) return false
+      const fItems = allWorkItems.filter(w => w.assignedToUid === f.freelancerId)
+
+      if (filterType && !matchesSkill(filterType, true, f.skill, fItems)) return false
+
+      if (filterStatus) {
+        const hasStatus = fItems.some(w =>
+          w.status === filterStatus &&
+          (!filterType || w.type === filterType) &&
+          (!filterPriority || w.priority === filterPriority)
+        )
+        if (!hasStatus) return false
+      }
+
+      if (filterPriority) {
+        const hasPriority = fItems.some(w =>
+          w.priority === filterPriority &&
+          (!filterType || w.type === filterType) &&
+          (!filterStatus || w.status === filterStatus)
+        )
+        if (!hasPriority) return false
+      }
+
+      return true
+    })
+  }, [availableFreelancers, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+
   // Update Status handler (used by cards and side panel)
   const handleStatusChange = async (id: string, status: WorkItemStatus) => {
     const progressVal = status === 'done' ? 100 : status === 'inProgress' ? 50 : status === 'review' ? 80 : 0
@@ -2063,7 +2202,12 @@ export default function WorkBoardPage() {
         </select>
 
         <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-          {filtered.length} works
+          {tab === 'board'
+            ? `${filtered.length} works`
+            : tab === 'staff'
+              ? `${filteredStaffList.length + filteredFreelancersList.length} members`
+              : `${filteredAvailableStaff.length + filteredAvailableFreelancers.length} available`
+          }
         </span>
       </div>
 
@@ -2153,29 +2297,45 @@ export default function WorkBoardPage() {
               </tr>
             </thead>
             <tbody>
-              {/* Staff Rows */}
-              {staff.map(s => (
-                <TeamMemberRow
-                  key={s.uid}
-                  personId={s.uid}
-                  name={s.name}
-                  roleSubtitle={s.jobTitle || 'Staff Member'}
-                  isFreelancer={false}
-                  items={allWorkItems}
-                />
-              ))}
+              {filteredStaffList.length === 0 && filteredFreelancersList.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{
+                    textAlign: 'center',
+                    padding: '48px 16px',
+                    color: 'var(--color-foreground-muted)',
+                    fontSize: 'var(--text-sm)',
+                  }}>
+                    <i className="ti ti-filter-off" style={{ fontSize: '28px', display: 'block', marginBottom: '8px', color: 'var(--color-foreground-subtle)' }} />
+                    No team members match the selected filter criteria.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {/* Staff Rows */}
+                  {filteredStaffList.map(s => (
+                    <TeamMemberRow
+                      key={s.uid}
+                      personId={s.uid}
+                      name={s.name}
+                      roleSubtitle={s.jobTitle || 'Staff Member'}
+                      isFreelancer={false}
+                      items={allWorkItems}
+                    />
+                  ))}
 
-              {/* Freelancer Rows */}
-              {freelancers.map(f => (
-                <TeamMemberRow
-                  key={f.freelancerId}
-                  personId={f.freelancerId}
-                  name={f.name}
-                  roleSubtitle={`${f.skill.charAt(0).toUpperCase() + f.skill.slice(1)} · Freelancer`}
-                  isFreelancer={true}
-                  items={allWorkItems}
-                />
-              ))}
+                  {/* Freelancer Rows */}
+                  {filteredFreelancersList.map(f => (
+                    <TeamMemberRow
+                      key={f.freelancerId}
+                      personId={f.freelancerId}
+                      name={f.name}
+                      roleSubtitle={`${f.skill.charAt(0).toUpperCase() + f.skill.slice(1)} · Freelancer`}
+                      isFreelancer={true}
+                      items={allWorkItems}
+                    />
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
         </div>
@@ -2184,14 +2344,16 @@ export default function WorkBoardPage() {
       {/* ── AVAILABLE TAB ── */}
       {tab === 'available' && (
         <div>
-          {availableStaff.length === 0 && availableFreelancers.length === 0 ? (
+          {filteredAvailableStaff.length === 0 && filteredAvailableFreelancers.length === 0 ? (
             <div style={{
               textAlign: 'center', padding: '60px 24px',
               color: 'var(--color-foreground-muted)',
               fontSize: 'var(--text-sm)',
             }}>
               <i className="ti ti-users" style={{ fontSize: '32px', display: 'block', marginBottom: '12px', color: 'var(--color-foreground-subtle)' }} />
-              All team members are currently assigned to active works.
+              {availableStaff.length === 0 && availableFreelancers.length === 0
+                ? 'All team members are currently assigned to active works.'
+                : 'No available team members match the selected filter criteria.'}
             </div>
           ) : (
             <>
@@ -2204,7 +2366,7 @@ export default function WorkBoardPage() {
                 gap: '16px',
               }}>
                 {/* Available Staff */}
-                {availableStaff.map(s => (
+                {filteredAvailableStaff.map(s => (
                   <AvailablePersonCard
                     key={s.uid}
                     name={s.name}
@@ -2218,7 +2380,7 @@ export default function WorkBoardPage() {
                 ))}
 
                 {/* Available Freelancers */}
-                {availableFreelancers.map(f => (
+                {filteredAvailableFreelancers.map(f => (
                   <AvailablePersonCard
                     key={f.freelancerId}
                     name={f.name}
