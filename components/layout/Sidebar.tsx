@@ -18,11 +18,11 @@ interface NavItem {
 const CRM_ITEMS: NavItem[] = [
   { id: 'events',     label: 'Events Board', icon: 'ti-route',           href: '/events',            roles: ['admin','manager'] },
   { id: 'calendar',   label: 'Calendar',     icon: 'ti-calendar-event',  href: '/events/calendar',   roles: ['admin','manager'] },
-  { id: 'work-board', label: 'Work Board',   icon: 'ti-layout-kanban',   href: '/events/work-board', roles: ['admin','manager'] },
-  { id: 'editing',    label: 'Editing Queue',icon: 'ti-wand',            href: '/events/editing',    roles: ['admin','manager','staff'] },
+  { id: 'work-board', label: 'Work Board',   icon: 'ti-layout-kanban',   href: '/events/work-board', roles: ['admin','manager','staff'] },
   { id: 'clients',    label: 'Clients',      icon: 'ti-users',           href: '/clients',           roles: ['admin','manager'] },
   { id: 'leads',      label: 'Leads',        icon: 'ti-user-plus',       href: '/leads',             roles: ['admin','manager'] },
 ]
+
 
 const HRMS_ITEMS: NavItem[] = [
   { id: 'attendance',  label: 'Attendance',  icon: 'ti-checklist',    href: '/hrms/attendance',  roles: ['admin','manager','staff'] },

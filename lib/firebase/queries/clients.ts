@@ -31,6 +31,7 @@ export function subscribeToClients(
           customEventType: data.customEventType || '',
           startTime: data.startTime || '',
           endTime:   data.endTime || '',
+          freelancerIds: Array.isArray(data.freelancerIds) ? data.freelancerIds : [],
           eventDate: data.eventDate instanceof Timestamp
             ? data.eventDate.toDate()
             : data.eventDate ? new Date(data.eventDate) : new Date(),
@@ -101,6 +102,7 @@ export async function getClientById(clientId: string): Promise<Client | null> {
     customEventType: data.customEventType || '',
     startTime: data.startTime || '',
     endTime:   data.endTime || '',
+    freelancerIds: Array.isArray(data.freelancerIds) ? data.freelancerIds : [],
     eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
     eventDates: Array.isArray(data.eventDates)
@@ -386,19 +388,6 @@ export async function createBooking(data: {
   // Write 3: Project — denormalized fields from client
   batch.set(projectRef, projectDocData)
 
-  // Write 4: Increment invoice counter
-  if (data.status === 'booked') {
-    if (numSnap.exists()) {
-      batch.update(doc(db, 'studioSettings', 'numberingConfig'), {
-        invoiceStartNumber: nextNum + 1,
-      })
-    } else {
-      batch.set(doc(db, 'studioSettings', 'config'), {
-        invoiceStartNumber: nextNum + 1,
-      }, { merge: true })
-    }
-  }
-
   console.group('🔥 [createBooking] Firestore Batch Payload')
   console.log('Incoming Data:', data)
   console.log('Client Document (/clients/' + clientRef.id + '):', clientDocData)
@@ -410,8 +399,25 @@ export async function createBooking(data: {
   console.groupEnd()
 
   await batch.commit()
-
   console.log('✅ [createBooking] Successfully committed batch. Created clientId:', clientRef.id)
+
+  // Increment invoice counter outside the core booking batch so permission restrictions on studioSettings do not abort booking creation
+  if (data.status === 'booked') {
+    try {
+      if (numSnap.exists()) {
+        await updateDoc(doc(db, 'studioSettings', 'numberingConfig'), {
+          invoiceStartNumber: nextNum + 1,
+        })
+      } else {
+        await setDoc(doc(db, 'studioSettings', 'config'), {
+          invoiceStartNumber: nextNum + 1,
+        }, { merge: true })
+      }
+    } catch (settErr) {
+      console.warn('⚠️ [createBooking] Could not update studioSettings numbering counter (non-fatal):', settErr)
+    }
+  }
+
   return clientRef.id
 }
 
