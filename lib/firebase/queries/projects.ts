@@ -4,7 +4,7 @@ import {
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Project, ProjectStage, StaffAssignment } from '@/types'
+import { Project, ProjectStage, StaffAssignment, EventDateEntry } from '@/types'
 
 const STAGE_ORDER: ProjectStage[] = [
   'booked',
@@ -15,18 +15,55 @@ const STAGE_ORDER: ProjectStage[] = [
   'delivered'
 ]
 
+function parseFirestoreDate(val: unknown, fallback: Date = new Date()): Date {
+  if (!val) return fallback
+  if (val instanceof Date && !isNaN(val.getTime())) return val
+  if (typeof (val as { toDate?: () => Date }).toDate === 'function') {
+    const d = (val as { toDate: () => Date }).toDate()
+    if (!isNaN(d.getTime())) return d
+  }
+  if (typeof val === 'object' && val !== null) {
+    if ('seconds' in val && typeof (val as { seconds: number }).seconds === 'number') {
+      const d = new Date((val as { seconds: number }).seconds * 1000)
+      if (!isNaN(d.getTime())) return d
+    }
+    if ('_seconds' in val && typeof (val as { _seconds: number })._seconds === 'number') {
+      const d = new Date((val as { _seconds: number })._seconds * 1000)
+      if (!isNaN(d.getTime())) return d
+    }
+  }
+  const parsed = new Date(val as string | number)
+  return !isNaN(parsed.getTime()) ? parsed : fallback
+}
+
+function parseEventDates(raw: unknown): EventDateEntry[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return raw.map((item, idx) => ({
+    id: item.id || `day-${idx}`,
+    label: item.label || `Event Day ${idx + 1}`,
+    location: item.location || '',
+    startTime: item.startTime || '',
+    endTime: item.endTime || '',
+    date: parseFirestoreDate(item.date),
+  }))
+}
+
+function mapDocToProject(id: string, data: Record<string, any>): Project {
+  return {
+    ...data,
+    projectId: id,
+    eventDate: parseFirestoreDate(data.eventDate),
+    createdAt: parseFirestoreDate(data.createdAt),
+    updatedAt: parseFirestoreDate(data.updatedAt),
+    eventDates: parseEventDates(data.eventDates),
+  } as Project
+}
+
 /** Get single project by ID */
 export async function getProjectById(projectId: string): Promise<Project | null> {
   const snap = await getDoc(doc(db, 'projects', projectId))
   if (!snap.exists()) return null
-  const data = snap.data()
-  return {
-    ...data,
-    projectId: snap.id,
-    eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
-  } as Project
+  return mapDocToProject(snap.id, snap.data())
 }
 
 /** Get project linked to a client by clientId */
@@ -37,15 +74,7 @@ export async function getProjectByClientId(clientId: string): Promise<Project | 
   )
   const snap = await getDocs(q)
   if (snap.empty) return null
-  const docSnap = snap.docs[0]
-  const data = docSnap.data()
-  return {
-    ...data,
-    projectId: docSnap.id,
-    eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
-  } as Project
+  return mapDocToProject(snap.docs[0].id, snap.docs[0].data())
 }
 
 /** Real-time subscription to project by ID */
@@ -58,14 +87,7 @@ export function subscribeToProject(
       callback(null)
       return
     }
-    const data = snap.data()
-    callback({
-      ...data,
-      projectId: snap.id,
-      eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
-      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
-      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
-    } as Project)
+    callback(mapDocToProject(snap.id, snap.data()))
   })
 }
 
@@ -85,6 +107,23 @@ export function subscribeToProjectStaffAssignments(
       createdAt: d.data().createdAt instanceof Timestamp ? d.data().createdAt.toDate() : new Date(),
     } as StaffAssignment))
     callback(list)
+  })
+}
+
+/** Real-time subscription to all staff assignments */
+export function subscribeToAllStaffAssignments(
+  callback: (assignments: StaffAssignment[]) => void
+): () => void {
+  const q = query(collection(db, 'staffAssignments'))
+  return onSnapshot(q, snap => {
+    const list = snap.docs.map(d => ({
+      ...d.data(),
+      assignmentId: d.id,
+      createdAt: d.data().createdAt instanceof Timestamp ? d.data().createdAt.toDate() : new Date(),
+    } as StaffAssignment))
+    callback(list)
+  }, err => {
+    console.error('subscribeToAllStaffAssignments error:', err)
   })
 }
 
@@ -228,16 +267,7 @@ export function subscribeToProjects(
   const q = query(collection(db, 'projects'))
   return onSnapshot(q, snap => {
     const list = snap.docs
-      .map(d => {
-        const data = d.data()
-        return {
-          ...data,
-          projectId: d.id,
-          eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
-          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
-        } as Project
-      })
+      .map(d => mapDocToProject(d.id, d.data()))
       .filter(p => !p.isDeleted && p.status !== 'cancelled')
 
     list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
@@ -252,16 +282,7 @@ export async function getActiveProjects(): Promise<Project[]> {
   try {
     const snap = await getDocs(collection(db, 'projects'))
     const list = snap.docs
-      .map(d => {
-        const data = d.data()
-        return {
-          ...data,
-          projectId: d.id,
-          eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
-          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : new Date(),
-        } as Project
-      })
+      .map(d => mapDocToProject(d.id, d.data()))
       .filter(p => !p.isDeleted && p.status !== 'cancelled')
 
     list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())

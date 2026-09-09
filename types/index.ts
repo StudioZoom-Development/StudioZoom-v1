@@ -163,25 +163,34 @@ export type WorkItemType =
   | 'photography' | 'videography' | 'photoEditing'
   | 'videoEditing' | 'albumDesign' | 'highlights' | 'fullFilm'
 
-export type WorkItemStatus = 'todo' | 'inProgress' | 'review' | 'done'
+export type WorkItemStatus = 'pending' | 'todo' | 'inProgress' | 'review' | 'done'
 export type WorkTrack      = 'photo' | 'video'
 
+export type WorkItemPriority = 'low' | 'medium' | 'high'
+
 export interface WorkItem {
-  workItemId:      string
-  projectId:       string
-  clientId:        string
-  eventDate:       Date
-  eventName:       string           // DENORMALIZED
-  type:            WorkItemType
-  track:           WorkTrack
-  assignedToUid:   string
-  assignedToName:  string           // DENORMALIZED
-  status:          WorkItemStatus
-  startDate?:      Date
-  dueDate?:        Date
-  notes?:          string
-  createdBy:       string
-  createdAt:       Date
+  workItemId:       string
+  projectId:        string
+  clientId:         string
+  eventDate:        Date
+  eventName:        string           // DENORMALIZED
+  clientName?:      string           // DENORMALIZED
+  type:             WorkItemType
+  track:            WorkTrack
+  assignedToUid:    string
+  assignedToName:   string           // DENORMALIZED
+  isFreelancer?:    boolean
+  status:           WorkItemStatus
+  priority?:        WorkItemPriority
+  estimatedHours?:  number
+  progressPercent?: number           // 0–100
+  startDate?:       Date
+  dueDate?:         Date
+  notes?:           string
+  isDeleted?:       boolean
+  createdBy:        string
+  createdAt:        Date
+  updatedAt?:       Date
 }
 
 // ─── EQUIPMENT ────────────────────────────────────────────────────────────
