@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
@@ -282,6 +282,37 @@ function EventsBoardContent() {
   const [zoom, setZoom] = useState<number>(1)
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 48, y: 48 })
   const [isDragging, setIsDragging] = useState(false)
+
+  // ─── DYNAMIC PORT MEASUREMENT ───────────────────────────────────────────
+  const measurePorts = useCallback(() => {
+    if (!canvasRef.current || !innerContainerRef.current) return
+    const innerRect = innerContainerRef.current.getBoundingClientRect()
+    const elements = innerContainerRef.current.querySelectorAll<HTMLElement>('[data-port-id]')
+    const coords: Record<string, Point> = {}
+
+    elements.forEach(el => {
+      const id = el.getAttribute('data-port-id')
+      if (!id) return
+      const rect = el.getBoundingClientRect()
+      // Calculate coordinates relative to inner container taking scale into account
+      const x = (rect.left + rect.width / 2 - innerRect.left) / zoom
+      const y = (rect.top + rect.height / 2 - innerRect.top) / zoom
+      coords[id] = { x, y }
+    })
+
+    setPorts(coords)
+  }, [zoom])
+
+  useEffect(() => {
+    measurePorts()
+    const timer = setTimeout(measurePorts, 60)
+    return () => clearTimeout(timer)
+  }, [measurePorts, selectedProjectId, selectedDayTab, projects])
+
+  useEffect(() => {
+    window.addEventListener('resize', measurePorts)
+    return () => window.removeEventListener('resize', measurePorts)
+  }, [measurePorts])
   const dragStartRef = useRef<{
     mouseX: number
     mouseY: number
@@ -295,6 +326,68 @@ function EventsBoardContent() {
     panY: 48,
     hasMoved: false,
   })
+
+  // Draggable node offsets { [nodeId]: { x, y } }
+  const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({})
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
+  const draggingNodeRef = useRef<{
+    nodeId: string
+    startMouseX: number
+    startMouseY: number
+    startOffsetX: number
+    startOffsetY: number
+    hasMoved: boolean
+  } | null>(null)
+  const rafRef = useRef<number | null>(null)
+
+  // Load custom node offsets from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('studio_zoom_node_offsets')
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, { x: number; y: number }>
+        if (parsed && typeof parsed === 'object') {
+          const timer = setTimeout(() => {
+            setNodeOffsets(parsed)
+            setTimeout(measurePorts, 60)
+          }, 0)
+          return () => clearTimeout(timer)
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [measurePorts])
+
+  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    if (e.button !== 0) return
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, select, textarea, a, [data-no-drag]')) {
+      return
+    }
+    e.stopPropagation()
+
+    draggingNodeRef.current = {
+      nodeId,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startOffsetX: nodeOffsets[nodeId]?.x || 0,
+      startOffsetY: nodeOffsets[nodeId]?.y || 0,
+      hasMoved: false,
+    }
+  }
+
+  const handleResetPositions = () => {
+    setNodeOffsets({})
+    try {
+      localStorage.removeItem('studio_zoom_node_offsets')
+    } catch {
+      // ignore
+    }
+    setPan({ x: 48, y: 48 })
+    setZoom(1)
+    setTimeout(measurePorts, 50)
+  }
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // Only drag with left mouse button (0) or middle mouse button (1)
@@ -318,22 +411,74 @@ function EventsBoardContent() {
 
   // Global mousemove and mouseup listeners for buttery smooth dragging in all directions
   useEffect(() => {
-    if (!isDragging) return
-
     const handleMouseMove = (e: MouseEvent) => {
-      const dx = e.clientX - dragStartRef.current.mouseX
-      const dy = e.clientY - dragStartRef.current.mouseY
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        dragStartRef.current.hasMoved = true
+      // 1. Node dragging takes priority
+      if (draggingNodeRef.current) {
+        const dx = (e.clientX - draggingNodeRef.current.startMouseX) / zoom
+        const dy = (e.clientY - draggingNodeRef.current.startMouseY) / zoom
+        const dist = Math.hypot(dx * zoom, dy * zoom)
+
+        // Require at least 8px of intentional movement to start dragging the node
+        if (!draggingNodeRef.current.hasMoved) {
+          if (dist < 8) return
+          draggingNodeRef.current.hasMoved = true
+          setDraggingNodeId(draggingNodeRef.current.nodeId)
+        }
+
+        const nextX = Math.round(draggingNodeRef.current.startOffsetX + dx)
+        const nextY = Math.round(draggingNodeRef.current.startOffsetY + dy)
+
+        setNodeOffsets(prev => ({
+          ...prev,
+          [draggingNodeRef.current!.nodeId]: { x: nextX, y: nextY },
+        }))
+
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          measurePorts()
+        })
+        return
       }
-      setPan({
-        x: dragStartRef.current.panX + dx,
-        y: dragStartRef.current.panY + dy,
-      })
+
+      // 2. Canvas panning
+      if (isDragging) {
+        const dx = e.clientX - dragStartRef.current.mouseX
+        const dy = e.clientY - dragStartRef.current.mouseY
+        const dist = Math.hypot(dx, dy)
+        if (!dragStartRef.current.hasMoved) {
+          if (dist < 8) return
+          dragStartRef.current.hasMoved = true
+        }
+        setPan({
+          x: dragStartRef.current.panX + dx,
+          y: dragStartRef.current.panY + dy,
+        })
+      }
     }
 
     const handleMouseUp = () => {
+      if (draggingNodeRef.current) {
+        const hasMoved = draggingNodeRef.current.hasMoved
+
+        if (hasMoved) {
+          setTimeout(measurePorts, 20)
+          setNodeOffsets(current => {
+            try {
+              localStorage.setItem('studio_zoom_node_offsets', JSON.stringify(current))
+            } catch {
+              // ignore
+            }
+            return current
+          })
+        }
+
+        setDraggingNodeId(null)
+        setTimeout(() => {
+          draggingNodeRef.current = null
+        }, 50)
+      }
       setIsDragging(false)
+      dragStartRef.current.hasMoved = false
     }
 
     window.addEventListener('mousemove', handleMouseMove)
@@ -341,8 +486,9 @@ function EventsBoardContent() {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [isDragging])
+  }, [isDragging, draggingNodeId, zoom, measurePorts])
 
   // Mouse wheel scroll up/down for zoom in and zoom out
   useEffect(() => {
@@ -363,9 +509,9 @@ function EventsBoardContent() {
     return () => canvasEl.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Prevent opening stage panel if the user was dragging/panning across a card
+  // Open stage panel on card click (only block if user actively dragged the node)
   const handleStageCardClick = (stageKey: ProjectStage, dayIdx?: number) => {
-    if (dragStartRef.current.hasMoved) return
+    if (draggingNodeRef.current?.hasMoved) return
     if (dayIdx !== undefined) {
       setSelectedDayTab(dayIdx)
     }
@@ -378,8 +524,35 @@ function EventsBoardContent() {
 
   // ─── REAL-TIME FIRESTORE SUBSCRIPTIONS ──────────────────────────────────
   useEffect(() => {
+    const getFallback = (): Project[] => {
+      if (typeof window !== 'undefined') {
+        try {
+          const saved = localStorage.getItem('studio_zoom_demo_projects')
+          if (saved) {
+            const list = JSON.parse(saved)
+            if (Array.isArray(list) && list.length > 0) {
+              return list.map((p: Record<string, unknown>) => ({
+                ...p,
+                eventDate: new Date(p.eventDate as string),
+                createdAt: new Date(p.createdAt as string),
+                updatedAt: new Date(p.updatedAt as string),
+                eventDates: Array.isArray(p.eventDates)
+                  ? (p.eventDates as Record<string, unknown>[]).map((ed, i) => ({
+                      ...ed,
+                      id: (ed.id as string) || `day-${i}`,
+                      date: new Date(ed.date as string),
+                    }))
+                  : undefined,
+              })) as unknown as Project[]
+            }
+          }
+        } catch {}
+      }
+      return MOCK_FALLBACK_PROJECTS
+    }
+
     const unsubProjects = subscribeToProjects(firestoreProjects => {
-      const projs = firestoreProjects && firestoreProjects.length > 0 ? firestoreProjects : MOCK_FALLBACK_PROJECTS
+      const projs = firestoreProjects && firestoreProjects.length > 0 ? firestoreProjects : getFallback()
       setProjects(projs)
       setSelectedProjectId(curr => {
         if (paramProject) {
@@ -391,6 +564,17 @@ function EventsBoardContent() {
         return firstActive?.projectId || null
       })
     })
+
+    const handleSync = () => {
+      const projs = getFallback()
+      setProjects(prev => {
+        if (prev.length === 0 || prev.some(p => p.projectId.startsWith('demo-'))) {
+          return projs
+        }
+        return prev
+      })
+    }
+    window.addEventListener('studio_zoom_projects_changed', handleSync)
 
     const unsubStaff = subscribeToStaff(team => {
       if (team && team.length > 0) {
@@ -408,6 +592,7 @@ function EventsBoardContent() {
       unsubProjects()
       unsubStaff()
       unsubFreelancers()
+      window.removeEventListener('studio_zoom_projects_changed', handleSync)
     }
   }, [paramProject])
 
@@ -475,36 +660,7 @@ function EventsBoardContent() {
     return () => clearTimeout(timer)
   }, [paramProject, paramStage, projects])
 
-  // ─── DYNAMIC PORT MEASUREMENT ───────────────────────────────────────────
-  const measurePorts = useCallback(() => {
-    if (!canvasRef.current || !innerContainerRef.current) return
-    const innerRect = innerContainerRef.current.getBoundingClientRect()
-    const elements = innerContainerRef.current.querySelectorAll<HTMLElement>('[data-port-id]')
-    const coords: Record<string, Point> = {}
 
-    elements.forEach(el => {
-      const id = el.getAttribute('data-port-id')
-      if (!id) return
-      const rect = el.getBoundingClientRect()
-      // Calculate coordinates relative to inner container taking scale into account
-      const x = (rect.left + rect.width / 2 - innerRect.left) / zoom
-      const y = (rect.top + rect.height / 2 - innerRect.top) / zoom
-      coords[id] = { x, y }
-    })
-
-    setPorts(coords)
-  }, [zoom])
-
-  useLayoutEffect(() => {
-    measurePorts()
-    const timer = setTimeout(measurePorts, 60)
-    return () => clearTimeout(timer)
-  }, [measurePorts, selectedProjectId, selectedDayTab, projects])
-
-  useEffect(() => {
-    window.addEventListener('resize', measurePorts)
-    return () => window.removeEventListener('resize', measurePorts)
-  }, [measurePorts])
 
   // ─── KPI METRICS ────────────────────────────────────────────────────────
   const now = useMemo(() => new Date(), [])
@@ -581,7 +737,34 @@ function EventsBoardContent() {
   const multiEventDays: EventDateEntry[] = useMemo(() => {
     if (!selectedProject) return []
     if (selectedProject.eventDates && selectedProject.eventDates.length > 0) {
-      return selectedProject.eventDates
+      return (selectedProject.eventDates as unknown as Array<{
+        id?: string
+        date: unknown
+        label?: string
+        location?: string
+        startTime?: string
+        endTime?: string
+      }>).map((ed, i) => {
+        let dateVal: unknown = ed.date
+        if (dateVal && typeof (dateVal as { toDate?: () => Date }).toDate === 'function') {
+          dateVal = (dateVal as { toDate: () => Date }).toDate()
+        } else if (dateVal && typeof dateVal === 'object' && 'seconds' in dateVal && typeof (dateVal as { seconds: number }).seconds === 'number') {
+          dateVal = new Date((dateVal as { seconds: number }).seconds * 1000)
+        } else if (dateVal && typeof dateVal === 'object' && '_seconds' in dateVal && typeof (dateVal as { _seconds: number })._seconds === 'number') {
+          dateVal = new Date((dateVal as { _seconds: number })._seconds * 1000)
+        } else if (dateVal && !(dateVal instanceof Date) && (typeof dateVal === 'string' || typeof dateVal === 'number')) {
+          dateVal = new Date(dateVal)
+        }
+        const validDate = dateVal instanceof Date && !isNaN(dateVal.getTime()) ? dateVal : selectedProject.eventDate
+        return {
+          id: ed.id || `day-${i}`,
+          date: validDate,
+          label: ed.label || `Day ${i + 1}`,
+          location: ed.location,
+          startTime: ed.startTime,
+          endTime: ed.endTime,
+        }
+      })
     }
     return [
       {
@@ -830,12 +1013,21 @@ function EventsBoardContent() {
   const handleAssignStaff = async (staffUid: string) => {
     if (!selectedProject) return
     if (selectedProject.projectId.startsWith('demo-')) {
-      setProjects(prev => prev.map(p => {
-        if (p.projectId === selectedProject.projectId) {
-          return { ...p, staffUids: [...(p.staffUids || []), staffUid] }
+      setProjects(prev => {
+        const next = prev.map(p => {
+          if (p.projectId === selectedProject.projectId) {
+            return { ...p, staffUids: [...(p.staffUids || []), staffUid] }
+          }
+          return p
+        })
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('studio_zoom_demo_projects', JSON.stringify(next))
+            window.dispatchEvent(new Event('studio_zoom_projects_changed'))
+          } catch {}
         }
-        return p
-      }))
+        return next
+      })
     } else {
       await assignStaffToProject(selectedProject.projectId, staffUid, selectedProject.clientId)
     }
@@ -844,12 +1036,21 @@ function EventsBoardContent() {
   const handleRemoveStaff = async (staffUid: string) => {
     if (!selectedProject) return
     if (selectedProject.projectId.startsWith('demo-')) {
-      setProjects(prev => prev.map(p => {
-        if (p.projectId === selectedProject.projectId) {
-          return { ...p, staffUids: (p.staffUids || []).filter(id => id !== staffUid) }
+      setProjects(prev => {
+        const next = prev.map(p => {
+          if (p.projectId === selectedProject.projectId) {
+            return { ...p, staffUids: (p.staffUids || []).filter(id => id !== staffUid) }
+          }
+          return p
+        })
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('studio_zoom_demo_projects', JSON.stringify(next))
+            window.dispatchEvent(new Event('studio_zoom_projects_changed'))
+          } catch {}
         }
-        return p
-      }))
+        return next
+      })
     } else {
       await removeStaffFromProject(selectedProject.projectId, staffUid, selectedProject.clientId)
     }
@@ -874,27 +1075,36 @@ function EventsBoardContent() {
     const assignedRole = fl ? (fl.skill.charAt(0).toUpperCase() + fl.skill.slice(1)) : 'Photographer'
     const assignedRate = fl?.dayRate || 6000
 
-    setProjects(prev => prev.map(p => {
-      if (p.projectId === selectedProject.projectId) {
-        const updatedIds = Array.from(new Set([...(p.freelancerIds || []), freelancerId]))
-        const updatedAssignments = {
-          ...(p.freelancerAssignments || {}),
-          [freelancerId]: { role: assignedRole, days: 1, dayRate: assignedRate }
+    setProjects(prev => {
+      const next = prev.map(p => {
+        if (p.projectId === selectedProject.projectId) {
+          const updatedIds = Array.from(new Set([...(p.freelancerIds || []), freelancerId]))
+          const updatedAssignments = {
+            ...(p.freelancerAssignments || {}),
+            [freelancerId]: { role: assignedRole, days: 1, dayRate: assignedRate }
+          }
+          const updatedRates = {
+            ...(p.freelancerRates || {}),
+            [freelancerId]: assignedRate
+          }
+          return {
+            ...p,
+            freelancerIds: updatedIds,
+            freelancerAssignments: updatedAssignments,
+            freelancerRates: updatedRates,
+            updatedAt: new Date(),
+          }
         }
-        const updatedRates = {
-          ...(p.freelancerRates || {}),
-          [freelancerId]: assignedRate
-        }
-        return {
-          ...p,
-          freelancerIds: updatedIds,
-          freelancerAssignments: updatedAssignments,
-          freelancerRates: updatedRates,
-          updatedAt: new Date(),
-        }
+        return p
+      })
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('studio_zoom_demo_projects', JSON.stringify(next))
+          window.dispatchEvent(new Event('studio_zoom_projects_changed'))
+        } catch {}
       }
-      return p
-    }))
+      return next
+    })
 
     // Auto check 'Freelancer crew confirmed' gate if in Pre-Prod
     const overrideKey = `${selectedProject.projectId}_preProduction_Freelancer crew confirmed`
@@ -916,23 +1126,32 @@ function EventsBoardContent() {
   const handleRemoveFreelancer = async (freelancerId: string) => {
     if (!selectedProject) return
 
-    setProjects(prev => prev.map(p => {
-      if (p.projectId === selectedProject.projectId) {
-        const updatedIds = (p.freelancerIds || []).filter(id => id !== freelancerId)
-        const updatedAssignments = { ...(p.freelancerAssignments || {}) }
-        delete updatedAssignments[freelancerId]
-        const updatedRates = { ...(p.freelancerRates || {}) }
-        delete updatedRates[freelancerId]
-        return {
-          ...p,
-          freelancerIds: updatedIds,
-          freelancerAssignments: updatedAssignments,
-          freelancerRates: updatedRates,
-          updatedAt: new Date(),
+    setProjects(prev => {
+      const next = prev.map(p => {
+        if (p.projectId === selectedProject.projectId) {
+          const updatedIds = (p.freelancerIds || []).filter(id => id !== freelancerId)
+          const updatedAssignments = { ...(p.freelancerAssignments || {}) }
+          delete updatedAssignments[freelancerId]
+          const updatedRates = { ...(p.freelancerRates || {}) }
+          delete updatedRates[freelancerId]
+          return {
+            ...p,
+            freelancerIds: updatedIds,
+            freelancerAssignments: updatedAssignments,
+            freelancerRates: updatedRates,
+            updatedAt: new Date(),
+          }
         }
+        return p
+      })
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('studio_zoom_demo_projects', JSON.stringify(next))
+          window.dispatchEvent(new Event('studio_zoom_projects_changed'))
+        } catch {}
       }
-      return p
-    }))
+      return next
+    })
 
     if (!selectedProject.projectId.startsWith('demo-')) {
       try {
@@ -943,9 +1162,21 @@ function EventsBoardContent() {
     }
   }
 
-  const formatShortDate = (d: Date | string | undefined) => {
+  const formatShortDate = (d: unknown) => {
     if (!d) return '—'
-    const date = d instanceof Date ? d : new Date(d)
+    let date: Date
+    if (d instanceof Date) {
+      date = d
+    } else if (typeof (d as { toDate?: () => Date }).toDate === 'function') {
+      date = (d as { toDate: () => Date }).toDate()
+    } else if (typeof d === 'object' && d !== null && 'seconds' in d && typeof (d as { seconds: number }).seconds === 'number') {
+      date = new Date((d as { seconds: number }).seconds * 1000)
+    } else if (typeof d === 'object' && d !== null && '_seconds' in d && typeof (d as { _seconds: number })._seconds === 'number') {
+      date = new Date((d as { _seconds: number })._seconds * 1000)
+    } else {
+      date = new Date(d as string | number)
+    }
+    if (isNaN(date.getTime())) return '—'
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 
@@ -1372,6 +1603,26 @@ function EventsBoardContent() {
             </span>
           </div>
 
+          {/* Reset Positions Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetPositions}
+            title="Reset all node positions to default layout"
+            style={{
+              height: '32px',
+              fontSize: 'var(--text-xs)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderColor: Object.keys(nodeOffsets).length > 0 ? 'var(--color-primary)' : 'var(--color-border)',
+              color: Object.keys(nodeOffsets).length > 0 ? 'var(--color-primary)' : 'var(--color-foreground)',
+            }}
+          >
+            <i className="ti ti-refresh" style={{ fontSize: '14px' }} />
+            Reset positions
+          </Button>
+
           {/* Project Detail Link Button */}
           {selectedProject?.clientId && (
             <Button
@@ -1475,20 +1726,31 @@ function EventsBoardContent() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '64px', position: 'relative', zIndex: 2 }}>
               
               {/* ROOT NODE: START PROJECT PILL */}
-              <div style={{
-                marginTop: '68px',
-                width: '130px',
-                flexShrink: 0,
-                background: 'var(--color-surface)',
-                border: '1.5px solid var(--color-accent)',
-                borderRadius: '20px',
-                padding: '8px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                position: 'relative',
-              }}>
+              <div
+                onMouseDown={(e) => handleNodeMouseDown(e, 'start')}
+                style={{
+                  marginTop: '68px',
+                  width: '130px',
+                  flexShrink: 0,
+                  background: 'var(--color-surface)',
+                  border: '1.5px solid var(--color-accent)',
+                  borderRadius: '20px',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: draggingNodeId === 'start'
+                    ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-accent)'
+                    : '0 2px 8px rgba(0,0,0,0.15)',
+                  position: 'relative',
+                  cursor: draggingNodeId === 'start' ? 'grabbing' : 'grab',
+                  transform: `translate3d(${nodeOffsets['start']?.x || 0}px, ${nodeOffsets['start']?.y || 0}px, 0)`,
+                  zIndex: draggingNodeId === 'start' ? 10 : 2,
+                  transition: draggingNodeId === 'start' ? 'none' : 'box-shadow 0.15s ease',
+                  userSelect: 'none',
+                }}
+              >
+                <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-accent)' }} />
                 <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-accent)' }}>
                   Start Project
@@ -1517,6 +1779,12 @@ function EventsBoardContent() {
                 schedule={formatShortDate(selectedProject?.createdAt)}
                 isSelected={panelStageKey === 'booked'}
                 onClick={() => handleStageCardClick('booked')}
+                onMouseDown={(e) => handleNodeMouseDown(e, 'booked')}
+                style={{
+                  transform: `translate3d(${nodeOffsets['booked']?.x || 0}px, ${nodeOffsets['booked']?.y || 0}px, 0)`,
+                  zIndex: draggingNodeId === 'booked' ? 10 : 2,
+                }}
+                isNodeDragging={draggingNodeId === 'booked'}
                 inPortId="booked-in"
                 outPortId="booked-out"
                 gates={['Advance recorded', 'Quotation accepted']}
@@ -1531,6 +1799,12 @@ function EventsBoardContent() {
                 schedule="2–3 weeks prior"
                 isSelected={panelStageKey === 'planning'}
                 onClick={() => handleStageCardClick('planning')}
+                onMouseDown={(e) => handleNodeMouseDown(e, 'planning')}
+                style={{
+                  transform: `translate3d(${nodeOffsets['planning']?.x || 0}px, ${nodeOffsets['planning']?.y || 0}px, 0)`,
+                  zIndex: draggingNodeId === 'planning' ? 10 : 2,
+                }}
+                isNodeDragging={draggingNodeId === 'planning'}
                 inPortId="planning-in"
                 outPortId="planning-out"
                 gates={['Shot list approved', 'Core team assigned', 'Venue walkthrough done']}
@@ -1545,6 +1819,12 @@ function EventsBoardContent() {
                 schedule="3–5 days prior"
                 isSelected={panelStageKey === 'preProduction'}
                 onClick={() => handleStageCardClick('preProduction')}
+                onMouseDown={(e) => handleNodeMouseDown(e, 'preProduction')}
+                style={{
+                  transform: `translate3d(${nodeOffsets['preProduction']?.x || 0}px, ${nodeOffsets['preProduction']?.y || 0}px, 0)`,
+                  zIndex: draggingNodeId === 'preProduction' ? 10 : 2,
+                }}
+                isNodeDragging={draggingNodeId === 'preProduction'}
                 inPortId="preprod-in"
                 outPortId="preprod-out"
                 gates={['Equipment checked out', 'Freelancer crew confirmed']}
@@ -1560,33 +1840,49 @@ function EventsBoardContent() {
                 {multiEventDays.map((day: EventDateEntry, idx: number) => {
                   const dayStatus = getStageStatus('eventDay')
                   const isDaySelected = panelStageKey === 'eventDay' && selectedDayTab === idx
+                  const dayNodeId = `eventDay-${idx}`
+                  const isDayDragging = draggingNodeId === dayNodeId
+
+                  const dayLeftBorderColor =
+                    dayStatus === 'completed'
+                      ? 'var(--color-success)'
+                      : dayStatus === 'active'
+                      ? 'var(--color-primary)'
+                      : 'var(--color-border)'
+
+                  const daySelectionRingColor =
+                    dayStatus === 'completed'
+                      ? 'var(--color-success)'
+                      : dayStatus === 'active'
+                      ? 'var(--color-primary)'
+                      : 'var(--color-border-strong)'
 
                   return (
                     <div
                       key={day.id || idx}
                       onClick={() => handleStageCardClick('eventDay', idx)}
+                      onMouseDown={(e) => handleNodeMouseDown(e, dayNodeId)}
                       style={{
                         width: '260px',
-                        cursor: isDragging ? 'grabbing' : 'pointer',
-                        background: 'var(--color-surface)',
+                        cursor: isDayDragging ? 'grabbing' : 'pointer',
+                        background: isDaySelected ? 'var(--color-surface-raised)' : 'var(--color-surface)',
                         border: '0.5px solid var(--color-border)',
-                        borderLeft: `3px solid ${
-                          dayStatus === 'completed'
-                            ? 'var(--color-success)'
-                            : dayStatus === 'active'
-                            ? 'var(--color-primary)'
-                            : 'var(--color-border)'
-                        }`,
+                        borderLeft: `${isDaySelected ? '4px' : '3px'} solid ${dayLeftBorderColor}`,
                         borderRadius: '12px',
                         padding: '16px',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '10px',
-                        boxShadow: isDaySelected
-                          ? '0 0 0 2px var(--color-primary), 0 4px 14px rgba(0,0,0,0.2)'
+                        boxShadow: isDayDragging
+                          ? `0 12px 28px rgba(0,0,0,0.35), 0 0 0 2px ${daySelectionRingColor}`
+                          : isDaySelected
+                          ? `0 0 0 2px ${daySelectionRingColor}, 0 6px 20px rgba(0,0,0,0.22)`
                           : '0 2px 8px rgba(0,0,0,0.1)',
                         position: 'relative',
-                        transition: 'all 0.15s ease',
+                        transform: `translate3d(${nodeOffsets[dayNodeId]?.x || 0}px, ${nodeOffsets[dayNodeId]?.y || 0}px, 0)`,
+                        zIndex: isDayDragging ? 10 : 2,
+                        transition: isDayDragging ? 'none' : 'box-shadow 0.15s ease, background-color 0.15s ease',
+                        userSelect: 'none',
                       }}
                     >
                       {/* Left & Right Ports */}
@@ -1622,6 +1918,11 @@ function EventsBoardContent() {
                       {/* Header with track number badge */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i
+                            className="ti ti-grip-vertical"
+                            style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }}
+                            title="Drag node"
+                          />
                           {isMultiEvent && (
                             <span style={{
                               width: '18px',
@@ -1671,7 +1972,17 @@ function EventsBoardContent() {
               </div>
 
               {/* STAGE 5: POST-PROD (Main node + parallel photo & video tracks) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '310px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px',
+                  width: '310px',
+                  transform: `translate3d(${nodeOffsets['postProduction']?.x || 0}px, ${nodeOffsets['postProduction']?.y || 0}px, 0)`,
+                  zIndex: draggingNodeId === 'postProduction' || draggingNodeId === 'photoTrack' || draggingNodeId === 'videoTrack' ? 10 : 2,
+                  position: 'relative',
+                }}
+              >
                 <div style={{ position: 'relative' }}>
                   <StageNodeCard
                     config={STAGE_CONFIGS[4]}
@@ -1679,6 +1990,8 @@ function EventsBoardContent() {
                     schedule="Post-event processing"
                     isSelected={panelStageKey === 'postProduction'}
                     onClick={() => handleStageCardClick('postProduction')}
+                    onMouseDown={(e) => handleNodeMouseDown(e, 'postProduction')}
+                    isNodeDragging={draggingNodeId === 'postProduction'}
                     inPortId="postprod-in"
                     gates={['Photo track completed', 'Video track completed']}
                     assignedNames={assignedTeamMembers.map(s => s.name)}
@@ -1721,8 +2034,9 @@ function EventsBoardContent() {
                   {/* Photo Track Card */}
                   <div
                     onClick={() => {
-                      if (!dragStartRef.current.hasMoved) handleStageCardClick('postProduction')
+                      if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
                     }}
+                    onMouseDown={(e) => handleNodeMouseDown(e, 'photoTrack')}
                     style={{
                       flex: 1,
                       background: 'var(--color-surface)',
@@ -1734,9 +2048,16 @@ function EventsBoardContent() {
                       flexDirection: 'column',
                       gap: '8px',
                       position: 'relative',
-                      cursor: 'pointer',
-                      boxShadow: panelStageKey === 'postProduction' ? '0 0 0 1px var(--color-accent)' : 'none',
-                      transition: 'all 0.15s ease',
+                      cursor: draggingNodeId === 'photoTrack' ? 'grabbing' : 'pointer',
+                      transform: `translate3d(${nodeOffsets['photoTrack']?.x || 0}px, ${nodeOffsets['photoTrack']?.y || 0}px, 0)`,
+                      zIndex: draggingNodeId === 'photoTrack' ? 10 : 2,
+                      boxShadow: draggingNodeId === 'photoTrack'
+                        ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-accent)'
+                        : panelStageKey === 'postProduction'
+                        ? '0 0 0 1px var(--color-accent)'
+                        : 'none',
+                      transition: draggingNodeId === 'photoTrack' ? 'none' : 'all 0.15s ease',
+                      userSelect: 'none',
                     }}
                   >
                     {/* Ports */}
@@ -1771,6 +2092,7 @@ function EventsBoardContent() {
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
                         <i className="ti ti-camera" style={{ fontSize: '14px', color: 'var(--color-accent)' }} />
                         <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
                           Photo Track
@@ -1829,8 +2151,9 @@ function EventsBoardContent() {
                   {/* Video Track Card */}
                   <div
                     onClick={() => {
-                      if (!dragStartRef.current.hasMoved) handleStageCardClick('postProduction')
+                      if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
                     }}
+                    onMouseDown={(e) => handleNodeMouseDown(e, 'videoTrack')}
                     style={{
                       flex: 1,
                       background: 'var(--color-surface)',
@@ -1842,9 +2165,16 @@ function EventsBoardContent() {
                       flexDirection: 'column',
                       gap: '8px',
                       position: 'relative',
-                      cursor: 'pointer',
-                      boxShadow: panelStageKey === 'postProduction' ? '0 0 0 1px var(--color-secondary)' : 'none',
-                      transition: 'all 0.15s ease',
+                      cursor: draggingNodeId === 'videoTrack' ? 'grabbing' : 'pointer',
+                      transform: `translate3d(${nodeOffsets['videoTrack']?.x || 0}px, ${nodeOffsets['videoTrack']?.y || 0}px, 0)`,
+                      zIndex: draggingNodeId === 'videoTrack' ? 10 : 2,
+                      boxShadow: draggingNodeId === 'videoTrack'
+                        ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-secondary)'
+                        : panelStageKey === 'postProduction'
+                        ? '0 0 0 1px var(--color-secondary)'
+                        : 'none',
+                      transition: draggingNodeId === 'videoTrack' ? 'none' : 'all 0.15s ease',
+                      userSelect: 'none',
                     }}
                   >
                     {/* Ports */}
@@ -1879,6 +2209,7 @@ function EventsBoardContent() {
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
                         <i className="ti ti-video" style={{ fontSize: '14px', color: 'var(--color-secondary)' }} />
                         <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
                           Video Track
@@ -1945,6 +2276,12 @@ function EventsBoardContent() {
                   schedule="Final handover"
                   isSelected={panelStageKey === 'delivered'}
                   onClick={() => handleStageCardClick('delivered')}
+                  onMouseDown={(e) => handleNodeMouseDown(e, 'delivered')}
+                  style={{
+                    transform: `translate3d(${nodeOffsets['delivered']?.x || 0}px, ${nodeOffsets['delivered']?.y || 0}px, 0)`,
+                    zIndex: draggingNodeId === 'delivered' ? 10 : 2,
+                  }}
+                  isNodeDragging={draggingNodeId === 'delivered'}
                   inPortId="delivered-in"
                   outPortId="delivered-out"
                   gates={['Outstanding balance = ₹0', 'Client sign-off received']}
@@ -1953,19 +2290,29 @@ function EventsBoardContent() {
                 />
 
                 {/* Handover Complete Pill */}
-                <div style={{
-                  width: '140px',
-                  flexShrink: 0,
-                  background: 'var(--color-surface)',
-                  border: `1.5px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
-                  borderRadius: '20px',
-                  padding: '8px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  position: 'relative',
-                }}>
+                <div
+                  onMouseDown={(e) => handleNodeMouseDown(e, 'end')}
+                  style={{
+                    width: '140px',
+                    flexShrink: 0,
+                    background: 'var(--color-surface)',
+                    border: `1.5px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
+                    borderRadius: '20px',
+                    padding: '8px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: draggingNodeId === 'end'
+                      ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-success)'
+                      : '0 2px 8px rgba(0,0,0,0.15)',
+                    position: 'relative',
+                    cursor: draggingNodeId === 'end' ? 'grabbing' : 'grab',
+                    transform: `translate3d(${nodeOffsets['end']?.x || 0}px, ${nodeOffsets['end']?.y || 0}px, 0)`,
+                    zIndex: draggingNodeId === 'end' ? 10 : 2,
+                    transition: draggingNodeId === 'end' ? 'none' : 'box-shadow 0.15s ease',
+                    userSelect: 'none',
+                  }}
+                >
                   {/* Left Port */}
                   <span
                     data-port-id="end-in"
@@ -1981,6 +2328,7 @@ function EventsBoardContent() {
                       border: `2px solid ${currentStageIndex === 5 ? 'var(--color-success)' : 'var(--color-border)'}`,
                     }}
                   />
+                  <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
                   <span style={{
                     width: '8px',
                     height: '8px',
@@ -2053,9 +2401,11 @@ function EventsBoardContent() {
                 Schedule
               </span>
               <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
-                {selectedProject ? formatShortDate(selectedProject.eventDate) : '—'}
-                {' · '}
-                {currentPanelConfig.whenOffset}
+                {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                  ? `${formatShortDate(multiEventDays[selectedDayTab].date)} · ${multiEventDays[selectedDayTab].label || 'Shoot day'}`
+                  : selectedProject
+                  ? `${formatShortDate(selectedProject.eventDate)} · ${currentPanelConfig.whenOffset}`
+                  : '—'}
               </span>
             </div>
 
@@ -2780,16 +3130,19 @@ function EventsBoardContent() {
 
 // ─── REUSABLE STAGE NODE CARD COMPONENT ─────────────────────────────────────
 interface StageNodeCardProps {
-  config:        StageConfig
-  status:        'completed' | 'active' | 'pending'
-  schedule:      string
-  isSelected:    boolean
-  onClick:       () => void
-  inPortId?:     string
-  outPortId?:    string
-  gates:         string[]
-  assignedNames: string[]
-  isDragging?:   boolean
+  config:         StageConfig
+  status:         'completed' | 'active' | 'pending'
+  schedule:       string
+  isSelected:     boolean
+  onClick:        () => void
+  onMouseDown?:   (e: React.MouseEvent) => void
+  style?:         React.CSSProperties
+  inPortId?:      string
+  outPortId?:     string
+  gates:          string[]
+  assignedNames:  string[]
+  isDragging?:    boolean
+  isNodeDragging?: boolean
 }
 
 function StageNodeCard({
@@ -2798,11 +3151,14 @@ function StageNodeCard({
   schedule,
   isSelected,
   onClick,
+  onMouseDown,
+  style,
   inPortId,
   outPortId,
   gates,
   assignedNames,
   isDragging,
+  isNodeDragging,
 }: StageNodeCardProps) {
   const leftBorderColor =
     status === 'completed'
@@ -2811,26 +3167,38 @@ function StageNodeCard({
       ? 'var(--color-primary)'
       : 'var(--color-border)'
 
+  const selectionRingColor =
+    status === 'completed'
+      ? 'var(--color-success)'
+      : status === 'active'
+      ? 'var(--color-primary)'
+      : 'var(--color-border-strong)'
+
   return (
     <div
       onClick={onClick}
+      onMouseDown={onMouseDown}
       style={{
         width: '260px',
         flexShrink: 0,
-        cursor: isDragging ? 'grabbing' : 'pointer',
-        background: 'var(--color-surface)',
+        cursor: isNodeDragging ? 'grabbing' : isDragging ? 'grab' : 'pointer',
+        background: isSelected ? 'var(--color-surface-raised)' : 'var(--color-surface)',
         border: '0.5px solid var(--color-border)',
-        borderLeft: `3px solid ${leftBorderColor}`,
+        borderLeft: `${isSelected ? '4px' : '3px'} solid ${leftBorderColor}`,
         borderRadius: '12px',
         padding: '16px',
         display: 'flex',
         flexDirection: 'column',
         gap: '10px',
-        boxShadow: isSelected
-          ? '0 0 0 2px var(--color-primary), 0 4px 14px rgba(0,0,0,0.2)'
+        boxShadow: isNodeDragging
+          ? `0 12px 28px rgba(0,0,0,0.35), 0 0 0 2px ${selectionRingColor}`
+          : isSelected
+          ? `0 0 0 2px ${selectionRingColor}, 0 6px 20px rgba(0,0,0,0.22)`
           : '0 2px 8px rgba(0,0,0,0.1)',
         position: 'relative',
-        transition: 'all 0.15s ease',
+        transition: isNodeDragging ? 'none' : 'box-shadow 0.15s ease, background-color 0.15s ease',
+        userSelect: 'none',
+        ...style,
       }}
     >
       {/* Connector Ports on Left and Right (Measured dynamically by data-port-id) */}
@@ -2870,6 +3238,11 @@ function StageNodeCard({
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <i
+            className="ti ti-grip-vertical"
+            style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }}
+            title="Drag to reposition node"
+          />
           <i className={`ti ${config.icon}`} style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
           <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
             {config.name}
