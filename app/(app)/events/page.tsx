@@ -338,6 +338,7 @@ function EventsBoardContent() {
     startOffsetY: number
     hasMoved: boolean
   } | null>(null)
+  const justDraggedRef = useRef<boolean>(false)
   const rafRef = useRef<number | null>(null)
 
   // Load custom node offsets from localStorage on mount
@@ -345,10 +346,20 @@ function EventsBoardContent() {
     try {
       const saved = localStorage.getItem('studio_zoom_node_offsets')
       if (saved) {
-        const parsed = JSON.parse(saved) as Record<string, { x: number; y: number }>
-        if (parsed && typeof parsed === 'object') {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const sanitized: Record<string, { x: number; y: number }> = {}
+          for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+            if (v && typeof v === 'object' && 'x' in v && 'y' in v) {
+              const xNum = Number((v as { x: unknown }).x)
+              const yNum = Number((v as { y: unknown }).y)
+              if (!isNaN(xNum) && !isNaN(yNum)) {
+                sanitized[k] = { x: xNum, y: yNum }
+              }
+            }
+          }
           const timer = setTimeout(() => {
-            setNodeOffsets(parsed)
+            setNodeOffsets(sanitized)
             setTimeout(measurePorts, 60)
           }, 0)
           return () => clearTimeout(timer)
@@ -359,6 +370,16 @@ function EventsBoardContent() {
     }
   }, [measurePorts])
 
+  // Persist node offsets safely to localStorage when offsets change
+  useEffect(() => {
+    if (Object.keys(nodeOffsets).length === 0) return
+    try {
+      localStorage.setItem('studio_zoom_node_offsets', JSON.stringify(nodeOffsets))
+    } catch {
+      // ignore
+    }
+  }, [nodeOffsets])
+
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     if (e.button !== 0) return
     const target = e.target as HTMLElement
@@ -367,12 +388,16 @@ function EventsBoardContent() {
     }
     e.stopPropagation()
 
+    const currentOffset = nodeOffsets[nodeId]
+    const curX = currentOffset?.x && !isNaN(currentOffset.x) ? currentOffset.x : 0
+    const curY = currentOffset?.y && !isNaN(currentOffset.y) ? currentOffset.y : 0
+
     draggingNodeRef.current = {
       nodeId,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
-      startOffsetX: nodeOffsets[nodeId]?.x || 0,
-      startOffsetY: nodeOffsets[nodeId]?.y || 0,
+      startOffsetX: curX,
+      startOffsetY: curY,
       hasMoved: false,
     }
   }
@@ -412,25 +437,36 @@ function EventsBoardContent() {
   // Global mousemove and mouseup listeners for buttery smooth dragging in all directions
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      // Safety: if mouse buttons are 0, user released mouse button outside or lost focus
+      if (e.buttons === 0) {
+        if (draggingNodeRef.current || isDragging) {
+          handleMouseUp()
+        }
+        return
+      }
+
       // 1. Node dragging takes priority
       if (draggingNodeRef.current) {
-        const dx = (e.clientX - draggingNodeRef.current.startMouseX) / zoom
-        const dy = (e.clientY - draggingNodeRef.current.startMouseY) / zoom
-        const dist = Math.hypot(dx * zoom, dy * zoom)
+        const node = draggingNodeRef.current
+        const z = zoom > 0 ? zoom : 1
+        const dx = (e.clientX - node.startMouseX) / z
+        const dy = (e.clientY - node.startMouseY) / z
+        const dist = Math.hypot(dx * z, dy * z)
 
-        // Require at least 8px of intentional movement to start dragging the node
-        if (!draggingNodeRef.current.hasMoved) {
-          if (dist < 8) return
-          draggingNodeRef.current.hasMoved = true
-          setDraggingNodeId(draggingNodeRef.current.nodeId)
+        // Require at least 6px of intentional movement to start dragging the node
+        if (!node.hasMoved) {
+          if (dist < 6) return
+          node.hasMoved = true
+          setDraggingNodeId(node.nodeId)
         }
 
-        const nextX = Math.round(draggingNodeRef.current.startOffsetX + dx)
-        const nextY = Math.round(draggingNodeRef.current.startOffsetY + dy)
+        const nextX = Math.round(node.startOffsetX + dx)
+        const nextY = Math.round(node.startOffsetY + dy)
+        const targetId = node.nodeId
 
         setNodeOffsets(prev => ({
           ...prev,
-          [draggingNodeRef.current!.nodeId]: { x: nextX, y: nextY },
+          [targetId]: { x: nextX, y: nextY },
         }))
 
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -446,7 +482,7 @@ function EventsBoardContent() {
         const dy = e.clientY - dragStartRef.current.mouseY
         const dist = Math.hypot(dx, dy)
         if (!dragStartRef.current.hasMoved) {
-          if (dist < 8) return
+          if (dist < 6) return
           dragStartRef.current.hasMoved = true
         }
         setPan({
@@ -459,23 +495,15 @@ function EventsBoardContent() {
     const handleMouseUp = () => {
       if (draggingNodeRef.current) {
         const hasMoved = draggingNodeRef.current.hasMoved
-
         if (hasMoved) {
+          justDraggedRef.current = true
+          setTimeout(() => {
+            justDraggedRef.current = false
+          }, 150)
           setTimeout(measurePorts, 20)
-          setNodeOffsets(current => {
-            try {
-              localStorage.setItem('studio_zoom_node_offsets', JSON.stringify(current))
-            } catch {
-              // ignore
-            }
-            return current
-          })
         }
-
         setDraggingNodeId(null)
-        setTimeout(() => {
-          draggingNodeRef.current = null
-        }, 50)
+        draggingNodeRef.current = null
       }
       setIsDragging(false)
       dragStartRef.current.hasMoved = false
@@ -488,7 +516,7 @@ function EventsBoardContent() {
       window.removeEventListener('mouseup', handleMouseUp)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [isDragging, draggingNodeId, zoom, measurePorts])
+  }, [isDragging, zoom, measurePorts])
 
   // Mouse wheel scroll up/down for zoom in and zoom out
   useEffect(() => {
@@ -511,7 +539,7 @@ function EventsBoardContent() {
 
   // Open stage panel on card click (only block if user actively dragged the node)
   const handleStageCardClick = (stageKey: ProjectStage, dayIdx?: number) => {
-    if (draggingNodeRef.current?.hasMoved) return
+    if (justDraggedRef.current || draggingNodeRef.current?.hasMoved) return
     if (dayIdx !== undefined) {
       setSelectedDayTab(dayIdx)
     }
@@ -1194,7 +1222,14 @@ function EventsBoardContent() {
   ) => {
     const p1 = ports[fromId]
     const p2 = ports[toId]
-    if (!p1 || !p2) return null
+    if (
+      !p1 || !p2 ||
+      typeof p1.x !== 'number' || typeof p1.y !== 'number' ||
+      typeof p2.x !== 'number' || typeof p2.y !== 'number' ||
+      isNaN(p1.x) || isNaN(p1.y) || isNaN(p2.x) || isNaN(p2.y)
+    ) {
+      return null
+    }
 
     const dx = Math.max(40, Math.abs(p2.x - p1.x) * 0.5)
     const pathData = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`
@@ -3371,19 +3406,109 @@ function StatusPill({ status }: { status: 'completed' | 'active' | 'pending' }) 
   )
 }
 
+class EventsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Events Canvas Error Boundary caught an error:', error, errorInfo)
+  }
+
+  handleReset = () => {
+    try {
+      localStorage.removeItem('studio_zoom_node_offsets')
+    } catch {
+      // ignore
+    }
+    this.setState({ hasError: false, error: null })
+    window.location.reload()
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: '64px 24px',
+          textAlign: 'center',
+          fontFamily: 'var(--font-inter)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '60vh',
+          gap: '16px',
+        }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            background: 'var(--color-danger-muted)',
+            color: 'var(--color-danger)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+          }}>
+            <i className="ti ti-alert-triangle" />
+          </div>
+          <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)', margin: 0 }}>
+            Events Canvas encountered an issue
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', maxWidth: '440px', margin: 0 }}>
+            A temporary display error occurred while rendering the canvas nodes. Click below to reset node positions and restore the board.
+          </p>
+          <button
+            onClick={this.handleReset}
+            style={{
+              marginTop: '8px',
+              padding: '10px 20px',
+              background: 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontFamily: 'var(--font-inter)',
+            }}
+          >
+            <i className="ti ti-refresh" />
+            Reset Canvas & Reload
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function EventsBoardPage() {
   return (
-    <Suspense fallback={
-      <div style={{
-        padding: '48px',
-        textAlign: 'center',
-        color: 'var(--color-foreground-muted)',
-        fontFamily: 'var(--font-inter)',
-      }}>
-        Loading Events Board…
-      </div>
-    }>
-      <EventsBoardContent />
-    </Suspense>
+    <EventsErrorBoundary>
+      <Suspense fallback={
+        <div style={{
+          padding: '48px',
+          textAlign: 'center',
+          color: 'var(--color-foreground-muted)',
+          fontFamily: 'var(--font-inter)',
+        }}>
+          Loading Events Board…
+        </div>
+      }>
+        <EventsBoardContent />
+      </Suspense>
+    </EventsErrorBoundary>
   )
 }
