@@ -243,6 +243,68 @@ const MOCK_FREELANCERS: Freelancer[] = [
   { freelancerId: 'fl-priya', name: 'Priya Mani', skill: 'designer', dayRate: 4500, contact: '+91 98404 56789', isActive: true },
 ]
 
+const formatDateTime = (d: unknown): string => {
+  if (!d) return ''
+  let date: Date
+  if (d instanceof Date) {
+    date = d
+  } else if (typeof (d as { toDate?: () => Date }).toDate === 'function') {
+    date = (d as { toDate: () => Date }).toDate()
+  } else if (typeof d === 'object' && d !== null && 'seconds' in d && typeof (d as { seconds: number }).seconds === 'number') {
+    date = new Date((d as { seconds: number }).seconds * 1000)
+  } else if (typeof d === 'object' && d !== null && '_seconds' in d && typeof (d as { _seconds: number })._seconds === 'number') {
+    date = new Date((d as { _seconds: number })._seconds * 1000)
+  } else {
+    date = new Date(d as string | number)
+  }
+  if (isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ' at ' + date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
+const parseTimeToMinutes = (timeStr?: string): number => {
+  if (!timeStr) return 20 * 60 // default 8:00 PM
+  const s = timeStr.trim().toLowerCase()
+  const isPm = s.includes('pm')
+  const isAm = s.includes('am')
+  const clean = s.replace(/(am|pm)/g, '').trim()
+  const [hStr, mStr] = clean.split(':')
+  let h = parseInt(hStr, 10) || 0
+  const m = parseInt(mStr, 10) || 0
+  if (isPm && h < 12) h += 12
+  if (isAm && h === 12) h = 0
+  return h * 60 + m
+}
+
+const getShootEndDateTime = (eventDate: Date, endTimeStr?: string): Date => {
+  const d = new Date(eventDate)
+  const minutes = parseTimeToMinutes(endTimeStr)
+  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+  return d
+}
+
+const getStageCompletedDate = (p: Project | null, stageKey: ProjectStage): Date | null => {
+  if (!p) return null
+  if (p.stageCompletedAt?.[stageKey]) {
+    const raw = p.stageCompletedAt[stageKey]
+    if (raw instanceof Date) return raw
+    if (typeof (raw as { toDate?: () => Date }).toDate === 'function') return (raw as { toDate: () => Date }).toDate()
+    return new Date(raw as unknown as string | number)
+  }
+  // Fallbacks for legacy/mock data:
+  if (stageKey === 'booked' && p.createdAt) {
+    return p.createdAt instanceof Date ? p.createdAt : new Date(p.createdAt)
+  }
+  if (stageKey === 'delivered' && p.milestones?.delivered) {
+    return p.milestones.delivered instanceof Date ? p.milestones.delivered : new Date(p.milestones.delivered)
+  }
+  const stageIdx = STAGE_CONFIGS.findIndex(s => s.stageKey === stageKey)
+  const currentIdx = STAGE_CONFIGS.findIndex(s => s.stageKey === p.stage)
+  if (stageIdx >= 0 && currentIdx > stageIdx && p.updatedAt) {
+    return p.updatedAt instanceof Date ? p.updatedAt : new Date(p.updatedAt)
+  }
+  return null
+}
+
 interface Point {
   x: number
   y: number
@@ -579,8 +641,20 @@ function EventsBoardContent() {
       return MOCK_FALLBACK_PROJECTS
     }
 
+    const filterActiveBoardProjects = (raw: Project[]): Project[] => {
+      const nowMs = Date.now()
+      return raw.filter(p => {
+        const isCompleted = p.stage === 'delivered' || p.status === 'completed'
+        if (!isCompleted) return true
+        const eventDate = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
+        const daysSinceEvent = (nowMs - eventDate.getTime()) / (1000 * 60 * 60 * 24)
+        return daysSinceEvent <= 30
+      })
+    }
+
     const unsubProjects = subscribeToProjects(firestoreProjects => {
-      const projs = firestoreProjects && firestoreProjects.length > 0 ? firestoreProjects : getFallback()
+      const raw = firestoreProjects && firestoreProjects.length > 0 ? firestoreProjects : getFallback()
+      const projs = filterActiveBoardProjects(raw)
       setProjects(projs)
       setSelectedProjectId(curr => {
         if (paramProject) {
@@ -594,7 +668,8 @@ function EventsBoardContent() {
     })
 
     const handleSync = () => {
-      const projs = getFallback()
+      const raw = getFallback()
+      const projs = filterActiveBoardProjects(raw)
       setProjects(prev => {
         if (prev.length === 0 || prev.some(p => p.projectId.startsWith('demo-'))) {
           return projs
@@ -721,6 +796,13 @@ function EventsBoardContent() {
       const eventDate = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
       const isDelivered = p.stage === 'delivered' || p.status === 'completed'
       const isPastDue = !isDelivered && eventDate.getTime() < now.getTime()
+
+      // Requirement 2: Completed or done events should not exist after 30 days from the event
+      if (isDelivered) {
+        const diffMs = now.getTime() - eventDate.getTime()
+        const diffDays = diffMs / (1000 * 60 * 60 * 24)
+        if (diffDays > 30) return false
+      }
 
       // Ongoing: only active projects that are on track (not overdue and not delivered)
       if (railFilter === 'active' && (isDelivered || isPastDue)) return false
@@ -879,9 +961,45 @@ function EventsBoardContent() {
     }
   }
 
+  // ─── SHOOT TIMING & MANDATORY TEAM HELPERS ──────────────────────────────
+  const shootTimingInfo = useMemo(() => {
+    if (!selectedProject) {
+      return { isCompleted: true, shootEndTime: new Date(), formattedTime: '' }
+    }
+    const latestDay = multiEventDays.length > 0 ? multiEventDays[multiEventDays.length - 1] : null
+    const baseDate = latestDay?.date instanceof Date ? latestDay.date : new Date(latestDay?.date || selectedProject.eventDate)
+    const timeStr = latestDay?.endTime || selectedProject.endTime || '08:00 PM'
+    const shootEndTime = getShootEndDateTime(baseDate, timeStr)
+    const isCompleted = now.getTime() >= shootEndTime.getTime()
+    const formattedTime = shootEndTime.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }) + ' (' + shootEndTime.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+    }) + ')'
+    return { isCompleted, shootEndTime, formattedTime }
+  }, [selectedProject, multiEventDays, now])
+
+  const isTeamAssignmentMandatory = useMemo(() => {
+    if (!panelStageKey) return false
+    return ['planning', 'preProduction', 'eventDay', 'postProduction'].includes(panelStageKey)
+  }, [panelStageKey])
+
+  const hasAssignedTeamMembers = useMemo(() => {
+    return (selectedProject?.staffUids || []).length > 0
+  }, [selectedProject?.staffUids])
+
   // ─── GATE CHECKLIST STATE ───────────────────────────────────────────────
   const toggleGate = (stageKey: ProjectStage, gateText: string, currentVal: boolean) => {
     if (!selectedProject) return
+
+    // Requirement 5: The All raw footage checklist should be restricted until Events day shoot is completed
+    if (stageKey === 'eventDay' && gateText.toLowerCase().includes('raw footage') && !shootTimingInfo.isCompleted) {
+      return
+    }
+
     const key = `${selectedProject.projectId}_${stageKey}_${gateText}`
     const newVal = !currentVal
     setGateOverrides(prev => ({ ...prev, [key]: newVal }))
@@ -922,22 +1040,42 @@ function EventsBoardContent() {
     const stageIdx = STAGE_ORDER.indexOf(currentPanelConfig.stageKey)
     return currentPanelConfig.defaultGates.map((gateText: string, i: number) => {
       const key = `${selectedProject.projectId}_${currentPanelConfig.stageKey}_${gateText}`
+      // Requirement 4: Freelancer checklist is not mandatory in preprod
+      const isOptional = currentPanelConfig.stageKey === 'preProduction' && gateText.toLowerCase().includes('freelancer')
+
+      let isDone = false
       if (gateOverrides[key] !== undefined) {
-        return { label: gateText, done: gateOverrides[key] }
+        isDone = gateOverrides[key]
+      } else if (currentPanelConfig.stageKey === 'postProduction') {
+        if (gateText === 'Photo track completed') isDone = isPhotoTrackAllDone
+        else if (gateText === 'Video track completed') isDone = isVideoTrackAllDone
+      } else if (currentPanelConfig.stageKey === 'planning' && gateText.toLowerCase().includes('core team')) {
+        isDone = (selectedProject.staffUids || []).length > 0
+      } else if (stageIdx < currentStageIndex) {
+        isDone = true
+      } else if (stageIdx === currentStageIndex) {
+        isDone = i === 0
       }
-      if (currentPanelConfig.stageKey === 'postProduction') {
-        if (gateText === 'Photo track completed') return { label: gateText, done: isPhotoTrackAllDone }
-        if (gateText === 'Video track completed') return { label: gateText, done: isVideoTrackAllDone }
-      }
-      if (stageIdx < currentStageIndex) return { label: gateText, done: true }
-      if (stageIdx === currentStageIndex) return { label: gateText, done: i === 0 }
-      return { label: gateText, done: false }
+
+      return { label: gateText, done: isDone, isOptional }
     })
   }, [currentPanelConfig, selectedProject, currentStageIndex, gateOverrides, isPhotoTrackAllDone, isVideoTrackAllDone])
 
   const allPanelGatesDone = useMemo(() => {
-    return panelGates.length > 0 && panelGates.every(g => g.done)
-  }, [panelGates])
+    if (panelGates.length === 0) return false
+
+    // Requirement 4: Optional gates do not block stage advancement
+    const mandatoryGatesDone = panelGates.every(g => g.isOptional || g.done)
+    if (!mandatoryGatesDone) return false
+
+    // Requirement 3: Mandatory team member assigning in planning, preprod, Event day, post prod
+    if (isTeamAssignmentMandatory && !hasAssignedTeamMembers) return false
+
+    // Requirement 6: Event day cannot advance until shoot timing is completed
+    if (panelStageKey === 'eventDay' && !shootTimingInfo.isCompleted) return false
+
+    return true
+  }, [panelGates, isTeamAssignmentMandatory, hasAssignedTeamMembers, panelStageKey, shootTimingInfo.isCompleted])
 
   const nextStageKey = useMemo((): ProjectStage | null => {
     if (!panelStageKey) return null
@@ -960,6 +1098,7 @@ function EventsBoardContent() {
     if (!allPanelGatesDone && !hasOverride) return
 
     setIsAdvancing(true)
+    const nowCompleted = new Date()
     try {
       if (selectedProject.projectId.startsWith('demo-')) {
         setProjects(prev => prev.map(p => {
@@ -968,7 +1107,12 @@ function EventsBoardContent() {
               ...p,
               stage: nextStageKey,
               status: nextStageKey === 'delivered' ? 'completed' : 'ongoing',
-              updatedAt: new Date(),
+              stageCompletedAt: {
+                ...(p.stageCompletedAt || {}),
+                [panelStageKey]: nowCompleted,
+                ...(nextStageKey === 'delivered' ? { delivered: nowCompleted } : {}),
+              },
+              updatedAt: nowCompleted,
             }
           }
           return p
@@ -978,8 +1122,25 @@ function EventsBoardContent() {
           selectedProject.projectId,
           nextStageKey,
           selectedProject.clientId,
-          hasOverride ? { by: appUser?.name || 'Admin', reason: overrideReason.trim() } : undefined
+          hasOverride ? { by: appUser?.name || 'Admin', reason: overrideReason.trim() } : undefined,
+          panelStageKey
         )
+        setProjects(prev => prev.map(p => {
+          if (p.projectId === selectedProject.projectId) {
+            return {
+              ...p,
+              stage: nextStageKey,
+              status: nextStageKey === 'delivered' ? 'completed' : 'ongoing',
+              stageCompletedAt: {
+                ...(p.stageCompletedAt || {}),
+                [panelStageKey]: nowCompleted,
+                ...(nextStageKey === 'delivered' ? { delivered: nowCompleted } : {}),
+              },
+              updatedAt: nowCompleted,
+            }
+          }
+          return p
+        }))
       }
 
       setPanelStageKey(nextStageKey)
@@ -997,6 +1158,7 @@ function EventsBoardContent() {
     if (!allPanelGatesDone && !hasOverride) return
 
     setIsAdvancing(true)
+    const nowCompleted = new Date()
     try {
       if (selectedProject.projectId.startsWith('demo-')) {
         setProjects(prev => prev.map(p => {
@@ -1004,7 +1166,11 @@ function EventsBoardContent() {
             return {
               ...p,
               status: 'completed',
-              updatedAt: new Date(),
+              stageCompletedAt: {
+                ...(p.stageCompletedAt || {}),
+                delivered: nowCompleted,
+              },
+              updatedAt: nowCompleted,
             }
           }
           return p
@@ -1014,8 +1180,23 @@ function EventsBoardContent() {
           selectedProject.projectId,
           'delivered',
           selectedProject.clientId,
-          hasOverride ? { by: appUser?.name || 'Admin', reason: overrideReason.trim() } : undefined
+          hasOverride ? { by: appUser?.name || 'Admin', reason: overrideReason.trim() } : undefined,
+          'delivered'
         )
+        setProjects(prev => prev.map(p => {
+          if (p.projectId === selectedProject.projectId) {
+            return {
+              ...p,
+              status: 'completed',
+              stageCompletedAt: {
+                ...(p.stageCompletedAt || {}),
+                delivered: nowCompleted,
+              },
+              updatedAt: nowCompleted,
+            }
+          }
+          return p
+        }))
       }
       setOverrideReason('')
     } catch (err) {
@@ -1207,6 +1388,8 @@ function EventsBoardContent() {
     if (isNaN(date.getTime())) return '—'
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   }
+
+
 
   // ─── POST-PROD PARALLEL TRACKS PROGRESS ─────────────────────────────────
   const isPostProdActive = currentStageIndex >= 4
@@ -2442,7 +2625,50 @@ function EventsBoardContent() {
                   ? `${formatShortDate(selectedProject.eventDate)} · ${currentPanelConfig.whenOffset}`
                   : '—'}
               </span>
+              {panelStageKey === 'eventDay' && selectedProject && (() => {
+                const dayEntry = multiEventDays[selectedDayTab]
+                const location = dayEntry?.location
+                const startTime = dayEntry?.startTime || selectedProject.startTime
+                const endTime = dayEntry?.endTime || selectedProject.endTime
+                const timeLabel = startTime ? `${startTime} – ${endTime || 'Wrap'}` : null
+
+                if (!location && !timeLabel) return null
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                    {timeLabel && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="ti ti-clock" style={{ fontSize: '13px' }} />
+                        {timeLabel}
+                      </span>
+                    )}
+                    {location && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <i className="ti ti-map-pin" style={{ fontSize: '13px' }} />
+                        {location}
+                      </span>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
+
+            {/* Stage Completed Timestamp (if stage completed) */}
+            {(() => {
+              const compDate = getStageCompletedDate(selectedProject, panelStageKey)
+              if (!compDate) return null
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
+                    Stage Completed
+                  </span>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <i className="ti ti-circle-check" style={{ fontSize: '15px' }} />
+                    {formatDateTime(compDate)}
+                  </span>
+                </div>
+              )
+            })()}
 
             {/* Exit Gate Checklist (Interactive) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -2459,34 +2685,86 @@ function EventsBoardContent() {
                 </span>
               </div>
 
-              {panelGates.map(gate => (
-                <div
-                  key={gate.label}
-                  onClick={() => toggleGate(panelStageKey, gate.label, gate.done)}
-                  style={{
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: 'var(--text-sm)',
-                    color: gate.done ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
-                    background: gate.done ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
-                    border: `0.5px solid ${gate.done ? 'var(--color-success)' : 'var(--color-border)'}`,
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <i
-                    className={gate.done ? 'ti ti-circle-check' : 'ti ti-circle'}
-                    style={{
-                      fontSize: '18px',
-                      color: gate.done ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+              {panelGates.map(gate => {
+                const isRawFootageGate = gate.label.toLowerCase().includes('raw footage backed up')
+                const isRawLocked = isRawFootageGate && !shootTimingInfo.isCompleted
+
+                return (
+                  <div
+                    key={gate.label}
+                    onClick={() => {
+                      if (isRawLocked) {
+                        alert(`Event day shoot is still in progress (ends ${shootTimingInfo.formattedTime || 'later'}). Raw footage backup cannot be checked yet.`)
+                        return
+                      }
+                      toggleGate(panelStageKey, gate.label, gate.done)
                     }}
-                  />
-                  <span style={{ flex: 1 }}>{gate.label}</span>
-                </div>
-              ))}
+                    title={isRawLocked ? `Shoot in progress (ends ${shootTimingInfo.formattedTime || 'later'}). Locked until shoot completes.` : undefined}
+                    style={{
+                      cursor: isRawLocked ? 'not-allowed' : 'pointer',
+                      opacity: isRawLocked ? 0.75 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      fontSize: 'var(--text-sm)',
+                      color: gate.done ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
+                      background: isRawLocked
+                        ? 'var(--color-surface)'
+                        : gate.done
+                        ? 'var(--color-success-muted)'
+                        : 'var(--color-surface-raised)',
+                      border: `0.5px solid ${isRawLocked ? 'var(--color-secondary)' : gate.done ? 'var(--color-success)' : 'var(--color-border)'}`,
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <i
+                      className={isRawLocked ? 'ti ti-lock' : gate.done ? 'ti ti-circle-check' : 'ti ti-circle'}
+                      style={{
+                        fontSize: '18px',
+                        color: isRawLocked
+                          ? 'var(--color-secondary)'
+                          : gate.done
+                          ? 'var(--color-success)'
+                          : 'var(--color-foreground-subtle)',
+                      }}
+                    />
+                    <span style={{ flex: 1 }}>{gate.label}</span>
+                    {gate.isOptional && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        color: 'var(--color-foreground-subtle)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}>
+                        Optional
+                      </span>
+                    )}
+                    {isRawLocked && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'var(--color-secondary-muted)',
+                        color: 'var(--color-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}>
+                        <i className="ti ti-clock" style={{ fontSize: '11px' }} />
+                        Ends {shootTimingInfo.formattedTime || 'later'}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             {/* Post-Production Parallel Tracks Checklists */}
@@ -2639,13 +2917,62 @@ function EventsBoardContent() {
             {/* Assigned Staff Section */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
-                  Assigned team
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
+                    Assigned team
+                  </span>
+                  {isTeamAssignmentMandatory && (
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      background: hasAssignedTeamMembers
+                        ? 'var(--color-success-muted)'
+                        : panelStageStatus === 'active'
+                        ? 'var(--color-danger-muted)'
+                        : 'var(--color-surface-raised)',
+                      color: hasAssignedTeamMembers
+                        ? 'var(--color-success)'
+                        : panelStageStatus === 'active'
+                        ? 'var(--color-danger)'
+                        : 'var(--color-foreground-subtle)',
+                      border: `0.5px solid ${
+                        hasAssignedTeamMembers
+                          ? 'var(--color-success)'
+                          : panelStageStatus === 'active'
+                          ? 'var(--color-danger)'
+                          : 'var(--color-border)'
+                      }`,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}>
+                      Mandatory
+                    </span>
+                  )}
+                </div>
                 <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
                   {assignedTeamMembers.length} assigned
                 </span>
               </div>
+
+              {panelStageStatus === 'active' && isTeamAssignmentMandatory && !hasAssignedTeamMembers && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'var(--color-danger-muted)',
+                  border: '0.5px solid var(--color-danger)',
+                  color: 'var(--color-danger)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 500,
+                }}>
+                  <i className="ti ti-alert-circle" style={{ fontSize: '14px', flexShrink: 0 }} />
+                  <span>Mandatory: Assign at least one team member to advance this stage.</span>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {assignedTeamMembers.map(tm => {
@@ -2859,54 +3186,61 @@ function EventsBoardContent() {
               marginTop: 'auto',
             }}>
               {/* CASE 1: Stage is already completed */}
-              {panelStageStatus === 'completed' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    background: 'var(--color-success-muted)',
-                    border: '0.5px solid var(--color-success)',
-                  }}>
-                    <i className="ti ti-circle-check" style={{ fontSize: '20px', color: 'var(--color-success)', flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-success)' }}>
-                        Stage Completed
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                        All exit gates satisfied · Project is currently at {STAGE_CONFIGS[currentStageIndex]?.name}.
+              {panelStageStatus === 'completed' && (() => {
+                const compDate = getStageCompletedDate(selectedProject, panelStageKey)
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      background: 'var(--color-success-muted)',
+                      border: '0.5px solid var(--color-success)',
+                    }}>
+                      <i className="ti ti-circle-check" style={{ fontSize: '20px', color: 'var(--color-success)', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-success)' }}>
+                          Stage Completed
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                          {compDate ? (
+                            <>Completed on {formatDateTime(compDate)} · Current stage: {STAGE_CONFIGS[currentStageIndex]?.name}.</>
+                          ) : (
+                            <>All exit gates satisfied · Current stage: {STAGE_CONFIGS[currentStageIndex]?.name}.</>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {nextStageKey && (
-                    <button
-                      onClick={() => setPanelStageKey(nextStageKey)}
-                      style={{
-                        fontFamily: 'var(--font-inter)',
-                        height: '36px',
-                        borderRadius: '8px',
-                        border: '0.5px solid var(--color-border)',
-                        background: 'var(--color-surface-raised)',
-                        color: 'var(--color-foreground)',
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <span>Next: View {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span>
-                      <i className="ti ti-arrow-right" style={{ fontSize: '14px' }} />
-                    </button>
-                  )}
-                </div>
-              )}
+                    {nextStageKey && (
+                      <button
+                        onClick={() => setPanelStageKey(nextStageKey)}
+                        style={{
+                          fontFamily: 'var(--font-inter)',
+                          height: '36px',
+                          borderRadius: '8px',
+                          border: '0.5px solid var(--color-border)',
+                          background: 'var(--color-surface-raised)',
+                          color: 'var(--color-foreground)',
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>Next: View {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span>
+                        <i className="ti ti-arrow-right" style={{ fontSize: '14px' }} />
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* CASE 2: Stage is upcoming / locked */}
               {panelStageStatus === 'pending' && (
@@ -2932,85 +3266,162 @@ function EventsBoardContent() {
               )}
 
               {/* CASE 3: Active Stage (Current stage being worked on) */}
-              {panelStageStatus === 'active' && (
-                <>
-                  {panelStageKey === 'delivered' ? (
-                    selectedProject?.status === 'completed' ? (
-                      <div style={{
-                        padding: '12px',
-                        borderRadius: '8px',
-                        background: 'var(--color-success-muted)',
-                        border: '0.5px solid var(--color-success)',
-                        color: 'var(--color-success)',
-                        fontSize: 'var(--text-sm)',
-                        fontWeight: 600,
-                        textAlign: 'center',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                      }}>
-                        <i className="ti ti-circle-check" style={{ fontSize: '16px' }} />
-                        <span>Event Done &amp; Handover Complete</span>
-                      </div>
-                    ) : isPaymentPending ? (
-                      /* PAYMENT PENDING: Alert card + Record Payment button (Complete button is hidden until paid) */
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px',
-                        background: 'var(--color-secondary-muted)',
-                        border: '0.5px solid var(--color-secondary)',
-                        borderRadius: '8px',
-                        padding: '12px 14px',
-                      }}>
+              {panelStageStatus === 'active' && (() => {
+                const advanceBlockReason = (() => {
+                  if (isTeamAssignmentMandatory && !hasAssignedTeamMembers) {
+                    return 'Assign team member first'
+                  }
+                  if (panelStageKey === 'eventDay' && !shootTimingInfo.isCompleted) {
+                    return `Shoot in progress (ends ${shootTimingInfo.formattedTime || 'later'})`
+                  }
+                  return 'Gates pending'
+                })()
+
+                return (
+                  <>
+                    {panelStageKey === 'delivered' ? (
+                      selectedProject?.status === 'completed' ? (
                         <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          color: 'var(--color-secondary)',
-                          fontWeight: 600,
-                          fontSize: 'var(--text-xs)',
-                        }}>
-                          <i className="ti ti-alert-circle" style={{ fontSize: '16px' }} />
-                          <span>Remaining Payment Pending</span>
-                        </div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground)' }}>
-                          ₹{clientBalanceDue.toLocaleString('en-IN')} remaining of ₹{clientTotalAmount.toLocaleString('en-IN')}. Please record final payment before completing this event.
-                        </div>
-                        <Button
-                          className="w-full h-8 text-xs font-medium"
-                          onClick={() => setRecordPaymentModalOpen(true)}
-                        >
-                          <i className="ti ti-cash" style={{ marginRight: '6px' }} />
-                          Record Remaining Payment
-                        </Button>
-                      </div>
-                    ) : (
-                      /* PAYMENT CLEARED: Complete Handover button is visible */
-                      <>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          color: 'var(--color-success)',
-                          fontSize: 'var(--text-xs)',
-                          fontWeight: 600,
+                          padding: '12px',
+                          borderRadius: '8px',
                           background: 'var(--color-success-muted)',
                           border: '0.5px solid var(--color-success)',
-                          borderRadius: '8px',
-                          padding: '8px 12px',
+                          color: 'var(--color-success)',
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 600,
+                          textAlign: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
                         }}>
-                          <i className="ti ti-circle-check" style={{ fontSize: '15px' }} />
-                          <span>
-                            {clientTotalAmount > 0
-                              ? `All payments cleared (₹${clientTotalAmount.toLocaleString('en-IN')})`
-                              : 'Payments cleared'}
-                          </span>
+                          <i className="ti ti-circle-check" style={{ fontSize: '16px' }} />
+                          <span>Event Done &amp; Handover Complete</span>
                         </div>
+                      ) : isPaymentPending ? (
+                        /* PAYMENT PENDING: Alert card + Record Payment button (Complete button is hidden until paid) */
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                          background: 'var(--color-secondary-muted)',
+                          border: '0.5px solid var(--color-secondary)',
+                          borderRadius: '8px',
+                          padding: '12px 14px',
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            color: 'var(--color-secondary)',
+                            fontWeight: 600,
+                            fontSize: 'var(--text-xs)',
+                          }}>
+                            <i className="ti ti-alert-circle" style={{ fontSize: '16px' }} />
+                            <span>Remaining Payment Pending</span>
+                          </div>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground)' }}>
+                            ₹{clientBalanceDue.toLocaleString('en-IN')} remaining of ₹{clientTotalAmount.toLocaleString('en-IN')}. Please record final payment before completing this event.
+                          </div>
+                          <Button
+                            className="w-full h-8 text-xs font-medium"
+                            onClick={() => setRecordPaymentModalOpen(true)}
+                          >
+                            <i className="ti ti-cash" style={{ marginRight: '6px' }} />
+                            Record Remaining Payment
+                          </Button>
+                        </div>
+                      ) : (
+                        /* PAYMENT CLEARED: Complete Handover button is visible */
+                        <>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            color: 'var(--color-success)',
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 600,
+                            background: 'var(--color-success-muted)',
+                            border: '0.5px solid var(--color-success)',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                          }}>
+                            <i className="ti ti-circle-check" style={{ fontSize: '15px' }} />
+                            <span>
+                              {clientTotalAmount > 0
+                                ? `All payments cleared (₹${clientTotalAmount.toLocaleString('en-IN')})`
+                                : 'Payments cleared'}
+                            </span>
+                          </div>
 
+                          <button
+                            onClick={handleCompleteHandover}
+                            disabled={(!allPanelGatesDone && !overrideReason.trim()) || isAdvancing}
+                            style={{
+                              cursor: (allPanelGatesDone || overrideReason.trim()) && !isAdvancing ? 'pointer' : 'not-allowed',
+                              fontFamily: 'var(--font-inter)',
+                              height: '38px',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: (allPanelGatesDone || overrideReason.trim()) ? 'var(--color-success)' : 'var(--color-surface-raised)',
+                              color: (allPanelGatesDone || overrideReason.trim()) ? '#ffffff' : 'var(--color-foreground-subtle)',
+                              fontSize: 'var(--text-sm)',
+                              fontWeight: 600,
+                              transition: 'all 0.15s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                            }}
+                          >
+                            {isAdvancing ? (
+                              'Completing handover…'
+                            ) : allPanelGatesDone ? (
+                              <>
+                                <span>Complete Event Handover</span>
+                                <i className="ti ti-check" style={{ fontSize: '15px' }} />
+                              </>
+                            ) : overrideReason.trim() ? (
+                              <>
+                                <span>Override &amp; Complete Handover</span>
+                                <i className="ti ti-check" style={{ fontSize: '15px' }} />
+                              </>
+                            ) : (
+                              <span>Complete Handover · {advanceBlockReason}</span>
+                            )}
+                          </button>
+
+                          {!allPanelGatesDone && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                                Admin override (reason required)
+                              </span>
+                              <input
+                                value={overrideReason}
+                                onChange={e => setOverrideReason(e.target.value)}
+                                placeholder="Reason for override…"
+                                style={{
+                                  fontFamily: 'var(--font-inter)',
+                                  boxSizing: 'border-box',
+                                  width: '100%',
+                                  height: '32px',
+                                  background: 'var(--color-surface-raised)',
+                                  border: '0.5px solid var(--color-border)',
+                                  borderRadius: '8px',
+                                  padding: '0 10px',
+                                  fontSize: 'var(--text-xs)',
+                                  color: 'var(--color-foreground)',
+                                  outline: 'none',
+                                }}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )
+                    ) : (
+                      <>
                         <button
-                          onClick={handleCompleteHandover}
+                          onClick={handleAdvanceStage}
                           disabled={(!allPanelGatesDone && !overrideReason.trim()) || isAdvancing}
                           style={{
                             cursor: (allPanelGatesDone || overrideReason.trim()) && !isAdvancing ? 'pointer' : 'not-allowed',
@@ -3018,7 +3429,7 @@ function EventsBoardContent() {
                             height: '38px',
                             borderRadius: '8px',
                             border: 'none',
-                            background: (allPanelGatesDone || overrideReason.trim()) ? 'var(--color-success)' : 'var(--color-surface-raised)',
+                            background: (allPanelGatesDone || overrideReason.trim()) ? 'var(--color-primary)' : 'var(--color-surface-raised)',
                             color: (allPanelGatesDone || overrideReason.trim()) ? '#ffffff' : 'var(--color-foreground-subtle)',
                             fontSize: 'var(--text-sm)',
                             fontWeight: 600,
@@ -3030,22 +3441,23 @@ function EventsBoardContent() {
                           }}
                         >
                           {isAdvancing ? (
-                            'Completing handover…'
+                            'Advancing stage…'
                           ) : allPanelGatesDone ? (
                             <>
-                              <span>Complete Event Handover</span>
-                              <i className="ti ti-check" style={{ fontSize: '15px' }} />
+                              <span>Next: Advance to {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span>
+                              <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
                             </>
                           ) : overrideReason.trim() ? (
                             <>
-                              <span>Override &amp; Complete Handover</span>
-                              <i className="ti ti-check" style={{ fontSize: '15px' }} />
+                              <span>Next: Override & Advance</span>
+                              <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
                             </>
                           ) : (
-                            <span>Complete Handover · Gates pending</span>
+                            <span>Next: Advance to {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name} · {advanceBlockReason}</span>
                           )}
                         </button>
 
+                        {/* Admin Override Input */}
                         {!allPanelGatesDone && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
@@ -3072,76 +3484,10 @@ function EventsBoardContent() {
                           </div>
                         )}
                       </>
-                    )
-                  ) : (
-                    <>
-                      <button
-                        onClick={handleAdvanceStage}
-                        disabled={(!allPanelGatesDone && !overrideReason.trim()) || isAdvancing}
-                        style={{
-                          cursor: (allPanelGatesDone || overrideReason.trim()) && !isAdvancing ? 'pointer' : 'not-allowed',
-                          fontFamily: 'var(--font-inter)',
-                          height: '38px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: (allPanelGatesDone || overrideReason.trim()) ? 'var(--color-primary)' : 'var(--color-surface-raised)',
-                          color: (allPanelGatesDone || overrideReason.trim()) ? '#ffffff' : 'var(--color-foreground-subtle)',
-                          fontSize: 'var(--text-sm)',
-                          fontWeight: 600,
-                          transition: 'all 0.15s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                        }}
-                      >
-                        {isAdvancing ? (
-                          'Advancing stage…'
-                        ) : allPanelGatesDone ? (
-                          <>
-                            <span>Next: Advance to {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span>
-                            <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
-                          </>
-                        ) : overrideReason.trim() ? (
-                          <>
-                            <span>Next: Override & Advance</span>
-                            <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
-                          </>
-                        ) : (
-                          <span>Next: Advance to {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name} · Gates pending</span>
-                        )}
-                      </button>
-
-                      {/* Admin Override Input */}
-                      {!allPanelGatesDone && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                            Admin override (reason required)
-                          </span>
-                          <input
-                            value={overrideReason}
-                            onChange={e => setOverrideReason(e.target.value)}
-                            placeholder="Reason for override…"
-                            style={{
-                              fontFamily: 'var(--font-inter)',
-                              boxSizing: 'border-box',
-                              width: '100%',
-                              height: '32px',
-                              background: 'var(--color-surface-raised)',
-                              border: '0.5px solid var(--color-border)',
-                              borderRadius: '8px',
-                              padding: '0 10px',
-                              fontSize: 'var(--text-xs)',
-                              color: 'var(--color-foreground)',
-                              outline: 'none',
-                            }}
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+                    )}
+                  </>
+                )
+              })()}
             </div>
 
           </div>
@@ -3317,7 +3663,14 @@ function StageNodeCard({
         </span>
         <div style={{ display: 'flex', marginLeft: 'auto' }}>
           {assignedNames.slice(0, 3).map((name, i) => {
-            const init = name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+            const cleanName = name.replace(/\([^)]*\)/g, '').trim() || name
+            const init = cleanName
+              .split(/\s+/)
+              .map((w: string) => w[0])
+              .filter(Boolean)
+              .join('')
+              .slice(0, 2)
+              .toUpperCase()
             return (
               <div
                 key={`${name}-${i}`}
