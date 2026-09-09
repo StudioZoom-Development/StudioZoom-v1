@@ -48,6 +48,17 @@ function parseEventDates(raw: unknown): EventDateEntry[] | undefined {
   }))
 }
 
+function parseStageCompletedAt(raw: unknown): Partial<Record<ProjectStage, Date>> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const res: Partial<Record<ProjectStage, Date>> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v) {
+      res[k as ProjectStage] = parseFirestoreDate(v)
+    }
+  }
+  return Object.keys(res).length > 0 ? res : undefined
+}
+
 function mapDocToProject(id: string, data: Record<string, unknown>): Project {
   return {
     ...data,
@@ -56,6 +67,7 @@ function mapDocToProject(id: string, data: Record<string, unknown>): Project {
     createdAt: parseFirestoreDate(data.createdAt),
     updatedAt: parseFirestoreDate(data.updatedAt),
     eventDates: parseEventDates(data.eventDates),
+    stageCompletedAt: parseStageCompletedAt(data.stageCompletedAt),
   } as Project
 }
 
@@ -145,12 +157,13 @@ export async function advanceProjectStage(
   return nextStage
 }
 
-/** Update project stage with optional override reason and sync client doc */
+/** Update project stage with optional override reason, completedStage timestamp, and sync client doc */
 export async function updateProjectStage(
   projectId: string,
   newStage: ProjectStage,
   clientId?: string,
-  override?: { by: string; reason: string }
+  override?: { by: string; reason: string },
+  completedStage?: ProjectStage
 ): Promise<void> {
   const batch = writeBatch(db)
   const projectRef = doc(db, 'projects', projectId)
@@ -160,8 +173,13 @@ export async function updateProjectStage(
     updatedAt: serverTimestamp(),
   }
 
+  if (completedStage) {
+    updateData[`stageCompletedAt.${completedStage}`] = serverTimestamp()
+  }
+
   if (newStage === 'delivered') {
     updateData.status = 'completed'
+    updateData['stageCompletedAt.delivered'] = serverTimestamp()
   }
 
   if (override && override.reason.trim()) {
