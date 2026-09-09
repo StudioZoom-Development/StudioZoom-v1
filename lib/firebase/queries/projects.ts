@@ -4,7 +4,7 @@ import {
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Project, ProjectStage, StaffAssignment, EventDateEntry } from '@/types'
+import { Project, ProjectStage, StaffAssignment, EventDateEntry, RecurringSchedule } from '@/types'
 
 const STAGE_ORDER: ProjectStage[] = [
   'booked',
@@ -48,6 +48,21 @@ function parseEventDates(raw: unknown): EventDateEntry[] | undefined {
   }))
 }
 
+function parseRecurringSchedule(raw: unknown): RecurringSchedule | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  return {
+    frequency: (r.frequency as 'weekly' | 'biweekly' | 'monthly') || 'weekly',
+    startDate: parseFirestoreDate(r.startDate),
+    endDate: parseFirestoreDate(r.endDate),
+    totalSessions: Number(r.totalSessions) || 1,
+    perSessionRate: Number(r.perSessionRate) || 0,
+    paymentType: (r.paymentType as 'perSession' | 'custom') || 'perSession',
+    sessionStartTime: (r.sessionStartTime as string) || '09:00',
+    sessionEndTime: (r.sessionEndTime as string) || '18:00',
+  }
+}
+
 function parseStageCompletedAt(raw: unknown): Partial<Record<ProjectStage, Date>> | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const res: Partial<Record<ProjectStage, Date>> = {}
@@ -67,8 +82,9 @@ function mapDocToProject(id: string, data: Record<string, unknown>): Project {
     createdAt: parseFirestoreDate(data.createdAt),
     updatedAt: parseFirestoreDate(data.updatedAt),
     eventDates: parseEventDates(data.eventDates),
+    recurringSchedule: parseRecurringSchedule(data.recurringSchedule),
     stageCompletedAt: parseStageCompletedAt(data.stageCompletedAt),
-  } as Project
+  } as unknown as Project
 }
 
 /** Get single project by ID */

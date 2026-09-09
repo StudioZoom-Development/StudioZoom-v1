@@ -128,7 +128,9 @@ export interface Project {
   bookingType?:           BookingType
   bookingGroupId?:        string             // links sibling projects in multi-date bookings
   dateLabel?:             string             // "Engagement", "Reception", etc.
+  location?:              string
   eventDates?:            EventDateEntry[]
+  recurringSchedule?:     RecurringSchedule
   stageCompletedAt?:      Partial<Record<ProjectStage, Date>>
   isDeleted?:             boolean
   createdBy:              string

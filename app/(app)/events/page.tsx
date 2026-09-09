@@ -305,6 +305,61 @@ const getStageCompletedDate = (p: Project | null, stageKey: ProjectStage): Date 
   return null
 }
 
+function getProjectEffectiveDateRange(p: Project): { startDate: Date; endDate: Date } {
+  let startDate = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
+  let endDate = startDate
+
+  if (p.bookingType === 'recurring' && p.recurringSchedule) {
+    if (p.recurringSchedule.startDate) {
+      startDate = p.recurringSchedule.startDate instanceof Date
+        ? p.recurringSchedule.startDate
+        : new Date(p.recurringSchedule.startDate)
+    }
+    if (p.recurringSchedule.endDate) {
+      endDate = p.recurringSchedule.endDate instanceof Date
+        ? p.recurringSchedule.endDate
+        : new Date(p.recurringSchedule.endDate)
+    }
+  } else if (p.bookingType === 'multiDate' && p.eventDates && p.eventDates.length > 0) {
+    const first = p.eventDates[0]
+    const last = p.eventDates[p.eventDates.length - 1]
+    startDate = first.date instanceof Date ? first.date : new Date(first.date)
+    endDate = last.date instanceof Date ? last.date : new Date(last.date)
+  }
+
+  return { startDate, endDate }
+}
+
+function isProjectOverdue(p: Project, now: Date): boolean {
+  if (p.stage === 'delivered' || p.status === 'completed' || p.status === 'cancelled') {
+    return false
+  }
+
+  const { endDate } = getProjectEffectiveDateRange(p)
+  const endOfDayMs = new Date(endDate).setHours(23, 59, 59, 999)
+
+  // Recurring booking: contract spans across all sessions through endDate
+  if (p.bookingType === 'recurring') {
+    return now.getTime() > endOfDayMs
+  }
+
+  // Multi-date booking: spans across all shoot dates
+  if (p.bookingType === 'multiDate') {
+    return now.getTime() > endOfDayMs
+  }
+
+  // Post-production: editing actively happens AFTER the shoot date.
+  // Standard post-production SLA is 30 days after the shoot before it is considered overdue.
+  if (p.stage === 'postProduction') {
+    const deliverySlaMs = endDate.getTime() + (30 * 24 * 60 * 60 * 1000)
+    return now.getTime() > deliverySlaMs
+  }
+
+  // Booked, Planning, Pre-Prod, Event Day:
+  // Overdue if the shoot day has completely ended (past 23:59:59 of eventDate)
+  return now.getTime() > endOfDayMs
+}
+
 interface Point {
   x: number
   y: number
@@ -646,8 +701,8 @@ function EventsBoardContent() {
       return raw.filter(p => {
         const isCompleted = p.stage === 'delivered' || p.status === 'completed'
         if (!isCompleted) return true
-        const eventDate = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
-        const daysSinceEvent = (nowMs - eventDate.getTime()) / (1000 * 60 * 60 * 24)
+        const { endDate } = getProjectEffectiveDateRange(p)
+        const daysSinceEvent = (nowMs - endDate.getTime()) / (1000 * 60 * 60 * 24)
         return daysSinceEvent <= 30
       })
     }
@@ -735,6 +790,8 @@ function EventsBoardContent() {
   const clientTotalAmount = selectedClient?.totalAmount ?? 0
   const isPaymentPending = clientBalanceDue > 0 && selectedClient?.paymentStatus !== 'paid'
 
+  const now = useMemo(() => new Date(), [])
+
   // Apply URL params (project + stage) only once — on the first time projects data is available.
   // Do NOT re-run on every Firestore update, otherwise any panel navigation resets back to the URL stage.
   useEffect(() => {
@@ -747,6 +804,11 @@ function EventsBoardContent() {
         const match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
         if (match) {
           setSelectedProjectId(match.projectId)
+          const isDone = match.stage === 'delivered' || match.status === 'completed'
+          const isOverdue = !isDone && isProjectOverdue(match, now)
+          if (isDone) setRailFilter('done')
+          else if (isOverdue) setRailFilter('overdue')
+          else setRailFilter('active')
           applied = true
         }
       }
@@ -761,13 +823,11 @@ function EventsBoardContent() {
     }, 0)
 
     return () => clearTimeout(timer)
-  }, [paramProject, paramStage, projects])
+  }, [paramProject, paramStage, projects, now])
 
 
 
   // ─── KPI METRICS ────────────────────────────────────────────────────────
-  const now = useMemo(() => new Date(), [])
-
   const { ongoingCount, doneCount, overdueCount } = useMemo(() => {
     let ongoing = 0
     let done = 0
@@ -778,8 +838,7 @@ function EventsBoardContent() {
       if (isDelivered) {
         done++
       } else {
-        const eventDate = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
-        if (eventDate.getTime() < now.getTime()) {
+        if (isProjectOverdue(p, now)) {
           overdue++
         } else {
           ongoing++
@@ -793,36 +852,44 @@ function EventsBoardContent() {
   // ─── FILTERED PROJECTS IN LEFT RAIL ─────────────────────────────────────
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
-      const eventDate = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
       const isDelivered = p.stage === 'delivered' || p.status === 'completed'
-      const isPastDue = !isDelivered && eventDate.getTime() < now.getTime()
+      const isPastDue = isProjectOverdue(p, now)
 
       // Requirement 2: Completed or done events should not exist after 30 days from the event
       if (isDelivered) {
-        const diffMs = now.getTime() - eventDate.getTime()
+        const { endDate } = getProjectEffectiveDateRange(p)
+        const diffMs = now.getTime() - endDate.getTime()
         const diffDays = diffMs / (1000 * 60 * 60 * 24)
         if (diffDays > 30) return false
       }
 
-      // Ongoing: only active projects that are on track (not overdue and not delivered)
-      if (railFilter === 'active' && (isDelivered || isPastDue)) return false
-      // Done: only delivered/completed projects
-      if (railFilter === 'done' && !isDelivered) return false
-      // Overdue: only active projects whose event date has passed
-      if (railFilter === 'overdue' && !isPastDue) return false
+      // If this project is the one currently selected by the user, keep it visible in rail unless search filters it out
+      const isSelected = p.projectId === selectedProjectId
+
+      // Ongoing: active projects that are on track (or currently selected)
+      if (railFilter === 'active' && !isSelected && (isDelivered || isPastDue)) return false
+      // Done: completed/delivered projects (or currently selected)
+      if (railFilter === 'done' && !isSelected && !isDelivered) return false
+      // Overdue: overdue projects (or currently selected)
+      if (railFilter === 'overdue' && !isSelected && !isPastDue) return false
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
         const matchName = (p.eventName || '').toLowerCase().includes(q)
         const matchClient = (p.clientName || '').toLowerCase().includes(q)
         const matchType = (p.eventType || '').toLowerCase().includes(q)
+        const matchCustom = (p.customEventType || '').toLowerCase().includes(q)
         const matchLabel = (p.dateLabel || '').toLowerCase().includes(q)
-        if (!matchName && !matchClient && !matchType && !matchLabel) return false
+        const matchLocation = (p.location || '').toLowerCase().includes(q)
+        const matchBookingType = (p.bookingType || '').toLowerCase().includes(q)
+        if (!matchName && !matchClient && !matchType && !matchCustom && !matchLabel && !matchLocation && !matchBookingType) {
+          return false
+        }
       }
 
       return true
     })
-  }, [projects, railFilter, searchQuery, now])
+  }, [projects, railFilter, searchQuery, now, selectedProjectId])
 
   // ─── STAGE PROGRESS HELPERS ─────────────────────────────────────────────
   const currentStageIndex = useMemo(() => {
@@ -875,6 +942,31 @@ function EventsBoardContent() {
           endTime: ed.endTime,
         }
       })
+    }
+    if (selectedProject.bookingType === 'recurring' && selectedProject.recurringSchedule) {
+      const rs = selectedProject.recurringSchedule
+      const start = rs.startDate instanceof Date ? rs.startDate : new Date(rs.startDate)
+      const count = rs.totalSessions || 1
+      const days: EventDateEntry[] = []
+      for (let i = 0; i < count; i++) {
+        const sessionDate = new Date(start)
+        if (rs.frequency === 'weekly') {
+          sessionDate.setDate(sessionDate.getDate() + (i * 7))
+        } else if (rs.frequency === 'biweekly') {
+          sessionDate.setDate(sessionDate.getDate() + (i * 14))
+        } else if (rs.frequency === 'monthly') {
+          sessionDate.setMonth(sessionDate.getMonth() + i)
+        }
+        days.push({
+          id: `session-${i + 1}`,
+          date: sessionDate,
+          label: `Session ${i + 1}`,
+          location: selectedProject.location || 'Venue Site',
+          startTime: rs.sessionStartTime || selectedProject.startTime || '09:00',
+          endTime: rs.sessionEndTime || selectedProject.endTime || '18:00',
+        })
+      }
+      if (days.length > 0) return days
     }
     return [
       {
@@ -1647,8 +1739,9 @@ function EventsBoardContent() {
           ) : (
             filteredProjects.map(p => {
               const isSelected = p.projectId === selectedProject?.projectId
-              const isOverdue = p.stage !== 'delivered' && (p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)).getTime() < now.getTime()
+              const isOverdue = isProjectOverdue(p, now)
               const isMultiDay = (p.eventDates && p.eventDates.length > 1) || p.bookingType === 'multiDate'
+              const isRecurring = p.bookingType === 'recurring'
 
               return (
                 <div
@@ -1684,12 +1777,34 @@ function EventsBoardContent() {
                         Multi-Day
                       </span>
                     )}
+                    {isRecurring && (
+                      <span style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: 'var(--color-purple-muted)',
+                        color: 'var(--color-purple)',
+                      }}>
+                        Recurring
+                      </span>
+                    )}
                   </div>
 
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ textTransform: 'capitalize' }}>{p.eventType}</span>
+                    <span style={{ textTransform: 'capitalize' }}>
+                      {p.eventType === 'other' && p.customEventType ? p.customEventType : p.eventType}
+                    </span>
                     <span>·</span>
-                    <span>{formatShortDate(p.eventDate)}</span>
+                    {isRecurring && p.recurringSchedule ? (
+                      <span>
+                        {formatShortDate(p.recurringSchedule.startDate)}
+                        {p.recurringSchedule.frequency ? ` · ${p.recurringSchedule.frequency}` : ''}
+                      </span>
+                    ) : (
+                      <span>{formatShortDate(p.eventDate)}</span>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
@@ -1730,9 +1845,15 @@ function EventsBoardContent() {
                   {selectedProject.eventName || selectedProject.clientName}
                 </span>
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                  <span style={{ textTransform: 'capitalize' }}>{selectedProject.eventType}</span>
+                  <span style={{ textTransform: 'capitalize' }}>
+                    {selectedProject.eventType === 'other' && selectedProject.customEventType ? selectedProject.customEventType : selectedProject.eventType}
+                  </span>
                   {' · '}
-                  {formatShortDate(selectedProject.eventDate)}
+                  {selectedProject.bookingType === 'recurring' && selectedProject.recurringSchedule ? (
+                    `${formatShortDate(selectedProject.recurringSchedule.startDate)} – ${formatShortDate(selectedProject.recurringSchedule.endDate)}`
+                  ) : (
+                    formatShortDate(selectedProject.eventDate)
+                  )}
                   {selectedProject.clientName && ` · ${selectedProject.clientName}`}
                 </span>
               </div>
@@ -1748,6 +1869,19 @@ function EventsBoardContent() {
                   border: '0.5px solid var(--color-border)',
                 }}>
                   {multiEventDays.length} Event Tracks
+                </span>
+              )}
+              {selectedProject.bookingType === 'recurring' && selectedProject.recurringSchedule && (
+                <span style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  background: 'var(--color-purple-muted)',
+                  color: 'var(--color-purple)',
+                  border: '0.5px solid var(--color-border)',
+                }}>
+                  {selectedProject.recurringSchedule.totalSessions} Sessions · {selectedProject.recurringSchedule.frequency.charAt(0).toUpperCase() + selectedProject.recurringSchedule.frequency.slice(1)}
                 </span>
               )}
             </>
