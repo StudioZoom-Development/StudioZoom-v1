@@ -737,22 +737,32 @@ function EventsBoardContent() {
   const multiEventDays: EventDateEntry[] = useMemo(() => {
     if (!selectedProject) return []
     if (selectedProject.eventDates && selectedProject.eventDates.length > 0) {
-      return selectedProject.eventDates.map((ed: any, i: number) => {
-        let dateVal = ed.date
-        if (dateVal && typeof dateVal.toDate === 'function') {
-          dateVal = dateVal.toDate()
-        } else if (dateVal && typeof dateVal === 'object' && 'seconds' in dateVal && typeof dateVal.seconds === 'number') {
-          dateVal = new Date(dateVal.seconds * 1000)
-        } else if (dateVal && typeof dateVal === 'object' && '_seconds' in dateVal && typeof dateVal._seconds === 'number') {
-          dateVal = new Date(dateVal._seconds * 1000)
-        } else if (dateVal && !(dateVal instanceof Date)) {
+      return (selectedProject.eventDates as unknown as Array<{
+        id?: string
+        date: unknown
+        label?: string
+        location?: string
+        startTime?: string
+        endTime?: string
+      }>).map((ed, i) => {
+        let dateVal: unknown = ed.date
+        if (dateVal && typeof (dateVal as { toDate?: () => Date }).toDate === 'function') {
+          dateVal = (dateVal as { toDate: () => Date }).toDate()
+        } else if (dateVal && typeof dateVal === 'object' && 'seconds' in dateVal && typeof (dateVal as { seconds: number }).seconds === 'number') {
+          dateVal = new Date((dateVal as { seconds: number }).seconds * 1000)
+        } else if (dateVal && typeof dateVal === 'object' && '_seconds' in dateVal && typeof (dateVal as { _seconds: number })._seconds === 'number') {
+          dateVal = new Date((dateVal as { _seconds: number })._seconds * 1000)
+        } else if (dateVal && !(dateVal instanceof Date) && (typeof dateVal === 'string' || typeof dateVal === 'number')) {
           dateVal = new Date(dateVal)
         }
         const validDate = dateVal instanceof Date && !isNaN(dateVal.getTime()) ? dateVal : selectedProject.eventDate
         return {
-          ...ed,
           id: ed.id || `day-${i}`,
           date: validDate,
+          label: ed.label || `Day ${i + 1}`,
+          location: ed.location,
+          startTime: ed.startTime,
+          endTime: ed.endTime,
         }
       })
     }
@@ -3171,7 +3181,7 @@ function StageNodeCard({
       style={{
         width: '260px',
         flexShrink: 0,
-        cursor: isNodeDragging ? 'grabbing' : 'pointer',
+        cursor: isNodeDragging ? 'grabbing' : isDragging ? 'grab' : 'pointer',
         background: isSelected ? 'var(--color-surface-raised)' : 'var(--color-surface)',
         border: '0.5px solid var(--color-border)',
         borderLeft: `${isSelected ? '4px' : '3px'} solid ${leftBorderColor}`,

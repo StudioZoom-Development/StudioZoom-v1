@@ -48,7 +48,7 @@ function parseEventDates(raw: unknown): EventDateEntry[] | undefined {
   }))
 }
 
-function mapDocToProject(id: string, data: Record<string, any>): Project {
+function mapDocToProject(id: string, data: Record<string, unknown>): Project {
   return {
     ...data,
     projectId: id,

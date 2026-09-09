@@ -393,7 +393,6 @@ function WorkItemSidePanel({
   freelancers,
 }: SidePanelProps) {
   const [showReassign, setShowReassign] = useState(false)
-  const [selectedAssignee, setSelectedAssignee] = useState('')
 
   if (!item) return null
 
@@ -523,7 +522,7 @@ function WorkItemSidePanel({
                   Work is Paused (Pending)
                 </div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px', lineHeight: 1.4 }}>
-                  This work item has been denoted and moved to Pending status. Click "Resume Work" or change status to move it back to Ongoing.
+                  This work item has been denoted and moved to Pending status. Click &quot;Resume Work&quot; or change status to move it back to Ongoing.
                 </div>
               </div>
             </div>
@@ -907,7 +906,7 @@ function CreateWorkModal({
     const startDate = form.startDate ? new Date(form.startDate + 'T00:00:00') : undefined
     const dueDate   = form.dueDate   ? new Date(form.dueDate + 'T00:00:00')   : undefined
 
-    const optimisticId = 'work-' + Date.now()
+    const optimisticId = `work-${form.projectId}-${rawAssigneeId}-${form.type}`
     const optimisticItem: WorkItem = {
       workItemId:      optimisticId,
       projectId:       form.projectId,
