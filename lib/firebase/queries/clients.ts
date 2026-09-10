@@ -1,11 +1,13 @@
 import {
-  collection, query, orderBy,
+  collection, query, orderBy, where,
   onSnapshot, getDoc, getDocs, doc, writeBatch,
   deleteDoc, updateDoc, setDoc,
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { Client, EventDateEntry } from '@/types'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
 
 export interface ClientFilters {
   status?:        string
@@ -61,7 +63,7 @@ export function subscribeToClients(
             : undefined,
         } as Client
       })
-      .filter(c => !c.isDeleted && c.status !== 'inquiry')  // exclude soft-deleted and draft inquiries
+      .filter(c => !c.isDeleted && c.status !== 'inquiry' && isAllowedByTestMode(c.createdAt))  // exclude soft-deleted, draft inquiries, and hidden test-mode records
 
     if (filters.eventType) {
       clients = clients.filter(c => c.eventType === filters.eventType)
@@ -296,6 +298,33 @@ export async function createBooking(data: {
       }))
     : []
 
+  const isRecurring = data.bookingType === 'recurring' && Boolean(data.recurringSchedule)
+  const bookingGroupId = isRecurring ? `contract_${clientRef.id}` : undefined
+
+  // Compute recurring sessions if recurring booking
+  const computedSessions = isRecurring && data.recurringSchedule
+    ? computeRecurringSessionDates(
+        (data.recurringSchedule.frequency as 'weekly' | 'biweekly' | 'monthly') || 'weekly',
+        data.recurringSchedule.startDate,
+        data.recurringSchedule.totalSessions || 1,
+        data.recurringSchedule.sessionStartTime || data.startTime || '09:00',
+        data.recurringSchedule.sessionEndTime || data.endTime || '18:00'
+      )
+    : []
+
+  if (isRecurring && computedSessions.length > 0 && formattedEventDates.length === 0) {
+    computedSessions.forEach(sess => {
+      formattedEventDates.push({
+        id: `session-${sess.sessionNumber}`,
+        label: sess.label,
+        date: Timestamp.fromDate(sess.date),
+        location: data.location || '',
+        startTime: sess.startTime,
+        endTime: sess.endTime,
+      })
+    })
+  }
+
   const formattedRecurringSchedule = data.recurringSchedule
     ? {
         frequency:        data.recurringSchedule.frequency,
@@ -309,9 +338,18 @@ export async function createBooking(data: {
       }
     : null
 
+  // Generate project reference(s)
+  const projectRefs = isRecurring && computedSessions.length > 0
+    ? computedSessions.map(() => doc(collection(db, 'projects')))
+    : [projectRef]
+
+  const primaryProjectId = projectRefs[0].id
+
   const clientDocData = {
     clientId:          clientRef.id,
-    projectId:         projectRef.id,
+    projectId:         primaryProjectId,
+    projectIds:        projectRefs.map(p => p.id),
+    ...(bookingGroupId ? { bookingGroupId } : {}),
     name:              data.clientName,
     contact:           formattedContact,
     email:             data.email,
@@ -357,36 +395,76 @@ export async function createBooking(data: {
     batch.set(payRef, paymentDocData)
   }
 
-  const projectDocData = {
-    projectId:         projectRef.id,
-    clientId:          clientRef.id,
-    eventDate:         Timestamp.fromDate(data.eventDate),   // DENORMALIZED
-    startTime:         data.startTime || '09:00',            // DENORMALIZED
-    endTime:           data.endTime || '18:00',              // DENORMALIZED
-    eventName:         data.eventName,                       // DENORMALIZED
-    clientName:        data.clientName,                      // DENORMALIZED
-    clientContact:     formattedContact,                     // DENORMALIZED
-    eventType:         data.eventType,                       // DENORMALIZED
-    customEventType:   data.customEventType || '',           // DENORMALIZED
-    notes:             data.notes || '',                     // DENORMALIZED
-    bookingType:       data.bookingType || 'oneTime',        // DENORMALIZED
-    eventDates:        formattedEventDates,                  // DENORMALIZED
-    ...(formattedRecurringSchedule ? { recurringSchedule: formattedRecurringSchedule } : {}),
-    packageType:       data.packageType,                     // DENORMALIZED
-    stage:             'booked',
-    status:            'upcoming',
-    staffUids:         [],
-    freelancerIds:     [],
-    milestones:        data.advanceAmount > 0
-      ? { depositPaid: Timestamp.fromDate(data.advanceDate) }
-      : {},
-    createdBy:         data.createdBy,
-    createdAt:         serverTimestamp(),
-    updatedAt:         serverTimestamp(),
-  }
+  // Write 3: Projects (either discrete sessions for recurring, or single project)
+  if (isRecurring && computedSessions.length > 0) {
+    const perSessionRate = data.recurringSchedule?.perSessionRate || Math.round(data.totalAmount / computedSessions.length)
 
-  // Write 3: Project — denormalized fields from client
-  batch.set(projectRef, projectDocData)
+    computedSessions.forEach((sess, idx) => {
+      const pRef = projectRefs[idx]
+      const sessionProjectDocData = {
+        projectId:         pRef.id,
+        clientId:          clientRef.id,
+        bookingGroupId,
+        sessionIndex:      sess.sessionNumber,
+        totalSessions:     computedSessions.length,
+        sessionRate:       perSessionRate,
+        eventDate:         Timestamp.fromDate(sess.date),
+        startTime:         sess.startTime,
+        endTime:           sess.endTime,
+        eventName:         `${data.eventName} — ${sess.label}`,
+        dateLabel:         sess.label,
+        clientName:        data.clientName,
+        clientContact:     formattedContact,
+        eventType:         data.eventType,
+        customEventType:   data.customEventType || '',
+        notes:             data.notes || '',
+        location:          data.location || '',
+        bookingType:       'recurring',
+        packageType:       `${data.packageType || 'Contract'} · ${sess.label}/${computedSessions.length}`,
+        stage:             'booked',
+        status:            'upcoming',
+        staffUids:         [],
+        freelancerIds:     [],
+        milestones:        (idx === 0 && data.advanceAmount > 0)
+          ? { depositPaid: Timestamp.fromDate(data.advanceDate) }
+          : {},
+        createdBy:         data.createdBy,
+        createdAt:         serverTimestamp(),
+        updatedAt:         serverTimestamp(),
+      }
+      batch.set(pRef, sessionProjectDocData)
+    })
+  } else {
+    const projectDocData = {
+      projectId:         projectRef.id,
+      clientId:          clientRef.id,
+      eventDate:         Timestamp.fromDate(data.eventDate),
+      startTime:         data.startTime || '09:00',
+      endTime:           data.endTime || '18:00',
+      eventName:         data.eventName,
+      clientName:        data.clientName,
+      clientContact:     formattedContact,
+      eventType:         data.eventType,
+      customEventType:   data.customEventType || '',
+      notes:             data.notes || '',
+      location:          data.location || '',
+      bookingType:       data.bookingType || 'oneTime',
+      eventDates:        formattedEventDates,
+      ...(formattedRecurringSchedule ? { recurringSchedule: formattedRecurringSchedule } : {}),
+      packageType:       data.packageType,
+      stage:             'booked',
+      status:            'upcoming',
+      staffUids:         [],
+      freelancerIds:     [],
+      milestones:        data.advanceAmount > 0
+        ? { depositPaid: Timestamp.fromDate(data.advanceDate) }
+        : {},
+      createdBy:         data.createdBy,
+      createdAt:         serverTimestamp(),
+      updatedAt:         serverTimestamp(),
+    }
+    batch.set(projectRef, projectDocData)
+  }
 
   console.group('🔥 [createBooking] Firestore Batch Payload')
   console.log('Incoming Data:', data)
@@ -394,7 +472,7 @@ export async function createBooking(data: {
   if (paymentDocData) {
     console.log('Payment Document (/clients/' + clientRef.id + '/payments):', paymentDocData)
   }
-  console.log('Project Document (/projects/' + projectRef.id + '):', projectDocData)
+  console.log(`Created ${projectRefs.length} Project Document(s)`)
   console.log('Invoice Number Generated:', invoiceNo)
   console.groupEnd()
 
@@ -560,9 +638,11 @@ export async function softDeleteClient(clientId: string, deletedBy: string): Pro
     updatedAt:  serverTimestamp(),
   })
 
+  let projectId = ''
   if (clientSnap.exists()) {
     const data = clientSnap.data()
     if (data.projectId) {
+      projectId = data.projectId
       batch.update(doc(db, 'projects', data.projectId), {
         isDeleted:  true,
         deletedBy,
@@ -571,6 +651,39 @@ export async function softDeleteClient(clientId: string, deletedBy: string): Pro
       })
     }
   }
+
+  // Soft-delete related work items
+  if (projectId) {
+    const wSnap1 = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', projectId)))
+    wSnap1.forEach(d => {
+      batch.update(d.ref, {
+        isDeleted:  true,
+        deletedBy,
+        deletedAt:  serverTimestamp(),
+        updatedAt:  serverTimestamp(),
+      })
+    })
+
+    const aSnap1 = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', projectId)))
+    aSnap1.forEach(d => {
+      batch.update(d.ref, {
+        isDeleted:  true,
+        deletedBy,
+        deletedAt:  serverTimestamp(),
+        updatedAt:  serverTimestamp(),
+      })
+    })
+  }
+
+  const wSnap2 = await getDocs(query(collection(db, 'workItems'), where('clientId', '==', clientId)))
+  wSnap2.forEach(d => {
+    batch.update(d.ref, {
+      isDeleted:  true,
+      deletedBy,
+      deletedAt:  serverTimestamp(),
+      updatedAt:  serverTimestamp(),
+    })
+  })
 
   await batch.commit()
 }

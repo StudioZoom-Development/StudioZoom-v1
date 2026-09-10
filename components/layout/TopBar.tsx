@@ -36,7 +36,6 @@ export function TopBar() {
   const pathname = usePathname()
   const router   = useRouter()
   const appUser  = useAuthStore(s => s.appUser)
-
   const title = PAGE_TITLES[pathname]
     ?? Object.entries(PAGE_TITLES).find(([k]) => pathname.startsWith(k + '/'))?.[1]
     ?? 'Studio Zoom'

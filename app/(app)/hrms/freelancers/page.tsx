@@ -13,6 +13,7 @@ import {
   getAllFreelancerPayouts,
   addFreelancer,
 } from '@/lib/firebase/queries/freelancers'
+import { useUIStore } from '@/store/uiStore'
 
 function getInitials(name: string): string {
   if (!name) return 'FL'
@@ -39,6 +40,8 @@ const SKILL_FILTERS = [
 
 export default function FreelancersListPage() {
   const router = useRouter()
+  const testDatasetMode = useUIStore(s => s.testDatasetMode)
+  const testModeCutoff = useUIStore(s => s.testModeCutoff)
   const [freelancers, setFreelancers] = useState<Freelancer[]>([])
   const [payouts, setPayouts] = useState<FreelancerPayout[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,12 +68,13 @@ export default function FreelancersListPage() {
 
   // Subscribe to real-time freelancers
   useEffect(() => {
+    setLoading(true)
     const unsub = subscribeToFreelancers(data => {
       setFreelancers(data)
       setLoading(false)
     })
     return () => unsub()
-  }, [])
+  }, [testDatasetMode, testModeCutoff])
 
   // Load payouts to derive lastEngaged dates
   useEffect(() => {

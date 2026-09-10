@@ -73,6 +73,7 @@ export interface Client {
   eventDates?:         EventDateEntry[]
   recurringSchedule?:  RecurringSchedule
   bookingGroupId?:     string
+  projectIds?:         string[]          // IDs of all sibling session projects for recurring bookings
   createdBy:           string
   createdAt:           Date
   updatedAt:           Date
@@ -124,19 +125,126 @@ export interface Project {
   milestones:             Partial<Record<MilestoneKey, Date>>
   photoMilestones?:       Record<string, boolean>
   videoMilestones?:       Record<string, boolean>
+  postProdRequirements?:  PostProdRequirements      // Configured at Booked stage
+  postProduction?:        PostProductionData         // Populated at Post-Production entry
   override?:              { by: string; reason: string; at: Date }
   bookingType?:           BookingType
   bookingGroupId?:        string             // links sibling projects in multi-date bookings
+  sessionIndex?:          number             // 1-indexed session number for recurring discrete sessions
+  totalSessions?:         number             // total session count for recurring discrete contract
+  sessionRate?:           number             // per-session billing rate
   dateLabel?:             string             // "Engagement", "Reception", etc.
   location?:              string
   eventDates?:            EventDateEntry[]
   recurringSchedule?:     RecurringSchedule
   sessionMilestones?:     Record<string, SessionMilestoneState>
   stageCompletedAt?:      Partial<Record<ProjectStage, Date>>
+  stageGates?:            Record<string, Record<string, boolean>>
   isDeleted?:             boolean
   createdBy:              string
   createdAt:              Date
   updatedAt:              Date
+}
+
+// ─── POST-PRODUCTION REQUIREMENTS (configured at Booked stage) ───────
+export interface PostProdServiceRequirement {
+  required: boolean
+  clientReviewRequired: boolean
+}
+
+export interface PostProdRequirements {
+  photography: PostProdServiceRequirement
+  album: PostProdServiceRequirement
+  videoHighlights: PostProdServiceRequirement
+  fullVideo: PostProdServiceRequirement
+}
+
+// ─── POST-PRODUCTION TRACK STATUS & DATA ─────────────────────────────
+export type PostProdTrackStatus = 'notStarted' | 'inProgress' | 'completed'
+
+export type PostProdStageStatus =
+  | 'pending'         // Not yet started
+  | 'inProgress'      // Staff actively working
+  | 'completed'       // Work finished
+  | 'waitingClient'   // Sent for client review
+  | 'approved'        // Client approved
+  | 'notApproved'     // Client rejected → goes back
+  | 'notRequired'     // Client review not required (auto-pass)
+
+export interface ClientReviewEntry {
+  decision: 'approved' | 'notApproved'
+  reviewedAt: Date
+  reviewedBy: string
+  notes?: string
+}
+
+export interface PostProdStageData {
+  status: PostProdStageStatus
+  startDate?: Date          // Auto-set on first transition to inProgress
+  dueDate?: Date            // Set by admin during Post-Prod setup
+}
+
+export interface PostProdTrackAssignment {
+  staffUid: string
+  staffName: string
+  freelancerId?: string
+  freelancerName?: string
+}
+
+export interface PostProdClientReview {
+  status: PostProdStageStatus  // waitingClient | approved | notApproved | notRequired
+  required: boolean            // From Booked stage config
+  history: ClientReviewEntry[]
+}
+
+// ── Photo Track ──
+export interface PostProdPhotoTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  selectedPhotos: boolean
+  rawDelivered: boolean
+  designing: PostProdStageData
+  clientReview: PostProdClientReview
+}
+
+// ── Album Track ──
+export interface PostProdAlbumTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  albumDesigning: PostProdStageData
+  clientReview: PostProdClientReview
+  creatingAlbum: PostProdStageData
+  delivered: boolean
+}
+
+// ── Video Highlights Track ──
+export interface PostProdVideoTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  selectedVideo: boolean
+  rawVideoDelivered: boolean
+  highlights: PostProdStageData
+  clientReview: PostProdClientReview
+}
+
+// ── Full Video Track ──
+export interface PostProdFullVideoTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  fullVideoEditing: PostProdStageData
+  clientReview: PostProdClientReview
+  delivered: boolean
+}
+
+// ── Post-Production Container ──
+export interface PostProductionData {
+  isConfigured: boolean       // false until admin saves Post-Prod setup
+  configuredAt?: Date
+  configuredBy?: string
+  photoTrack?: PostProdPhotoTrack         // Only present if photography required
+  albumTrack?: PostProdAlbumTrack         // Only present if album required
+  videoTrack?: PostProdVideoTrack         // Only present if videoHighlights required
+  fullVideoTrack?: PostProdFullVideoTrack // Only present if fullVideo required
 }
 
 export interface SessionMilestoneState {
@@ -174,6 +282,11 @@ export interface StaffAssignment {
 export type WorkItemType =
   | 'photography' | 'videography' | 'photoEditing'
   | 'videoEditing' | 'albumDesign' | 'highlights' | 'fullFilm'
+  | 'photoDesigning' | 'albumDesigning' | 'albumCreating'
+  | 'highlightsEditing' | 'fullVideoEditing'
+
+export type PostProdTrackKey = 'photoTrack' | 'albumTrack' | 'videoTrack' | 'fullVideoTrack'
+export type PostProdStageKey = 'designing' | 'albumDesigning' | 'creatingAlbum' | 'highlights' | 'fullVideoEditing'
 
 export type WorkItemStatus = 'pending' | 'todo' | 'inProgress' | 'review' | 'done'
 export type WorkTrack      = 'photo' | 'video'
@@ -199,6 +312,8 @@ export interface WorkItem {
   startDate?:       Date
   dueDate?:         Date
   notes?:           string
+  postProdTrackKey?: PostProdTrackKey   // Links to source track
+  postProdStageKey?: PostProdStageKey   // Links to stage within track
   isDeleted?:       boolean
   createdBy:        string
   createdAt:        Date
@@ -343,6 +458,7 @@ export interface Freelancer {
   contact:      string
   notes?:       string
   isActive:     boolean
+  isDeleted?:   boolean
   createdAt?:   Date
   updatedAt?:   Date
 }

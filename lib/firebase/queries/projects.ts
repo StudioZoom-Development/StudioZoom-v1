@@ -4,7 +4,21 @@ import {
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Project, ProjectStage, StaffAssignment, EventDateEntry, RecurringSchedule } from '@/types'
+import {
+  Project,
+  ProjectStage,
+  StaffAssignment,
+  EventDateEntry,
+  RecurringSchedule,
+  PostProductionData,
+  PostProdRequirements,
+  PostProdStageStatus,
+  PostProdTrackStatus,
+  PostProdStageData,
+  ClientReviewEntry,
+} from '@/types'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
+import { completeAllWorkItemsForProject } from './workItems'
 
 const STAGE_ORDER: ProjectStage[] = [
   'booked',
@@ -74,6 +88,129 @@ function parseStageCompletedAt(raw: unknown): Partial<Record<ProjectStage, Date>
   return Object.keys(res).length > 0 ? res : undefined
 }
 
+function parseClientReviewHistory(raw: unknown): ClientReviewEntry[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map(item => ({
+    decision: (item.decision === 'approved' ? 'approved' : 'notApproved') as 'approved' | 'notApproved',
+    reviewedAt: parseFirestoreDate(item.reviewedAt),
+    reviewedBy: String(item.reviewedBy || ''),
+    notes: item.notes ? String(item.notes) : undefined,
+  }))
+}
+
+function parseStageData(raw: unknown): PostProdStageData | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  return {
+    status: (r.status as PostProdStageStatus) || 'pending',
+    startDate: r.startDate ? parseFirestoreDate(r.startDate) : undefined,
+    dueDate: r.dueDate ? parseFirestoreDate(r.dueDate) : undefined,
+  }
+}
+
+function parsePostProduction(raw: unknown): PostProductionData | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const data = raw as Record<string, unknown>
+  const result: PostProductionData = {
+    isConfigured: Boolean(data.isConfigured),
+    configuredAt: data.configuredAt ? parseFirestoreDate(data.configuredAt) : undefined,
+    configuredBy: data.configuredBy ? String(data.configuredBy) : undefined,
+  }
+
+  if (data.photoTrack && typeof data.photoTrack === 'object') {
+    const pt = data.photoTrack as Record<string, unknown>
+    const cr = (pt.clientReview as Record<string, unknown>) || {}
+    const asgn = (pt.assignment as Record<string, unknown>) || {}
+    result.photoTrack = {
+      status: (pt.status as PostProdTrackStatus) || 'notStarted',
+      assignment: {
+        staffUid: String(asgn.staffUid || ''),
+        staffName: String(asgn.staffName || ''),
+        freelancerId: asgn.freelancerId ? String(asgn.freelancerId) : undefined,
+        freelancerName: asgn.freelancerName ? String(asgn.freelancerName) : undefined,
+      },
+      selectedPhotos: Boolean(pt.selectedPhotos),
+      rawDelivered: Boolean(pt.rawDelivered),
+      designing: parseStageData(pt.designing) || { status: 'pending' },
+      clientReview: {
+        status: (cr.status as PostProdStageStatus) || 'pending',
+        required: cr.required !== undefined ? Boolean(cr.required) : true,
+        history: parseClientReviewHistory(cr.history),
+      },
+    }
+  }
+
+  if (data.albumTrack && typeof data.albumTrack === 'object') {
+    const at = data.albumTrack as Record<string, unknown>
+    const cr = (at.clientReview as Record<string, unknown>) || {}
+    const asgn = (at.assignment as Record<string, unknown>) || {}
+    result.albumTrack = {
+      status: (at.status as PostProdTrackStatus) || 'notStarted',
+      assignment: {
+        staffUid: String(asgn.staffUid || ''),
+        staffName: String(asgn.staffName || ''),
+        freelancerId: asgn.freelancerId ? String(asgn.freelancerId) : undefined,
+        freelancerName: asgn.freelancerName ? String(asgn.freelancerName) : undefined,
+      },
+      albumDesigning: parseStageData(at.albumDesigning) || { status: 'pending' },
+      clientReview: {
+        status: (cr.status as PostProdStageStatus) || 'pending',
+        required: cr.required !== undefined ? Boolean(cr.required) : true,
+        history: parseClientReviewHistory(cr.history),
+      },
+      creatingAlbum: parseStageData(at.creatingAlbum) || { status: 'pending' },
+      delivered: Boolean(at.delivered),
+    }
+  }
+
+  if (data.videoTrack && typeof data.videoTrack === 'object') {
+    const vt = data.videoTrack as Record<string, unknown>
+    const cr = (vt.clientReview as Record<string, unknown>) || {}
+    const asgn = (vt.assignment as Record<string, unknown>) || {}
+    result.videoTrack = {
+      status: (vt.status as PostProdTrackStatus) || 'notStarted',
+      assignment: {
+        staffUid: String(asgn.staffUid || ''),
+        staffName: String(asgn.staffName || ''),
+        freelancerId: asgn.freelancerId ? String(asgn.freelancerId) : undefined,
+        freelancerName: asgn.freelancerName ? String(asgn.freelancerName) : undefined,
+      },
+      selectedVideo: Boolean(vt.selectedVideo),
+      rawVideoDelivered: Boolean(vt.rawVideoDelivered),
+      highlights: parseStageData(vt.highlights) || { status: 'pending' },
+      clientReview: {
+        status: (cr.status as PostProdStageStatus) || 'pending',
+        required: cr.required !== undefined ? Boolean(cr.required) : true,
+        history: parseClientReviewHistory(cr.history),
+      },
+    }
+  }
+
+  if (data.fullVideoTrack && typeof data.fullVideoTrack === 'object') {
+    const fvt = data.fullVideoTrack as Record<string, unknown>
+    const cr = (fvt.clientReview as Record<string, unknown>) || {}
+    const asgn = (fvt.assignment as Record<string, unknown>) || {}
+    result.fullVideoTrack = {
+      status: (fvt.status as PostProdTrackStatus) || 'notStarted',
+      assignment: {
+        staffUid: String(asgn.staffUid || ''),
+        staffName: String(asgn.staffName || ''),
+        freelancerId: asgn.freelancerId ? String(asgn.freelancerId) : undefined,
+        freelancerName: asgn.freelancerName ? String(asgn.freelancerName) : undefined,
+      },
+      fullVideoEditing: parseStageData(fvt.fullVideoEditing) || { status: 'pending' },
+      clientReview: {
+        status: (cr.status as PostProdStageStatus) || 'pending',
+        required: cr.required !== undefined ? Boolean(cr.required) : true,
+        history: parseClientReviewHistory(cr.history),
+      },
+      delivered: Boolean(fvt.delivered),
+    }
+  }
+
+  return result
+}
+
 function mapDocToProject(id: string, data: Record<string, unknown>): Project {
   return {
     ...data,
@@ -84,6 +221,8 @@ function mapDocToProject(id: string, data: Record<string, unknown>): Project {
     eventDates: parseEventDates(data.eventDates),
     recurringSchedule: parseRecurringSchedule(data.recurringSchedule),
     stageCompletedAt: parseStageCompletedAt(data.stageCompletedAt),
+    postProdRequirements: data.postProdRequirements as PostProdRequirements | undefined,
+    postProduction: parsePostProduction(data.postProduction),
   } as unknown as Project
 }
 
@@ -129,11 +268,13 @@ export function subscribeToProjectStaffAssignments(
     where('projectId', '==', projectId)
   )
   return onSnapshot(q, snap => {
-    const list = snap.docs.map(d => ({
-      ...d.data(),
-      assignmentId: d.id,
-      createdAt: d.data().createdAt instanceof Timestamp ? d.data().createdAt.toDate() : new Date(),
-    } as StaffAssignment))
+    const list = snap.docs
+      .map(d => ({
+        ...d.data(),
+        assignmentId: d.id,
+        createdAt: d.data().createdAt instanceof Timestamp ? d.data().createdAt.toDate() : new Date(),
+      } as StaffAssignment))
+      .filter(a => isAllowedByTestMode(a.createdAt))
     callback(list)
   })
 }
@@ -144,11 +285,13 @@ export function subscribeToAllStaffAssignments(
 ): () => void {
   const q = query(collection(db, 'staffAssignments'))
   return onSnapshot(q, snap => {
-    const list = snap.docs.map(d => ({
-      ...d.data(),
-      assignmentId: d.id,
-      createdAt: d.data().createdAt instanceof Timestamp ? d.data().createdAt.toDate() : new Date(),
-    } as StaffAssignment))
+    const list = snap.docs
+      .map(d => ({
+        ...d.data(),
+        assignmentId: d.id,
+        createdAt: d.data().createdAt instanceof Timestamp ? d.data().createdAt.toDate() : new Date(),
+      } as StaffAssignment))
+      .filter(a => isAllowedByTestMode(a.createdAt))
     callback(list)
   }, err => {
     console.error('subscribeToAllStaffAssignments error:', err)
@@ -193,7 +336,7 @@ export async function updateProjectStage(
     updateData[`stageCompletedAt.${completedStage}`] = serverTimestamp()
   }
 
-  if (newStage === 'delivered') {
+  if (newStage === 'delivered' && completedStage === 'delivered') {
     updateData.status = 'completed'
     updateData['stageCompletedAt.delivered'] = serverTimestamp()
   }
@@ -210,14 +353,53 @@ export async function updateProjectStage(
 
   if (clientId) {
     const clientRef = doc(db, 'clients', clientId)
-    const clientUpdate: Record<string, unknown> = {
-      stage: newStage,
-      updatedAt: serverTimestamp(),
+    const clientSnap = await getDoc(clientRef)
+
+    if (clientSnap.exists()) {
+      const clientData = clientSnap.data()
+      const isClientRecurring = clientData.bookingType === 'recurring' || Boolean(clientData.recurringSchedule) || Boolean(clientData.projectIds?.length)
+
+      if (isClientRecurring && Array.isArray(clientData.projectIds) && clientData.projectIds.length > 1) {
+        const projsQuery = query(collection(db, 'projects'), where('clientId', '==', clientId))
+        const projsSnap = await getDocs(projsQuery)
+        const siblingProjs = projsSnap.docs.map(d => ({
+          id: d.id,
+          sessionIndex: d.data().sessionIndex as number | undefined,
+          stage: (d.id === projectId ? newStage : d.data().stage) as ProjectStage,
+          status: (d.id === projectId && newStage === 'delivered' && completedStage === 'delivered') ? 'completed' : d.data().status,
+          eventDate: d.data().eventDate,
+        }))
+
+        siblingProjs.sort((a, b) => (a.sessionIndex ?? 0) - (b.sessionIndex ?? 0))
+
+        const nextPending = siblingProjs.find(p => p.stage !== 'delivered' && p.status !== 'completed')
+        const allCompleted = siblingProjs.every(p => p.stage === 'delivered' || p.status === 'completed')
+
+        const clientUpdate: Record<string, unknown> = {
+          updatedAt: serverTimestamp(),
+        }
+
+        if (allCompleted) {
+          clientUpdate.stage = 'delivered'
+        } else if (nextPending) {
+          clientUpdate.stage = nextPending.stage || 'booked'
+          if (nextPending.eventDate) {
+            clientUpdate.eventDate = nextPending.eventDate
+          }
+        }
+
+        batch.update(clientRef, clientUpdate)
+      } else {
+        const clientUpdate: Record<string, unknown> = {
+          stage: newStage,
+          updatedAt: serverTimestamp(),
+        }
+        if (newStage === 'delivered') {
+          clientUpdate.status = 'booked'
+        }
+        batch.update(clientRef, clientUpdate)
+      }
     }
-    if (newStage === 'delivered') {
-      clientUpdate.status = 'booked'
-    }
-    batch.update(clientRef, clientUpdate)
   }
 
   await batch.commit()
@@ -331,7 +513,7 @@ export function subscribeToProjects(
   return onSnapshot(q, snap => {
     const list = snap.docs
       .map(d => mapDocToProject(d.id, d.data()))
-      .filter(p => !p.isDeleted && p.status !== 'cancelled')
+      .filter(p => !p.isDeleted && p.status !== 'cancelled' && isAllowedByTestMode(p.createdAt))
 
     list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
     callback(list)
@@ -346,7 +528,7 @@ export async function getActiveProjects(): Promise<Project[]> {
     const snap = await getDocs(collection(db, 'projects'))
     const list = snap.docs
       .map(d => mapDocToProject(d.id, d.data()))
-      .filter(p => !p.isDeleted && p.status !== 'cancelled')
+      .filter(p => !p.isDeleted && p.status !== 'cancelled' && isAllowedByTestMode(p.createdAt))
 
     list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
     return list
@@ -356,3 +538,52 @@ export async function getActiveProjects(): Promise<Project[]> {
   }
 }
 
+/** Soft-delete a project and all its associated work items and assignments */
+export async function softDeleteProject(projectId: string, deletedBy: string): Promise<void> {
+  const batch = writeBatch(db)
+  const projRef = doc(db, 'projects', projectId)
+  const projSnap = await getDoc(projRef)
+
+  batch.update(projRef, {
+    isDeleted: true,
+    deletedBy,
+    deletedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
+
+  if (projSnap.exists()) {
+    const data = projSnap.data()
+    if (data.clientId) {
+      batch.update(doc(db, 'clients', data.clientId), {
+        isDeleted: true,
+        deletedBy,
+        deletedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    }
+  }
+
+  // Soft-delete related work items
+  const wSnap = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', projectId)))
+  wSnap.forEach(d => {
+    batch.update(d.ref, {
+      isDeleted: true,
+      deletedBy,
+      deletedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  })
+
+  // Soft-delete related staff assignments
+  const aSnap = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', projectId)))
+  aSnap.forEach(d => {
+    batch.update(d.ref, {
+      isDeleted: true,
+      deletedBy,
+      deletedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  })
+
+  await batch.commit()
+}

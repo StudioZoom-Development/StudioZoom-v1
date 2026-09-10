@@ -10,6 +10,7 @@ import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { subscribeToLeads, softDeleteLead } from '@/lib/firebase/queries/leads'
 import { formatDisplayDate } from '@/lib/utils/dates'
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
 import { Lead } from '@/types'
 
 // Select styling matching design components
@@ -42,6 +43,8 @@ function getPaginationItems(current: number, total: number): (number | 'ellipsis
 export default function LeadsPage() {
   const router = useRouter()
   const appUser = useAuthStore(s => s.appUser)
+  const testDatasetMode = useUIStore(s => s.testDatasetMode)
+  const testModeCutoff = useUIStore(s => s.testModeCutoff)
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -69,12 +72,13 @@ export default function LeadsPage() {
 
   // Real-time Firestore subscription
   useEffect(() => {
+    setLoading(true)
     const unsub = subscribeToLeads({ source: sourceFilter }, data => {
       setLeads(data)
       setLoading(false)
     })
     return unsub
-  }, [sourceFilter])
+  }, [sourceFilter, testDatasetMode, testModeCutoff])
 
   // Filter leads by search term (AND logic with Source filter)
   const filteredLeads = useMemo(() => {
@@ -196,7 +200,6 @@ export default function LeadsPage() {
           background: 'var(--color-surface)',
           border: '0.5px solid var(--color-border)',
           borderRadius: '12px',
-          overflow: 'hidden',
         }}
       >
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
@@ -248,7 +251,7 @@ export default function LeadsPage() {
                 <LeadRow
                   key={lead.leadId}
                   lead={lead}
-                  isNearBottom={idx >= Math.max(0, paginatedLeads.length - 2)}
+                  isNearBottom={paginatedLeads.length >= 4 && idx >= paginatedLeads.length - 2}
                   onView={() => router.push(`/leads/${lead.leadId}`)}
                   onConvert={() => handleConvertToBooking(lead)}
                   onDelete={() => setDeleteTarget(lead)}
@@ -517,8 +520,8 @@ function LeadRow({
               style={{
                 position: 'absolute',
                 right: '12px',
-                ...(isNearBottom ? { bottom: '38px' } : { top: '40px' }),
-                zIndex: 50,
+                ...(isNearBottom ? { bottom: '100%', marginBottom: '4px' } : { top: '100%', marginTop: '4px' }),
+                zIndex: 100,
                 background: 'var(--color-surface-overlay)',
                 border: '0.5px solid var(--color-border)',
                 borderRadius: '10px',

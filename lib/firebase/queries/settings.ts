@@ -4,6 +4,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
 
 // ─────────────────────────────────────────────
 // Shared types
@@ -210,7 +211,7 @@ export function subscribeToAllUsers(
   return onSnapshot(q, snap => {
     callback(
       snap.docs
-        .filter(d => !d.data().isDeleted)
+        .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
         .map(d => ({
           uid:      d.id,
           name:     (d.data().name     as string) ?? '',

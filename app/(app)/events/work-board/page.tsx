@@ -8,8 +8,10 @@ import {
   updateWorkItemStatus,
   updateWorkItemProgress,
   updateWorkItemAssignee,
+  saveWorkItemDetails,
   CreateWorkItemData,
 } from '@/lib/firebase/queries/workItems'
+import { updateTrackStageStatus } from '@/lib/firebase/queries/postProduction'
 import {
   subscribeToProjects,
   subscribeToAllStaffAssignments,
@@ -23,6 +25,8 @@ import {
 } from '@/lib/firebase/queries/freelancers'
 import { subscribeToStaff, StaffMember } from '@/lib/firebase/queries/staff'
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
 import {
   WorkItem,
   WorkItemStatus,
@@ -32,131 +36,14 @@ import {
   Project,
   StaffAssignment,
   Freelancer,
+  PostProdStageStatus,
 } from '@/types'
 
 // ─── Fallback Data (matching events board fallback) ────────────────────────────
 
-const MOCK_FALLBACK_PROJECTS: Project[] = [
-  {
-    projectId: 'demo-proj-1',
-    clientId: 'client-1',
-    eventName: 'Karthik & Ananya Wedding',
-    clientName: 'Karthik Raja',
-    eventType: 'wedding',
-    stage: 'postProduction',
-    status: 'ongoing',
-    eventDate: new Date('2026-08-02T06:00:00'),
-    bookingType: 'multiDate',
-    dateLabel: 'Grand 3-Day Wedding',
-    staffUids: ['staff-naresh', 'staff-siva'],
-    freelancerIds: ['fl-guna'],
-    milestones: { depositPaid: new Date('2026-05-12') },
-    createdBy: 'admin',
-    createdAt: new Date('2026-05-12'),
-    updatedAt: new Date('2026-05-14'),
-  },
-  {
-    projectId: 'demo-proj-2',
-    clientId: 'client-2',
-    eventName: 'Divya & Arjun',
-    clientName: 'Divya Subramanian',
-    eventType: 'engagement',
-    stage: 'preProduction',
-    status: 'ongoing',
-    eventDate: new Date('2026-07-24T16:00:00'),
-    bookingType: 'oneTime',
-    staffUids: ['staff-siva', 'staff-ramesh'],
-    freelancerIds: [],
-    milestones: { depositPaid: new Date('2026-06-01') },
-    createdBy: 'admin',
-    createdAt: new Date('2026-06-01'),
-    updatedAt: new Date('2026-07-15'),
-  },
-  {
-    projectId: 'demo-proj-3',
-    clientId: 'client-3',
-    eventName: 'TVS Lucas AV',
-    clientName: 'TVS Lucas Ltd',
-    eventType: 'corporate',
-    stage: 'planning',
-    status: 'ongoing',
-    eventDate: new Date('2026-07-26T09:00:00'),
-    bookingType: 'oneTime',
-    staffUids: ['staff-deepak', 'staff-kavya'],
-    freelancerIds: [],
-    milestones: { depositPaid: new Date('2026-06-15') },
-    createdBy: 'admin',
-    createdAt: new Date('2026-06-15'),
-    updatedAt: new Date('2026-07-10'),
-  },
-  {
-    projectId: 'demo-proj-4',
-    clientId: 'client-4',
-    eventName: 'Ravi & Shruti',
-    clientName: 'Ravi Kumar',
-    eventType: 'wedding',
-    stage: 'eventDay',
-    status: 'ongoing',
-    eventDate: new Date('2026-08-15T07:00:00'),
-    bookingType: 'oneTime',
-    staffUids: ['staff-kavya', 'staff-ramesh', 'staff-anitha'],
-    freelancerIds: [],
-    milestones: { depositPaid: new Date('2026-07-01') },
-    createdBy: 'admin',
-    createdAt: new Date('2026-07-01'),
-    updatedAt: new Date('2026-07-20'),
-  },
-  {
-    projectId: 'demo-proj-5',
-    clientId: 'client-5',
-    eventName: 'Priya & Vignesh',
-    clientName: 'Priya Mani',
-    eventType: 'wedding',
-    stage: 'delivered',
-    status: 'completed',
-    eventDate: new Date('2026-06-20T08:00:00'),
-    bookingType: 'oneTime',
-    staffUids: ['staff-kavya'],
-    freelancerIds: [],
-    milestones: { depositPaid: new Date('2026-05-01') },
-    createdBy: 'admin',
-    createdAt: new Date('2026-05-01'),
-    updatedAt: new Date('2026-06-25'),
-  },
-  {
-    projectId: 'demo-proj-6',
-    clientId: 'client-6',
-    eventName: 'Meenakshi & Sundaram',
-    clientName: 'Sundaram Chettiar',
-    eventType: 'wedding',
-    stage: 'booked',
-    status: 'ongoing',
-    eventDate: new Date('2026-08-10T06:00:00'),
-    bookingType: 'oneTime',
-    staffUids: ['staff-deepak'],
-    freelancerIds: [],
-    milestones: { depositPaid: new Date('2026-03-01') },
-    createdBy: 'admin',
-    createdAt: new Date('2026-03-01'),
-    updatedAt: new Date('2026-06-01'),
-  },
-]
-
-const MOCK_STAFF: StaffMember[] = [
-  { uid: 'staff-naresh', name: 'Naresh B', email: 'naresh@studiozoom.in', role: 'admin', contact: '9840011223', isActive: true, createdAt: new Date() },
-  { uid: 'staff-siva',   name: 'Siva P',   email: 'siva@studiozoom.in',   role: 'staff', contact: '9840022334', isActive: true, createdAt: new Date() },
-  { uid: 'staff-kavya',  name: 'Kavya R',  email: 'kavya@studiozoom.in',  role: 'staff', contact: '9840033445', isActive: true, createdAt: new Date() },
-  { uid: 'staff-ramesh', name: 'Ramesh D', email: 'ramesh@studiozoom.in', role: 'staff', contact: '9840044556', isActive: true, createdAt: new Date() },
-  { uid: 'staff-deepak', name: 'Deepak S', email: 'deepak@studiozoom.in', role: 'staff', contact: '9840055667', isActive: true, createdAt: new Date() },
-  { uid: 'staff-anitha', name: 'Anitha M', email: 'anitha@studiozoom.in', role: 'staff', contact: '9840066778', isActive: true, createdAt: new Date() },
-]
-
-const MOCK_FREELANCERS: Freelancer[] = [
-  { freelancerId: 'fl-guna',  name: 'Guna Sundaram', skill: 'videographer', dayRate: 7500, contact: '+91 98401 23456', isActive: true },
-  { freelancerId: 'fl-arun',  name: 'Arun Kumar',    skill: 'photographer', dayRate: 6000, contact: '+91 98402 34567', isActive: true },
-  { freelancerId: 'fl-manoj', name: 'Manoj Krishna', skill: 'editor',       dayRate: 5000, contact: '+91 98403 45678', isActive: true },
-  { freelancerId: 'fl-priya', name: 'Priya Mani',    skill: 'designer',     dayRate: 4500, contact: '+91 98404 56789', isActive: true },
-]
+const MOCK_FALLBACK_PROJECTS: Project[] = []
+const MOCK_STAFF: StaffMember[] = []
+const MOCK_FREELANCERS: Freelancer[] = []
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -172,7 +59,7 @@ function formatDate(d?: Date): string {
 
 function isOverdue(item: WorkItem): boolean {
   if (!item.dueDate || item.status === 'done') return false
-  return item.dueDate < new Date()
+  return new Date() > item.dueDate
 }
 
 function daysOverdue(item: WorkItem): number {
@@ -184,13 +71,25 @@ function daysOverdue(item: WorkItem): number {
 // ─── Work Type Metadata ────────────────────────────────────────────────────────
 
 const WORK_TYPE_META: Record<WorkItemType, { label: string; icon: string }> = {
-  photography:  { label: 'Photography',        icon: 'ti-camera' },
-  videography:  { label: 'Videography',        icon: 'ti-video' },
-  photoEditing: { label: 'Photo Editing',      icon: 'ti-photo-edit' },
-  videoEditing: { label: 'Video Editing',      icon: 'ti-device-tv' },
-  albumDesign:  { label: 'Album Design',       icon: 'ti-layout-2' },
-  highlights:   { label: 'Highlights Editing', icon: 'ti-sparkles' },
-  fullFilm:     { label: 'Full Film',          icon: 'ti-movie' },
+  photography:       { label: 'Photo Shooting',     icon: 'ti-camera' },
+  videography:       { label: 'Video Shooting',     icon: 'ti-video' },
+  photoEditing:      { label: 'Photo Editing',      icon: 'ti-photo-edit' },
+  videoEditing:      { label: 'Video Editing',      icon: 'ti-device-tv' },
+  albumDesign:       { label: 'Album Design',       icon: 'ti-layout-2' },
+  highlights:        { label: 'Highlights Editing', icon: 'ti-sparkles' },
+  fullFilm:          { label: 'Full Film',          icon: 'ti-movie' },
+  photoDesigning:    { label: 'Photo Designing',    icon: 'ti-photo-edit' },
+  albumDesigning:    { label: 'Album Designing',    icon: 'ti-layout-2' },
+  albumCreating:     { label: 'Creating Album',     icon: 'ti-book' },
+  highlightsEditing: { label: 'Highlights Editing', icon: 'ti-sparkles' },
+  fullVideoEditing:  { label: 'Full Video Editing', icon: 'ti-movie' },
+}
+
+const TRACK_BADGE_META: Record<string, { label: string; icon: string }> = {
+  photo:     { label: 'Photo',       icon: 'ti-camera' },
+  album:     { label: 'Album',       icon: 'ti-book' },
+  video:     { label: 'Highlights',  icon: 'ti-sparkles' },
+  fullVideo: { label: 'Full Video',  icon: 'ti-movie' },
 }
 
 const PRIORITY_COLORS: Record<WorkItemPriority, { bg: string; text: string; label: string }> = {
@@ -283,10 +182,31 @@ function WorkCard({
         </span>
       </div>
 
-      {/* Work type */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-        <i className={`ti ${meta.icon}`} style={{ fontSize: '13px', color: 'var(--color-foreground-muted)' }} />
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{meta.label}</span>
+      {/* Work type + optional track badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+          <i className={`ti ${meta.icon}`} style={{ fontSize: '13px', color: 'var(--color-foreground-muted)', flexShrink: 0 }} />
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {meta.label}
+          </span>
+        </div>
+        {item.postProdTrackKey && TRACK_BADGE_META[item.postProdTrackKey] && (
+          <span style={{
+            fontSize: 'var(--text-xs)',
+            padding: '1px 6px',
+            borderRadius: '4px',
+            background: 'var(--color-accent-muted)',
+            color: 'var(--color-accent)',
+            fontWeight: 600,
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}>
+            <i className={`ti ${TRACK_BADGE_META[item.postProdTrackKey].icon}`} style={{ fontSize: '10px' }} />
+            {TRACK_BADGE_META[item.postProdTrackKey].label}
+          </span>
+        )}
       </div>
 
       {/* Assignee */}
@@ -320,16 +240,26 @@ function WorkCard({
         </div>
       </div>
 
-      {/* Due date + status select */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <span style={{
-          fontSize: 'var(--text-xs)',
-          color: overdue ? 'var(--color-danger)' : 'var(--color-foreground-muted)',
-          fontWeight: overdue ? 600 : 400,
-        }}>
-          {item.dueDate ? `Due ${formatDate(item.dueDate)}` : 'No due date'}
-          {overdue && ` · ${daysOverdue(item)}d overdue`}
-        </span>
+      {/* Due date + start date + status select */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
+          {item.startDate && (
+            <span style={{ fontSize: '0.65rem', color: 'var(--color-foreground-subtle)' }}>
+              Started {formatDate(item.startDate)}
+            </span>
+          )}
+          <span style={{
+            fontSize: 'var(--text-xs)',
+            color: overdue ? 'var(--color-danger)' : 'var(--color-foreground-muted)',
+            fontWeight: overdue ? 600 : 400,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {item.dueDate ? `Due ${formatDate(item.dueDate)}` : 'No due date'}
+            {overdue && ` · ${daysOverdue(item)}d overdue`}
+          </span>
+        </div>
 
         {/* Quick status dropdown */}
         <select
@@ -379,8 +309,10 @@ interface SidePanelProps {
   onStatusChange: (id: string, s: WorkItemStatus) => void
   onProgressChange: (id: string, p: number) => void
   onReassign: (id: string, newId: string, newName: string, isFreelancer: boolean) => void
+  onUpdateItem?: (updatedItem: WorkItem) => void
   staff: StaffMember[]
   freelancers: Freelancer[]
+  isStaff?: boolean
 }
 
 function WorkItemSidePanel({
@@ -389,14 +321,45 @@ function WorkItemSidePanel({
   onStatusChange,
   onProgressChange,
   onReassign,
+  onUpdateItem,
   staff,
   freelancers,
+  isStaff = false,
 }: SidePanelProps) {
   const [showReassign, setShowReassign] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+
+  // Edit form state
+  const [editType, setEditType] = useState<WorkItemType>('photography')
+  const [editPriority, setEditPriority] = useState<WorkItemPriority>('medium')
+  const [editStatus, setEditStatus] = useState<WorkItemStatus>('todo')
+  const [editAssignee, setEditAssignee] = useState<string>('')
+  const [editEstimatedHours, setEditEstimatedHours] = useState<number>(6)
+  const [editProgress, setEditProgress] = useState<number>(0)
+  const [editDueDate, setEditDueDate] = useState<string>('')
+  const [editNotes, setEditNotes] = useState<string>('')
+
+  useEffect(() => {
+    if (item) {
+      setEditType(item.type)
+      setEditPriority(item.priority ?? 'medium')
+      setEditStatus(item.status)
+      setEditAssignee(item.isFreelancer ? `fl:${item.assignedToUid}` : `staff:${item.assignedToUid}`)
+      setEditEstimatedHours(item.estimatedHours ?? 6)
+      setEditProgress(item.progressPercent ?? (item.status === 'done' ? 100 : item.status === 'inProgress' ? 50 : 0))
+      setEditDueDate(
+        item.dueDate
+          ? (item.dueDate instanceof Date ? item.dueDate.toISOString().slice(0, 10) : new Date(item.dueDate).toISOString().slice(0, 10))
+          : ''
+      )
+      setEditNotes(item.notes ?? '')
+      setIsEditing(false)
+    }
+  }, [item])
 
   if (!item) return null
 
-  const meta     = WORK_TYPE_META[item.type] ?? WORK_TYPE_META.photoEditing
+  const meta     = WORK_TYPE_META[item.type] ?? WORK_TYPE_META.photography
   const priority = PRIORITY_COLORS[item.priority ?? 'medium']
   const bucket   = getBucket(item)
   const bucketM  = BUCKET_META[bucket]
@@ -426,6 +389,52 @@ function WorkItemSidePanel({
       if (f) onReassign(item.workItemId, f.freelancerId, f.name, true)
     }
     setShowReassign(false)
+  }
+
+  const handleSaveEdit = () => {
+    if (!item) return
+    let newUid = item.assignedToUid
+    let newName = item.assignedToName
+    let newIsFreelancer = item.isFreelancer
+
+    if (editAssignee) {
+      const [prefix, id] = editAssignee.split(':')
+      if (prefix === 'staff') {
+        const s = staff.find(sm => sm.uid === id)
+        if (s) {
+          newUid = s.uid
+          newName = s.name
+          newIsFreelancer = false
+        }
+      } else if (prefix === 'fl') {
+        const f = freelancers.find(fl => fl.freelancerId === id)
+        if (f) {
+          newUid = f.freelancerId
+          newName = f.name
+          newIsFreelancer = true
+        }
+      }
+    }
+
+    const isPhoto = ['photography', 'photoEditing', 'albumDesign', 'photoDesigning', 'albumDesigning', 'albumCreating'].includes(editType)
+
+    const updated: WorkItem = {
+      ...item,
+      type: editType,
+      track: isPhoto ? 'photo' : 'video',
+      priority: editPriority,
+      status: editStatus,
+      assignedToUid: newUid,
+      assignedToName: newName,
+      isFreelancer: newIsFreelancer,
+      estimatedHours: Number(editEstimatedHours) || 6,
+      progressPercent: Number(editProgress) || 0,
+      dueDate: editDueDate ? new Date(editDueDate) : undefined,
+      notes: editNotes.trim(),
+    }
+
+    onUpdateItem?.(updated)
+    setIsEditing(false)
   }
 
   return (
@@ -461,48 +470,358 @@ function WorkItemSidePanel({
         }}>
           <div>
             <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)', margin: 0 }}>
-              {meta.label}
+              {isEditing ? `Edit: ${meta.label}` : meta.label}
             </h2>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', marginTop: '4px', margin: 0 }}>
               {item.eventName}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--color-foreground-muted)', fontSize: '20px', lineHeight: 1, padding: '4px',
-            }}
-          >
-            <i className="ti ti-x" />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {!isStaff && (
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                style={{
+                  background: isEditing ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                  border: `0.5px solid ${isEditing ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  color: isEditing ? 'var(--color-primary)' : 'var(--color-foreground)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                <i className={isEditing ? 'ti ti-x' : 'ti ti-edit'} style={{ fontSize: '13px' }} />
+                <span>{isEditing ? 'Cancel' : 'Edit'}</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--color-foreground-muted)', fontSize: '20px', lineHeight: 1, padding: '4px',
+              }}
+            >
+              <i className="ti ti-x" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
-        <div style={{ padding: '24px 28px', flex: 1, overflowY: 'auto' }}>
-          {/* Status & Priority Pills */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-            <span style={{
+        {isEditing ? (
+          <div style={{ padding: '24px 28px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '10px 14px',
+              background: 'var(--color-primary-muted)',
+              borderRadius: '8px',
+              border: '0.5px solid var(--color-primary)',
+              color: 'var(--color-primary)',
               fontSize: 'var(--text-xs)',
               fontWeight: 600,
-              padding: '3px 10px',
-              borderRadius: '20px',
-              background: bucketM.bg,
-              color: bucketM.color,
             }}>
-              {bucketM.label}
-            </span>
-            <span style={{
-              fontSize: 'var(--text-xs)',
-              fontWeight: 600,
-              padding: '3px 10px',
-              borderRadius: '20px',
-              background: priority.bg,
-              color: priority.text,
-            }}>
-              {priority.label}
-            </span>
+              <i className="ti ti-edit" style={{ fontSize: '15px' }} />
+              <span>Editing Work Item Details</span>
+            </div>
+
+            {/* Work Type */}
+            <div>
+              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                Work Type / Role
+              </label>
+              <select
+                value={editType}
+                onChange={e => setEditType(e.target.value as WorkItemType)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '8px',
+                  color: 'var(--color-foreground)',
+                  fontSize: 'var(--text-sm)',
+                  fontFamily: 'var(--font-inter)',
+                  outline: 'none',
+                }}
+              >
+                <option value="photography">📷 Photo Shooting</option>
+                <option value="videography">🎥 Video Shooting</option>
+                <option value="photoEditing">🎨 Photo Editing</option>
+                <option value="videoEditing">🎬 Video Editing</option>
+                <option value="albumDesign">📖 Album Design</option>
+                <option value="highlights">✨ Highlights Editing</option>
+                <option value="fullFilm">🎞️ Full Film</option>
+              </select>
+            </div>
+
+            {/* Assignee */}
+            <div>
+              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                Assignee (Staff or Freelancer)
+              </label>
+              <select
+                value={editAssignee}
+                onChange={e => setEditAssignee(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '8px',
+                  color: 'var(--color-foreground)',
+                  fontSize: 'var(--text-sm)',
+                  fontFamily: 'var(--font-inter)',
+                  outline: 'none',
+                }}
+              >
+                <optgroup label="Permanent Staff">
+                  {staff.map(sm => (
+                    <option key={sm.uid} value={`staff:${sm.uid}`}>
+                      {sm.name} {sm.role ? `(${sm.role})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Freelancers">
+                  {freelancers.map(fl => (
+                    <option key={fl.freelancerId} value={`fl:${fl.freelancerId}`}>
+                      {fl.name} ({fl.skill || 'Freelancer'})
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Status & Priority Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                  Status
+                </label>
+                <select
+                  value={editStatus}
+                  onChange={e => setEditStatus(e.target.value as WorkItemStatus)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    color: 'var(--color-foreground)',
+                    fontSize: 'var(--text-sm)',
+                    fontFamily: 'var(--font-inter)',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="pending">⏸ Pending / Paused</option>
+                  <option value="todo">📋 To Do / Assigned</option>
+                  <option value="inProgress">▶ In Progress / Ongoing</option>
+                  <option value="review">🔍 Client Review</option>
+                  <option value="done">✓ Delivered / Completed</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                  Priority
+                </label>
+                <select
+                  value={editPriority}
+                  onChange={e => setEditPriority(e.target.value as WorkItemPriority)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    color: 'var(--color-foreground)',
+                    fontSize: 'var(--text-sm)',
+                    fontFamily: 'var(--font-inter)',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="low">🟢 Low</option>
+                  <option value="medium">🟡 Medium</option>
+                  <option value="high">🔴 High</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Progress & Effort Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                  Progress ({editProgress}%)
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={editProgress}
+                  onChange={e => setEditProgress(Number(e.target.value))}
+                  style={{ width: '100%', marginTop: '8px', accentColor: 'var(--color-primary)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                  Estimated Effort (Hours)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={editEstimatedHours}
+                  onChange={e => setEditEstimatedHours(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    color: 'var(--color-foreground)',
+                    fontSize: 'var(--text-sm)',
+                    fontFamily: 'var(--font-inter)',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                Due Date
+              </label>
+              <input
+                type="date"
+                value={editDueDate}
+                onChange={e => setEditDueDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '8px',
+                  color: 'var(--color-foreground)',
+                  fontSize: 'var(--text-sm)',
+                  fontFamily: 'var(--font-inter)',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* Notes / Instructions */}
+            <div>
+              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
+                Notes / Scope Instructions
+              </label>
+              <textarea
+                rows={3}
+                value={editNotes}
+                onChange={e => setEditNotes(e.target.value)}
+                placeholder="Add special instructions or client requirements for this work item..."
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '8px',
+                  color: 'var(--color-foreground)',
+                  fontSize: 'var(--text-sm)',
+                  fontFamily: 'var(--font-inter)',
+                  outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+
+            {/* Save / Cancel Buttons */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                style={{
+                  flex: 1,
+                  padding: '11px 16px',
+                  background: 'var(--color-primary)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <i className="ti ti-check" style={{ fontSize: '16px' }} />
+                Save Changes
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                style={{
+                  padding: '11px 16px',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-foreground)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '8px',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
+        ) : (
+          <div style={{ padding: '24px 28px', flex: 1, overflowY: 'auto' }}>
+            {/* Status & Priority Pills + Track Badge */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                padding: '3px 10px',
+                borderRadius: '20px',
+                background: bucketM.bg,
+                color: bucketM.color,
+              }}>
+                {bucketM.label}
+              </span>
+              <span style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                padding: '3px 10px',
+                borderRadius: '20px',
+                background: priority.bg,
+                color: priority.text,
+              }}>
+                {priority.label}
+              </span>
+              {item.postProdTrackKey && TRACK_BADGE_META[item.postProdTrackKey] && (
+                <span style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '3px 10px',
+                  borderRadius: '20px',
+                  background: 'var(--color-accent-muted)',
+                  color: 'var(--color-accent)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}>
+                  <i className={`ti ${TRACK_BADGE_META[item.postProdTrackKey].icon}`} style={{ fontSize: '11px' }} />
+                  {TRACK_BADGE_META[item.postProdTrackKey].label} Track
+                </span>
+              )}
+            </div>
 
           {/* Paused & Pending Notice Banner */}
           {item.status === 'pending' && (
@@ -792,49 +1111,57 @@ function WorkItemSidePanel({
             </div>
           )}
         </div>
+        )}
 
         {/* Bottom Actions Bar */}
-        <div style={{
-          padding: '16px 28px',
-          borderTop: '0.5px solid var(--color-border)',
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px',
-          background: 'var(--color-surface)',
-        }}>
-          <Button
-            variant="outline"
-            onClick={() => setShowReassign(prev => !prev)}
-            style={{
-              background: showReassign ? 'var(--color-surface-raised)' : 'transparent',
-              border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)',
-              borderRadius: '8px',
-              fontFamily: 'var(--font-inter)',
-              fontSize: 'var(--text-sm)',
-              fontWeight: 500,
-              cursor: 'pointer',
-              padding: '10px',
-            }}
-          >
-            {showReassign ? 'Cancel' : 'Reassign'}
-          </Button>
+        {!isEditing && (
+          <div style={{
+            padding: '16px 28px',
+            borderTop: '0.5px solid var(--color-border)',
+            display: isStaff ? 'block' : 'grid',
+            gridTemplateColumns: isStaff ? undefined : '1fr 1fr',
+            gap: '12px',
+            background: 'var(--color-surface)',
+          }}>
+            {!isStaff && (
+              <Button
+                variant="outline"
+                onClick={() => setShowReassign(prev => !prev)}
+                style={{
+                  background: showReassign ? 'var(--color-surface-raised)' : 'transparent',
+                  border: '0.5px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                  borderRadius: '8px',
+                  fontFamily: 'var(--font-inter)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  padding: '10px',
+                }}
+              >
+                {showReassign ? 'Cancel' : 'Reassign'}
+              </Button>
+            )}
 
-          <Button
-            onClick={onClose}
-            style={{
-              background: 'var(--color-primary)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              fontFamily: 'var(--font-inter)',
-              fontSize: 'var(--text-sm)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              padding: '10px',
-            }}
-          >
-            Done
-          </Button>
-        </div>
+            <Button
+              onClick={onClose}
+              style={{
+                width: isStaff ? '100%' : undefined,
+                background: 'var(--color-primary)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: 'var(--font-inter)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '10px',
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -850,6 +1177,7 @@ interface CreateModalProps {
   createdBy:        string
   initialAssignee?: { id: string; isFreelancer: boolean }
   onWorkCreated:    (item: WorkItem) => void
+  onWorkIdResolved?: (tempId: string, realId: string) => void
 }
 
 function CreateWorkModal({
@@ -860,6 +1188,7 @@ function CreateWorkModal({
   createdBy,
   initialAssignee,
   onWorkCreated,
+  onWorkIdResolved,
 }: CreateModalProps) {
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
@@ -953,7 +1282,10 @@ function CreateWorkModal({
         notes:           form.notes || undefined,
         createdBy,
       }
-      await createWorkItem(data)
+      const newDocId = await createWorkItem(data)
+      if (newDocId) {
+        onWorkIdResolved?.(optimisticId, newDocId)
+      }
 
       // Sync assignment to project so it reflects on the Event Board
       if (form.projectId) {
@@ -1424,13 +1756,15 @@ type TabKey = 'board' | 'staff' | 'available'
 
 export default function WorkBoardPage() {
   const appUser = useAuthStore(s => s.appUser)
+  const testDatasetMode = useUIStore(s => s.testDatasetMode)
+  const testModeCutoff = useUIStore(s => s.testModeCutoff)
 
   const [tab, setTab]                               = useState<TabKey>('board')
   const [workItems, setWorkItems]                   = useState<WorkItem[]>([])
   const [localItems, setLocalItems]                 = useState<WorkItem[]>([])
-  const [projects, setProjects]                     = useState<Project[]>(MOCK_FALLBACK_PROJECTS)
-  const [staff, setStaff]                           = useState<StaffMember[]>(MOCK_STAFF)
-  const [freelancers, setFreelancers]               = useState<Freelancer[]>(MOCK_FREELANCERS)
+  const [projects, setProjects]                     = useState<Project[]>([])
+  const [staff, setStaff]                           = useState<StaffMember[]>([])
+  const [freelancers, setFreelancers]               = useState<Freelancer[]>([])
   const [assignments, setAssignments]               = useState<StaffAssignment[]>([])
   const [showCreate, setShowCreate]                 = useState(false)
   const [createAssignee, setCreateAssignee]         = useState<{ id: string; isFreelancer: boolean } | undefined>()
@@ -1443,68 +1777,54 @@ export default function WorkBoardPage() {
   const [filterType,     setFilterType]     = useState<WorkItemType | ''>('')
 
   // Helper to load synced demo projects from localStorage
-  const getFallbackProjects = (): Project[] => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('studio_zoom_demo_projects')
-        if (saved) {
-          const list = JSON.parse(saved)
-          if (Array.isArray(list) && list.length > 0) {
-            return list.map((p: Record<string, unknown>) => ({
-              ...p,
-              eventDate: new Date(p.eventDate as string),
-              createdAt: new Date(p.createdAt as string),
-              updatedAt: new Date(p.updatedAt as string),
-            })) as unknown as Project[]
-          }
-        }
-      } catch {}
-    }
-    return MOCK_FALLBACK_PROJECTS
-  }
+  const getFallbackProjects = (): Project[] => []
 
   // Real-time subscriptions
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('studio_zoom_demo_projects')
+      } catch {}
+    }
+
     const unsub1 = subscribeToWorkItems(items => {
       setWorkItems(items || [])
+      if (items && items.length > 0) {
+        setLocalItems(prev => prev.filter(local => !items.some(w => w.workItemId === local.workItemId)))
+      }
     })
 
     const unsub2 = subscribeToProjects(projs => {
-      if (projs && projs.length > 0) {
-        setProjects(projs)
-      } else {
-        setProjects(getFallbackProjects())
-      }
+      setProjects(projs || [])
     })
 
-    const unsub3 = subscribeToStaff(team => {
-      if (team && team.length > 0) {
-        setStaff(team)
-      } else {
-        setStaff(MOCK_STAFF)
-      }
-    })
+    let unsub3 = () => {}
+    let unsub4 = () => {}
 
-    const unsub4 = subscribeToFreelancers(list => {
-      if (list && list.length > 0) {
-        setFreelancers(list)
-      } else {
-        setFreelancers(MOCK_FREELANCERS)
-      }
-    })
+    if (appUser?.role === 'admin' || appUser?.role === 'manager') {
+      unsub3 = subscribeToStaff(team => {
+        setStaff(team || [])
+      })
+
+      unsub4 = subscribeToFreelancers(list => {
+        setFreelancers(list || [])
+      })
+    } else if (appUser?.role === 'staff') {
+      setStaff([{
+        uid: appUser.uid,
+        name: appUser.name,
+        email: appUser.email,
+        role: 'staff',
+        isActive: true,
+      }])
+      setFreelancers([])
+    }
 
     const unsub5 = subscribeToAllStaffAssignments(list => {
       setAssignments(list || [])
     })
 
-    const handleStorageSync = () => {
-      setProjects(prev => {
-        if (prev.length === 0 || prev.some(p => p.projectId.startsWith('demo-'))) {
-          return getFallbackProjects()
-        }
-        return prev
-      })
-    }
+    const handleStorageSync = () => {}
     window.addEventListener('studio_zoom_projects_changed', handleStorageSync)
 
     return () => {
@@ -1515,12 +1835,10 @@ export default function WorkBoardPage() {
       unsub5()
       window.removeEventListener('studio_zoom_projects_changed', handleStorageSync)
     }
-  }, [])
+  }, [testDatasetMode, testModeCutoff, appUser?.role, appUser?.uid, appUser?.name, appUser?.email])
 
   // ─── Unified allWorkItems (explicit items + synthesized assignments) ─────────
   const allWorkItems = useMemo(() => {
-    const combined: WorkItem[] = [...localItems]
-
     const getAssigneeName = (uid: string): { name: string; isFreelancer: boolean } => {
       const s = staff.find(sm => sm.uid === uid)
       if (s) return { name: s.name, isFreelancer: false }
@@ -1529,15 +1847,98 @@ export default function WorkBoardPage() {
       return { name: uid, isFreelancer: false }
     }
 
-    // 1. Add all Firestore workItems
-    for (const item of workItems) {
-      if (!combined.some(c => c.workItemId === item.workItemId)) {
-        combined.push(item)
+    // 1. Base on real Firestore workItems, overlaying any pending optimistic edits
+    const combined: WorkItem[] = workItems.map(item => {
+      const local = localItems.find(l => l.workItemId === item.workItemId)
+      return local ? { ...item, ...local } : item
+    })
+
+    // 2. Add localItems that are purely optimistic (e.g. newly created before Firestore snapshot)
+    for (const local of localItems) {
+      if (!combined.some(c => c.workItemId === local.workItemId)) {
+        combined.push(local)
+      }
+    }
+
+    // Reconcile items with parent project and post-production progress
+    for (let i = 0; i < combined.length; i++) {
+      const item = combined[i]
+      const proj = projects.find(p => p.projectId === item.projectId)
+      if (!proj) continue
+
+      // For post-production items, track stage progress is the source of truth!
+      if (item.postProdTrackKey && item.postProdStageKey && proj.postProduction) {
+        const pp = proj.postProduction
+        let newStatus: WorkItemStatus = item.status
+        let newProgress: number = item.progressPercent ?? 0
+
+        const getStageWorkStatus = (stageStatus?: PostProdStageStatus, clientReviewStatus?: string): { status: WorkItemStatus; progressPercent: number } => {
+          if (stageStatus === 'completed' || stageStatus === 'approved') return { status: 'done', progressPercent: 100 }
+          if (stageStatus === 'waitingClient' || clientReviewStatus === 'waitingClient') return { status: 'review', progressPercent: 80 }
+          if (stageStatus === 'inProgress') return { status: 'inProgress', progressPercent: 50 }
+          return { status: 'pending', progressPercent: 0 }
+        }
+
+        if (item.postProdTrackKey === 'photoTrack' && pp.photoTrack) {
+          const pt = pp.photoTrack
+          if (pt.status === 'completed' || pt.designing?.status === 'completed' || pt.designing?.status === 'approved') {
+            newStatus = 'done'
+            newProgress = 100
+          } else {
+            const mapped = getStageWorkStatus(pt.designing?.status, pt.clientReview?.status)
+            newStatus = mapped.status
+            newProgress = mapped.progressPercent
+          }
+        } else if (item.postProdTrackKey === 'albumTrack' && pp.albumTrack) {
+          const at = pp.albumTrack
+          if (at.status === 'completed') {
+            newStatus = 'done'
+            newProgress = 100
+          } else if (item.postProdStageKey === 'albumDesigning') {
+            const mapped = getStageWorkStatus(at.albumDesigning?.status, at.clientReview?.status)
+            newStatus = mapped.status
+            newProgress = mapped.progressPercent
+          } else if (item.postProdStageKey === 'creatingAlbum') {
+            const mapped = getStageWorkStatus(at.creatingAlbum?.status)
+            newStatus = mapped.status
+            newProgress = mapped.progressPercent
+          }
+        } else if (item.postProdTrackKey === 'videoTrack' && pp.videoTrack) {
+          const vt = pp.videoTrack
+          if (vt.status === 'completed' || vt.highlights?.status === 'completed' || vt.highlights?.status === 'approved') {
+            newStatus = 'done'
+            newProgress = 100
+          } else {
+            const mapped = getStageWorkStatus(vt.highlights?.status, vt.clientReview?.status)
+            newStatus = mapped.status
+            newProgress = mapped.progressPercent
+          }
+        } else if (item.postProdTrackKey === 'fullVideoTrack' && pp.fullVideoTrack) {
+          const fvt = pp.fullVideoTrack
+          if (fvt.status === 'completed' || fvt.fullVideoEditing?.status === 'completed' || fvt.fullVideoEditing?.status === 'approved') {
+            newStatus = 'done'
+            newProgress = 100
+          } else {
+            const mapped = getStageWorkStatus(fvt.fullVideoEditing?.status, fvt.clientReview?.status)
+            newStatus = mapped.status
+            newProgress = mapped.progressPercent
+          }
+        }
+
+        if (newStatus !== item.status || newProgress !== item.progressPercent) {
+          combined[i] = { ...item, status: newStatus, progressPercent: newProgress }
+          if (!item.workItemId.startsWith('postprod-') && !item.workItemId.startsWith('assign-') && !item.workItemId.startsWith('proj-')) {
+            updateWorkItemStatus(item.workItemId, newStatus).catch(() => {})
+          }
+        }
+      } else if (!item.postProdTrackKey && proj.stage === 'delivered' && item.status !== 'done') {
+        combined[i] = { ...item, status: 'done', progressPercent: 100 }
       }
     }
 
     // 2. Add from staffAssignments collection
     for (const a of assignments) {
+      if (testDatasetMode && !projects.some(p => p.projectId === a.projectId)) continue
       const exists = combined.some(
         w => w.projectId === a.projectId && w.assignedToUid === a.staffUid
       )
@@ -1599,8 +2000,10 @@ export default function WorkBoardPage() {
           else if (p.stage === 'postProduction' || p.stage === 'eventDay' || p.stage === 'preProduction') status = 'inProgress'
           else status = 'pending'
 
-          const type: WorkItemType = p.stage === 'postProduction' ? 'photoEditing' : 'photography'
-          const track: WorkTrack   = 'photo'
+          const staffMember = staff.find(sm => sm.uid === staffUid)
+          const isVideoStaff = staffMember?.role?.toLowerCase().includes('video')
+          const type: WorkItemType = isVideoStaff ? 'videography' : 'photography'
+          const track: WorkTrack   = isVideoStaff ? 'video' : 'photo'
           const assigneeInfo = getAssigneeName(staffUid)
 
           combined.push({
@@ -1676,23 +2079,265 @@ export default function WorkBoardPage() {
       }
     }
 
-    return combined
-  }, [workItems, localItems, projects, staff, freelancers, assignments])
+    // 5. Add post-production track work items if not already present
+    for (const p of projects) {
+      if (!p.postProduction?.isConfigured) continue
+      const pp = p.postProduction
 
-  // Filtered items
-  const filtered = useMemo(() => allWorkItems.filter(w => {
-    if (filterStaff    && w.assignedToUid !== filterStaff)         return false
+      const getStageWorkStatus = (stageStatus?: PostProdStageStatus, clientReviewStatus?: string): { status: WorkItemStatus; progressPercent: number } => {
+        if (stageStatus === 'completed' || stageStatus === 'approved') return { status: 'done', progressPercent: 100 }
+        if (clientReviewStatus === 'waitingClient' || stageStatus === 'waitingClient') return { status: 'review', progressPercent: 80 }
+        if (stageStatus === 'inProgress') return { status: 'inProgress', progressPercent: 50 }
+        return { status: 'pending', progressPercent: 0 }
+      }
+
+      // Photo Track -> photoDesigning
+      if (pp.photoTrack) {
+        const pt = pp.photoTrack
+        const exists = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'photoTrack')
+        if (!exists) {
+          const isFree = Boolean(pt.assignment.freelancerId)
+          const assigneeUid = isFree ? (pt.assignment.freelancerId || '') : pt.assignment.staffUid
+          const assigneeName = isFree ? (pt.assignment.freelancerName || '') : pt.assignment.staffName
+          const st = pt.status === 'completed'
+            ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
+            : getStageWorkStatus(pt.designing?.status, pt.clientReview?.status)
+          combined.push({
+            workItemId: `postprod-${p.projectId}-photoTrack-designing`,
+            projectId: p.projectId,
+            clientId: p.clientId || '',
+            eventDate: p.eventDate,
+            eventName: p.eventName,
+            clientName: p.clientName,
+            type: 'photoDesigning',
+            track: 'photo',
+            assignedToUid: assigneeUid,
+            assignedToName: assigneeName,
+            isFreelancer: isFree,
+            status: st.status,
+            priority: 'medium',
+            estimatedHours: 6,
+            progressPercent: st.progressPercent,
+            dueDate: pt.designing?.dueDate,
+            postProdTrackKey: 'photoTrack',
+            postProdStageKey: 'designing',
+            createdBy: 'system',
+            createdAt: p.createdAt || new Date(),
+          })
+        }
+      }
+
+      // Album Track -> albumDesigning + creatingAlbum
+      if (pp.albumTrack) {
+        const at = pp.albumTrack
+        const isFree = Boolean(at.assignment.freelancerId)
+        const assigneeUid = isFree ? (at.assignment.freelancerId || '') : at.assignment.staffUid
+        const assigneeName = isFree ? (at.assignment.freelancerName || '') : at.assignment.staffName
+
+        const exists1 = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'albumTrack' && w.postProdStageKey === 'albumDesigning')
+        if (!exists1) {
+          const st1 = at.status === 'completed'
+            ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
+            : getStageWorkStatus(at.albumDesigning?.status, at.clientReview?.status)
+          combined.push({
+            workItemId: `postprod-${p.projectId}-albumTrack-albumDesigning`,
+            projectId: p.projectId,
+            clientId: p.clientId || '',
+            eventDate: p.eventDate,
+            eventName: p.eventName,
+            clientName: p.clientName,
+            type: 'albumDesigning',
+            track: 'photo',
+            assignedToUid: assigneeUid,
+            assignedToName: assigneeName,
+            isFreelancer: isFree,
+            status: st1.status,
+            priority: 'medium',
+            estimatedHours: 6,
+            progressPercent: st1.progressPercent,
+            dueDate: at.albumDesigning?.dueDate,
+            postProdTrackKey: 'albumTrack',
+            postProdStageKey: 'albumDesigning',
+            createdBy: 'system',
+            createdAt: p.createdAt || new Date(),
+          })
+        }
+
+        const exists2 = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'albumTrack' && w.postProdStageKey === 'creatingAlbum')
+        if (!exists2) {
+          const st2 = at.status === 'completed'
+            ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
+            : getStageWorkStatus(at.creatingAlbum?.status)
+          combined.push({
+            workItemId: `postprod-${p.projectId}-albumTrack-creatingAlbum`,
+            projectId: p.projectId,
+            clientId: p.clientId || '',
+            eventDate: p.eventDate,
+            eventName: p.eventName,
+            clientName: p.clientName,
+            type: 'albumCreating',
+            track: 'photo',
+            assignedToUid: assigneeUid,
+            assignedToName: assigneeName,
+            isFreelancer: isFree,
+            status: st2.status,
+            priority: 'medium',
+            estimatedHours: 6,
+            progressPercent: st2.progressPercent,
+            dueDate: at.creatingAlbum?.dueDate,
+            postProdTrackKey: 'albumTrack',
+            postProdStageKey: 'creatingAlbum',
+            createdBy: 'system',
+            createdAt: p.createdAt || new Date(),
+          })
+        }
+      }
+
+      // Video Track -> highlightsEditing
+      if (pp.videoTrack) {
+        const vt = pp.videoTrack
+        const exists = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'videoTrack')
+        if (!exists) {
+          const isFree = Boolean(vt.assignment.freelancerId)
+          const assigneeUid = isFree ? (vt.assignment.freelancerId || '') : vt.assignment.staffUid
+          const assigneeName = isFree ? (vt.assignment.freelancerName || '') : vt.assignment.staffName
+          const st = vt.status === 'completed'
+            ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
+            : getStageWorkStatus(vt.highlights?.status, vt.clientReview?.status)
+          combined.push({
+            workItemId: `postprod-${p.projectId}-videoTrack-highlights`,
+            projectId: p.projectId,
+            clientId: p.clientId || '',
+            eventDate: p.eventDate,
+            eventName: p.eventName,
+            clientName: p.clientName,
+            type: 'highlightsEditing',
+            track: 'video',
+            assignedToUid: assigneeUid,
+            assignedToName: assigneeName,
+            isFreelancer: isFree,
+            status: st.status,
+            priority: 'medium',
+            estimatedHours: 6,
+            progressPercent: st.progressPercent,
+            dueDate: vt.highlights?.dueDate,
+            postProdTrackKey: 'videoTrack',
+            postProdStageKey: 'highlights',
+            createdBy: 'system',
+            createdAt: p.createdAt || new Date(),
+          })
+        }
+      }
+
+      // Full Video Track -> fullVideoEditing
+      if (pp.fullVideoTrack) {
+        const fvt = pp.fullVideoTrack
+        const exists = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'fullVideoTrack')
+        if (!exists) {
+          const isFree = Boolean(fvt.assignment.freelancerId)
+          const assigneeUid = isFree ? (fvt.assignment.freelancerId || '') : fvt.assignment.staffUid
+          const assigneeName = isFree ? (fvt.assignment.freelancerName || '') : fvt.assignment.staffName
+          const st = fvt.status === 'completed'
+            ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
+            : getStageWorkStatus(fvt.fullVideoEditing?.status, fvt.clientReview?.status)
+          combined.push({
+            workItemId: `postprod-${p.projectId}-fullVideoTrack-fullVideoEditing`,
+            projectId: p.projectId,
+            clientId: p.clientId || '',
+            eventDate: p.eventDate,
+            eventName: p.eventName,
+            clientName: p.clientName,
+            type: 'fullVideoEditing',
+            track: 'video',
+            assignedToUid: assigneeUid,
+            assignedToName: assigneeName,
+            isFreelancer: isFree,
+            status: st.status,
+            priority: 'medium',
+            estimatedHours: 6,
+            progressPercent: st.progressPercent,
+            dueDate: fvt.fullVideoEditing?.dueDate,
+            postProdTrackKey: 'fullVideoTrack',
+            postProdStageKey: 'fullVideoEditing',
+            createdBy: 'system',
+            createdAt: p.createdAt || new Date(),
+          })
+        }
+      }
+    }
+
+    // Filter out items for deleted projects or projects that no longer exist
+    const nonDeleted = combined.filter(w => {
+      if (w.isDeleted) return false
+      if (w.projectId) {
+        const p = projects.find(proj => proj.projectId === w.projectId)
+        if (!p || p.isDeleted) return false
+      }
+      return true
+    })
+
+    // Deduplicate any items that point to the exact same work
+    const seenWork = new Map<string, WorkItem>()
+    for (const item of nonDeleted) {
+      const workKey = `${item.projectId}_${item.assignedToUid}_${item.type}_${item.postProdTrackKey || ''}_${item.postProdStageKey || ''}`
+      const existing = seenWork.get(workKey)
+      if (!existing) {
+        seenWork.set(workKey, item)
+      } else {
+        const statusRank = (s: WorkItemStatus) => s === 'done' ? 4 : s === 'review' ? 3 : s === 'inProgress' ? 2 : 1
+        const itemRank = statusRank(item.status)
+        const existingRank = statusRank(existing.status)
+        if (itemRank > existingRank) {
+          seenWork.set(workKey, item)
+        } else if (itemRank === existingRank) {
+          if (existing.workItemId.startsWith('proj-') && !item.workItemId.startsWith('proj-')) {
+            seenWork.set(workKey, item)
+          }
+        }
+      }
+    }
+    const finalItems = Array.from(seenWork.values())
+
+    return testDatasetMode
+      ? finalItems.filter(w => isAllowedByTestMode(w.createdAt))
+      : finalItems
+  }, [workItems, localItems, projects, staff, freelancers, assignments, testDatasetMode, testModeCutoff])
+
+  const isStaff = appUser?.role === 'staff'
+
+  // If logged in as staff, filter items so staff member can ONLY see their own works
+  const userWorkItems = useMemo(() => {
+    if (!isStaff || !appUser) return allWorkItems
+    const staffUid = appUser.uid
+    const staffName = (appUser.name || '').trim().toLowerCase()
+    return allWorkItems.filter(w => {
+      if (w.assignedToUid && w.assignedToUid === staffUid) return true
+      if (w.assignedToName && staffName && w.assignedToName.trim().toLowerCase() === staffName) return true
+      return false
+    })
+  }, [allWorkItems, isStaff, appUser])
+
+  // Automatically ensure staff stays on 'board' tab
+  useEffect(() => {
+    if (isStaff && tab !== 'board') {
+      setTab('board')
+    }
+  }, [isStaff, tab])
+
+  // Filtered items (skills and team member filters are ignored for staff)
+  const filtered = useMemo(() => userWorkItems.filter(w => {
+    if (!isStaff && filterStaff    && w.assignedToUid !== filterStaff)         return false
+    if (!isStaff && filterType     && w.type          !== filterType)           return false
     if (filterStatus   && w.status        !== filterStatus)         return false
     if (filterPriority && w.priority      !== filterPriority)       return false
-    if (filterType     && w.type          !== filterType)           return false
     return true
-  }), [allWorkItems, filterStaff, filterStatus, filterPriority, filterType])
+  }), [userWorkItems, isStaff, filterStaff, filterStatus, filterPriority, filterType])
 
   // KPI counts
-  const ongoing    = allWorkItems.filter(w => getBucket(w) === 'ongoing').length
-  const pending    = allWorkItems.filter(w => getBucket(w) === 'pending').length
-  const upcoming   = allWorkItems.filter(w => getBucket(w) === 'upcoming').length
-  const overdue    = allWorkItems.filter(w => getBucket(w) === 'overdue').length
+  const ongoing    = userWorkItems.filter(w => getBucket(w) === 'ongoing').length
+  const pending    = userWorkItems.filter(w => getBucket(w) === 'pending').length
+  const upcoming   = userWorkItems.filter(w => getBucket(w) === 'upcoming').length
+  const overdue    = userWorkItems.filter(w => getBucket(w) === 'overdue').length
   const availStaff = staff.filter(s => !allWorkItems.some(w => w.assignedToUid === s.uid && w.status !== 'done')).length
 
   // Board buckets
@@ -1874,39 +2519,31 @@ export default function WorkBoardPage() {
       setSelectedPanelItem(curr => curr ? { ...curr, status, progressPercent: progressVal } : null)
     }
 
-    // Persist to Firestore
-    if (!id.startsWith('assign-') && !id.startsWith('proj-') && !id.startsWith('work-')) {
-      try {
-        await updateWorkItemStatus(id, status)
-      } catch (err) {
-        console.error('Failed to update status in Firestore:', err)
-      }
-    } else {
-      const synth = allWorkItems.find(w => w.workItemId === id)
-      if (synth) {
-        try {
-          await createWorkItem({
-            projectId:       synth.projectId,
-            clientId:        synth.clientId,
-            eventDate:       synth.eventDate,
-            eventName:       synth.eventName,
-            clientName:      synth.clientName,
-            type:            synth.type,
-            track:           synth.track,
-            assignedToUid:   synth.assignedToUid,
-            assignedToName:  synth.assignedToName,
-            isFreelancer:    synth.isFreelancer,
-            status,
-            priority:        synth.priority,
-            estimatedHours:  synth.estimatedHours,
-            progressPercent: progressVal,
-            dueDate:         synth.dueDate,
-            createdBy:       appUser?.uid || 'user',
-          })
-        } catch (err) {
-          console.error('Failed to persist item to Firestore:', err)
+    // Persist to Firestore idempotently
+    try {
+      const targetItem = allWorkItems.find(w => w.workItemId === id)
+      await updateWorkItemStatus(id, status, Boolean(targetItem?.startDate), targetItem)
+
+      // Bidirectional sync: if this item belongs to a Post-Production track & stage, update the stage status
+      if (targetItem?.projectId && targetItem?.postProdTrackKey && targetItem?.postProdStageKey) {
+        const stageStatusMap: Record<WorkItemStatus, PostProdStageStatus> = {
+          todo: 'pending',
+          pending: 'pending',
+          inProgress: 'inProgress',
+          review: 'waitingClient',
+          done: 'completed',
         }
+        const mappedStageStatus = stageStatusMap[status] || 'pending'
+        await updateTrackStageStatus(
+          targetItem.projectId,
+          targetItem.postProdTrackKey,
+          targetItem.postProdStageKey,
+          mappedStageStatus,
+          Boolean(targetItem?.startDate)
+        )
       }
+    } catch (err) {
+      console.error('Failed to update status in Firestore:', err)
     }
   }
 
@@ -1928,7 +2565,7 @@ export default function WorkBoardPage() {
       setSelectedPanelItem(curr => curr ? { ...curr, progressPercent } : null)
     }
 
-    if (!id.startsWith('assign-') && !id.startsWith('proj-') && !id.startsWith('work-')) {
+    if (!id.startsWith('assign-') && !id.startsWith('proj-')) {
       try {
         await updateWorkItemProgress(id, progressPercent)
       } catch (err) {
@@ -1974,7 +2611,7 @@ export default function WorkBoardPage() {
     }
 
     // 2. Persist to workItems collection
-    if (!id.startsWith('assign-') && !id.startsWith('proj-') && !id.startsWith('work-')) {
+    if (!id.startsWith('assign-') && !id.startsWith('proj-')) {
       await updateWorkItemAssignee(id, newId, newName, isFreelancer).catch(() => {})
     }
 
@@ -2040,6 +2677,30 @@ export default function WorkBoardPage() {
     }
   }
 
+  const handleUpdateWorkItem = async (updatedItem: WorkItem) => {
+    // 1. Optimistic update
+    setLocalItems(prev => {
+      const idx = prev.findIndex(p => p.workItemId === updatedItem.workItemId)
+      if (idx >= 0) {
+        const copy = [...prev]
+        copy[idx] = updatedItem
+        return copy
+      }
+      return [...prev, updatedItem]
+    })
+
+    if (selectedPanelItem?.workItemId === updatedItem.workItemId) {
+      setSelectedPanelItem(updatedItem)
+    }
+
+    // 2. Persist to Firestore
+    try {
+      await saveWorkItemDetails(updatedItem)
+    } catch (err) {
+      console.error('Failed to save work item details in Firestore:', err)
+    }
+  }
+
   const handleWorkCreated = (newItem: WorkItem) => {
     setLocalItems(prev => [newItem, ...prev])
 
@@ -2067,6 +2728,10 @@ export default function WorkBoardPage() {
         return next
       })
     }
+  }
+
+  const handleWorkIdResolved = (tempId: string, realId: string) => {
+    setLocalItems(prev => prev.map(p => p.workItemId === tempId ? { ...p, workItemId: realId } : p))
   }
 
   const selectStyle: React.CSSProperties = {
@@ -2104,37 +2769,39 @@ export default function WorkBoardPage() {
       }}>
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          {(['board', 'staff', 'available'] as TabKey[]).map(t => (
+          {(isStaff ? (['board'] as TabKey[]) : (['board', 'staff', 'available'] as TabKey[])).map(t => (
             <button key={t} style={tabStyle(tab === t)} onClick={() => setTab(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
-        <Button
-          onClick={() => {
-            setCreateAssignee(undefined)
-            setShowCreate(true)
-          }}
-          style={{
-            background: 'var(--color-primary)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '8px',
-            fontFamily: 'var(--font-inter)',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 600,
-            cursor: 'pointer',
-            padding: '8px 16px',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}>
-          <i className="ti ti-plus" />
-          Create Work
-        </Button>
+        {!isStaff && (
+          <Button
+            onClick={() => {
+              setCreateAssignee(undefined)
+              setShowCreate(true)
+            }}
+            style={{
+              background: 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontFamily: 'var(--font-inter)',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: '8px 16px',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}>
+            <i className="ti ti-plus" />
+            Create Work
+          </Button>
+        )}
       </div>
 
       {/* KPI row */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
+        display: 'grid', gridTemplateColumns: isStaff ? 'repeat(4, 1fr)' : 'repeat(5, 1fr)',
         gap: '12px', marginBottom: '20px',
       }}>
         {[
@@ -2142,7 +2809,7 @@ export default function WorkBoardPage() {
           { label: 'PENDING',         value: pending,    color: 'var(--color-secondary)' },
           { label: 'UPCOMING',        value: upcoming,   color: 'var(--color-accent)' },
           { label: 'OVERDUE',         value: overdue,    color: 'var(--color-danger)' },
-          { label: 'AVAILABLE STAFF', value: availStaff, color: 'var(--color-success)' },
+          ...(!isStaff ? [{ label: 'AVAILABLE STAFF', value: availStaff, color: 'var(--color-success)' }] : []),
         ].map(k => (
           <div key={k.label} style={{
             background: 'var(--color-surface)',
@@ -2168,22 +2835,26 @@ export default function WorkBoardPage() {
         display: 'flex', alignItems: 'center', gap: '10px',
         marginBottom: '20px', flexWrap: 'wrap',
       }}>
-        <select style={selectStyle} value={filterType} onChange={e => setFilterType(e.target.value as WorkItemType | '')}>
-          <option value="">All Skills</option>
-          {(Object.keys(WORK_TYPE_META) as WorkItemType[]).map(t => (
-            <option key={t} value={t}>{WORK_TYPE_META[t].label}</option>
-          ))}
-        </select>
+        {!isStaff && (
+          <select style={selectStyle} value={filterType} onChange={e => setFilterType(e.target.value as WorkItemType | '')}>
+            <option value="">All Skills</option>
+            {(Object.keys(WORK_TYPE_META) as WorkItemType[]).map(t => (
+              <option key={t} value={t}>{WORK_TYPE_META[t].label}</option>
+            ))}
+          </select>
+        )}
 
-        <select style={selectStyle} value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
-          <option value="">All Team Members</option>
-          <optgroup label="Staff Members">
-            {staff.map(s => <option key={s.uid} value={s.uid}>{s.name} (Staff)</option>)}
-          </optgroup>
-          <optgroup label="Freelancers">
-            {freelancers.map(f => <option key={f.freelancerId} value={f.freelancerId}>{f.name} (FL - {f.skill})</option>)}
-          </optgroup>
-        </select>
+        {!isStaff && (
+          <select style={selectStyle} value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
+            <option value="">All Team Members</option>
+            <optgroup label="Staff Members">
+              {staff.map(s => <option key={s.uid} value={s.uid}>{s.name} (Staff)</option>)}
+            </optgroup>
+            <optgroup label="Freelancers">
+              {freelancers.map(f => <option key={f.freelancerId} value={f.freelancerId}>{f.name} (FL - {f.skill})</option>)}
+            </optgroup>
+          </select>
+        )}
 
         <select style={selectStyle} value={filterStatus} onChange={e => setFilterStatus(e.target.value as WorkItemStatus | '')}>
           <option value="">All Status</option>
@@ -2405,12 +3076,14 @@ export default function WorkBoardPage() {
         onStatusChange={handleStatusChange}
         onProgressChange={handleProgressChange}
         onReassign={handleReassign}
+        onUpdateItem={handleUpdateWorkItem}
         staff={staff}
         freelancers={freelancers}
+        isStaff={isStaff}
       />
 
       {/* ── CREATE WORK MODAL ── */}
-      {showCreate && (
+      {showCreate && !isStaff && (
         <CreateWorkModal
           onClose={() => setShowCreate(false)}
           projects={projects}
@@ -2419,6 +3092,7 @@ export default function WorkBoardPage() {
           createdBy={appUser?.uid ?? ''}
           initialAssignee={createAssignee}
           onWorkCreated={handleWorkCreated}
+          onWorkIdResolved={handleWorkIdResolved}
         />
       )}
     </div>

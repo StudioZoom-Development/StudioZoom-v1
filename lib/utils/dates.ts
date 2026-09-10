@@ -84,3 +84,66 @@ export function getDaysCount(year: number, month: number): number {
 export function parseDate(dateStr: string): Date {
   return parseISO(dateStr)
 }
+
+export interface RecurringSessionDate {
+  sessionNumber: number
+  label: string
+  date: Date
+  dateStr: string // "yyyy-MM-dd"
+  displayDate: string // "11 Sep 2026"
+  dayOfWeek: string // "Fri"
+  startTime: string
+  endTime: string
+}
+
+/** Compute all session dates for a recurring booking based on frequency, startDate, and totalSessions */
+export function computeRecurringSessionDates(
+  frequency: 'weekly' | 'biweekly' | 'monthly',
+  startDate: Date | string,
+  totalSessions: number,
+  sessionStartTime: string = '09:00',
+  sessionEndTime: string = '18:00'
+): RecurringSessionDate[] {
+  let start: Date
+  if (startDate instanceof Date) {
+    start = new Date(startDate.getTime())
+  } else if (typeof startDate === 'string' && startDate) {
+    const parts = startDate.split('-').map(Number)
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      start = new Date(parts[0], parts[1] - 1, parts[2])
+    } else {
+      start = new Date(startDate)
+    }
+  } else {
+    start = new Date()
+  }
+
+  if (isNaN(start.getTime())) return []
+  const count = Math.max(1, Math.min(totalSessions || 1, 100))
+
+  const sessions: RecurringSessionDate[] = []
+  for (let i = 0; i < count; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    if (frequency === 'weekly') {
+      d.setDate(d.getDate() + (i * 7))
+    } else if (frequency === 'biweekly') {
+      d.setDate(d.getDate() + (i * 14))
+    } else if (frequency === 'monthly') {
+      d.setMonth(d.getMonth() + i)
+    }
+
+    sessions.push({
+      sessionNumber: i + 1,
+      label: `Session ${i + 1}`,
+      date: d,
+      dateStr: format(d, 'yyyy-MM-dd'),
+      displayDate: format(d, 'd MMM yyyy'),
+      dayOfWeek: format(d, 'EEE'),
+      startTime: sessionStartTime,
+      endTime: sessionEndTime,
+    })
+  }
+
+  return sessions
+}
+
