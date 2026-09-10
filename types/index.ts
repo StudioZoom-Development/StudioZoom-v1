@@ -246,7 +246,6 @@ export interface PostProductionData {
   videoTrack?: PostProdVideoTrack         // Only present if videoHighlights required
   fullVideoTrack?: PostProdFullVideoTrack // Only present if fullVideo required
 }
-
 export interface SessionMilestoneState {
   photoMilestones?: Record<string, boolean>
   videoMilestones?: Record<string, boolean>

@@ -916,6 +916,46 @@ function EventsBoardContent() {
     return 'active'
   }, [selectedProject, currentStageIndex, now])
 
+  const getDaySessionStatus = useCallback((day: EventDateEntry, _idx: number): 'completed' | 'active' | 'pending' => {
+    if (!selectedProject) return 'pending'
+
+    const eventDayIdx = STAGE_ORDER.indexOf('eventDay')
+    // If the project has not reached eventDay yet:
+    if (currentStageIndex < eventDayIdx) {
+      return 'pending'
+    }
+
+    // If the entire project is completed & delivered:
+    if (selectedProject.stage === 'delivered' && selectedProject.status === 'completed') {
+      return 'completed'
+    }
+
+    const dayDate = day.date instanceof Date ? day.date : new Date(day.date)
+    const startOfToday = new Date(now)
+    startOfToday.setHours(0, 0, 0, 0)
+    const endOfToday = new Date(now)
+    endOfToday.setHours(23, 59, 59, 999)
+
+    // Future date (e.g. 16 Sept, 23 Sept, 30 Sept when today is 9 Sept):
+    if (dayDate.getTime() > endOfToday.getTime()) {
+      return 'pending'
+    }
+
+    // Past date (before today):
+    if (dayDate.getTime() < startOfToday.getTime()) {
+      return 'completed'
+    }
+
+    // Today (same day as now):
+    // If the project has already moved to post-production or delivered, today's shoot has completed
+    if (currentStageIndex > eventDayIdx) {
+      return 'completed'
+    }
+
+    // Currently in eventDay on today's date:
+    return 'active'
+  }, [selectedProject, currentStageIndex, now])
+
   // Multi-day / Multi-event tracks detection
   const multiEventDays: EventDateEntry[] = useMemo(() => {
     if (!selectedProject) return []
