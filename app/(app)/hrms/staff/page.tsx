@@ -35,7 +35,6 @@ export default function StaffListPage() {
   const [deactivating, setDeactivating] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
     const unsub = subscribeToStaff((data) => {
       setStaffList(data)
       setLoading(false)

@@ -329,33 +329,40 @@ function WorkItemSidePanel({
   const [showReassign, setShowReassign] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
 
-  // Edit form state
-  const [editType, setEditType] = useState<WorkItemType>('photography')
-  const [editPriority, setEditPriority] = useState<WorkItemPriority>('medium')
-  const [editStatus, setEditStatus] = useState<WorkItemStatus>('todo')
-  const [editAssignee, setEditAssignee] = useState<string>('')
-  const [editEstimatedHours, setEditEstimatedHours] = useState<number>(6)
-  const [editProgress, setEditProgress] = useState<number>(0)
-  const [editDueDate, setEditDueDate] = useState<string>('')
-  const [editNotes, setEditNotes] = useState<string>('')
+  const [prevItemId, setPrevItemId] = useState<string | null>(item?.workItemId ?? null)
+  const [editType, setEditType] = useState<WorkItemType>(item?.type ?? 'photography')
+  const [editPriority, setEditPriority] = useState<WorkItemPriority>(item?.priority ?? 'medium')
+  const [editStatus, setEditStatus] = useState<WorkItemStatus>(item?.status ?? 'todo')
+  const [editAssignee, setEditAssignee] = useState<string>(
+    item ? (item.isFreelancer ? `fl:${item.assignedToUid}` : `staff:${item.assignedToUid}`) : ''
+  )
+  const [editEstimatedHours, setEditEstimatedHours] = useState<number>(item?.estimatedHours ?? 6)
+  const [editProgress, setEditProgress] = useState<number>(
+    item?.progressPercent ?? (item?.status === 'done' ? 100 : item?.status === 'inProgress' ? 50 : 0)
+  )
+  const [editDueDate, setEditDueDate] = useState<string>(
+    item?.dueDate
+      ? (item.dueDate instanceof Date ? item.dueDate.toISOString().slice(0, 10) : new Date(item.dueDate).toISOString().slice(0, 10))
+      : ''
+  )
+  const [editNotes, setEditNotes] = useState<string>(item?.notes ?? '')
 
-  useEffect(() => {
-    if (item) {
-      setEditType(item.type)
-      setEditPriority(item.priority ?? 'medium')
-      setEditStatus(item.status)
-      setEditAssignee(item.isFreelancer ? `fl:${item.assignedToUid}` : `staff:${item.assignedToUid}`)
-      setEditEstimatedHours(item.estimatedHours ?? 6)
-      setEditProgress(item.progressPercent ?? (item.status === 'done' ? 100 : item.status === 'inProgress' ? 50 : 0))
-      setEditDueDate(
-        item.dueDate
-          ? (item.dueDate instanceof Date ? item.dueDate.toISOString().slice(0, 10) : new Date(item.dueDate).toISOString().slice(0, 10))
-          : ''
-      )
-      setEditNotes(item.notes ?? '')
-      setIsEditing(false)
-    }
-  }, [item])
+  if (item && item.workItemId !== prevItemId) {
+    setPrevItemId(item.workItemId)
+    setEditType(item.type)
+    setEditPriority(item.priority ?? 'medium')
+    setEditStatus(item.status)
+    setEditAssignee(item.isFreelancer ? `fl:${item.assignedToUid}` : `staff:${item.assignedToUid}`)
+    setEditEstimatedHours(item.estimatedHours ?? 6)
+    setEditProgress(item.progressPercent ?? (item.status === 'done' ? 100 : item.status === 'inProgress' ? 50 : 0))
+    setEditDueDate(
+      item.dueDate
+        ? (item.dueDate instanceof Date ? item.dueDate.toISOString().slice(0, 10) : new Date(item.dueDate).toISOString().slice(0, 10))
+        : ''
+    )
+    setEditNotes(item.notes ?? '')
+    setIsEditing(false)
+  }
 
   if (!item) return null
 
@@ -1759,7 +1766,10 @@ export default function WorkBoardPage() {
   const testDatasetMode = useUIStore(s => s.testDatasetMode)
   const testModeCutoff = useUIStore(s => s.testModeCutoff)
 
+  const isStaff = appUser?.role === 'staff'
+
   const [tab, setTab]                               = useState<TabKey>('board')
+  const activeTab: TabKey                           = isStaff ? 'board' : tab
   const [workItems, setWorkItems]                   = useState<WorkItem[]>([])
   const [localItems, setLocalItems]                 = useState<WorkItem[]>([])
   const [projects, setProjects]                     = useState<Project[]>([])
@@ -1770,14 +1780,24 @@ export default function WorkBoardPage() {
   const [createAssignee, setCreateAssignee]         = useState<{ id: string; isFreelancer: boolean } | undefined>()
   const [selectedPanelItem, setSelectedPanelItem]   = useState<WorkItem | null>(null)
 
+  const effectiveStaff = useMemo<StaffMember[]>(() => {
+    if (isStaff && appUser) {
+      return [{
+        uid: appUser.uid,
+        name: appUser.name,
+        email: appUser.email,
+        role: 'staff',
+        isActive: true,
+      }]
+    }
+    return staff
+  }, [isStaff, appUser, staff])
+
   // Filters
   const [filterStaff,    setFilterStaff]    = useState('')
   const [filterStatus,   setFilterStatus]   = useState<WorkItemStatus | ''>('')
   const [filterPriority, setFilterPriority] = useState<WorkItemPriority | ''>('')
   const [filterType,     setFilterType]     = useState<WorkItemType | ''>('')
-
-  // Helper to load synced demo projects from localStorage
-  const getFallbackProjects = (): Project[] => []
 
   // Real-time subscriptions
   useEffect(() => {
@@ -1809,15 +1829,6 @@ export default function WorkBoardPage() {
       unsub4 = subscribeToFreelancers(list => {
         setFreelancers(list || [])
       })
-    } else if (appUser?.role === 'staff') {
-      setStaff([{
-        uid: appUser.uid,
-        name: appUser.name,
-        email: appUser.email,
-        role: 'staff',
-        isActive: true,
-      }])
-      setFreelancers([])
     }
 
     const unsub5 = subscribeToAllStaffAssignments(list => {
@@ -1840,7 +1851,7 @@ export default function WorkBoardPage() {
   // ─── Unified allWorkItems (explicit items + synthesized assignments) ─────────
   const allWorkItems = useMemo(() => {
     const getAssigneeName = (uid: string): { name: string; isFreelancer: boolean } => {
-      const s = staff.find(sm => sm.uid === uid)
+      const s = effectiveStaff.find(sm => sm.uid === uid)
       if (s) return { name: s.name, isFreelancer: false }
       const f = freelancers.find(fl => fl.freelancerId === uid)
       if (f) return { name: f.name, isFreelancer: true }
@@ -2000,7 +2011,7 @@ export default function WorkBoardPage() {
           else if (p.stage === 'postProduction' || p.stage === 'eventDay' || p.stage === 'preProduction') status = 'inProgress'
           else status = 'pending'
 
-          const staffMember = staff.find(sm => sm.uid === staffUid)
+          const staffMember = effectiveStaff.find(sm => sm.uid === staffUid)
           const isVideoStaff = staffMember?.role?.toLowerCase().includes('video')
           const type: WorkItemType = isVideoStaff ? 'videography' : 'photography'
           const track: WorkTrack   = isVideoStaff ? 'video' : 'photo'
@@ -2301,9 +2312,7 @@ export default function WorkBoardPage() {
     return testDatasetMode
       ? finalItems.filter(w => isAllowedByTestMode(w.createdAt))
       : finalItems
-  }, [workItems, localItems, projects, staff, freelancers, assignments, testDatasetMode, testModeCutoff])
-
-  const isStaff = appUser?.role === 'staff'
+  }, [workItems, localItems, projects, effectiveStaff, freelancers, assignments, testDatasetMode])
 
   // If logged in as staff, filter items so staff member can ONLY see their own works
   const userWorkItems = useMemo(() => {
@@ -2316,13 +2325,6 @@ export default function WorkBoardPage() {
       return false
     })
   }, [allWorkItems, isStaff, appUser])
-
-  // Automatically ensure staff stays on 'board' tab
-  useEffect(() => {
-    if (isStaff && tab !== 'board') {
-      setTab('board')
-    }
-  }, [isStaff, tab])
 
   // Filtered items (skills and team member filters are ignored for staff)
   const filtered = useMemo(() => userWorkItems.filter(w => {
@@ -2770,7 +2772,7 @@ export default function WorkBoardPage() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
           {(isStaff ? (['board'] as TabKey[]) : (['board', 'staff', 'available'] as TabKey[])).map(t => (
-            <button key={t} style={tabStyle(tab === t)} onClick={() => setTab(t)}>
+            <button key={t} style={tabStyle(activeTab === t)} onClick={() => setTab(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
@@ -2784,16 +2786,16 @@ export default function WorkBoardPage() {
             style={{
               background: 'var(--color-primary)',
               color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              fontFamily: 'var(--font-inter)',
-              fontSize: 'var(--text-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
               fontWeight: 600,
-              cursor: 'pointer',
+              fontSize: 'var(--text-xs)',
+              borderRadius: '8px',
               padding: '8px 16px',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}>
-            <i className="ti ti-plus" />
+            }}
+          >
+            <i className="ti ti-plus" style={{ fontSize: '14px' }} />
             Create Work
           </Button>
         )}
@@ -2830,9 +2832,9 @@ export default function WorkBoardPage() {
         ))}
       </div>
 
-      {/* Filter bar */}
+      {/* Filter Bar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
+        display: 'flex', gap: '10px', alignItems: 'center',
         marginBottom: '20px', flexWrap: 'wrap',
       }}>
         {!isStaff && (
@@ -2848,7 +2850,7 @@ export default function WorkBoardPage() {
           <select style={selectStyle} value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
             <option value="">All Team Members</option>
             <optgroup label="Staff Members">
-              {staff.map(s => <option key={s.uid} value={s.uid}>{s.name} (Staff)</option>)}
+              {effectiveStaff.map(s => <option key={s.uid} value={s.uid}>{s.name} (Staff)</option>)}
             </optgroup>
             <optgroup label="Freelancers">
               {freelancers.map(f => <option key={f.freelancerId} value={f.freelancerId}>{f.name} (FL - {f.skill})</option>)}
@@ -2873,9 +2875,9 @@ export default function WorkBoardPage() {
         </select>
 
         <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-          {tab === 'board'
+          {activeTab === 'board'
             ? `${filtered.length} works`
-            : tab === 'staff'
+            : activeTab === 'staff'
               ? `${filteredStaffList.length + filteredFreelancersList.length} members`
               : `${filteredAvailableStaff.length + filteredAvailableFreelancers.length} available`
           }
@@ -2942,7 +2944,7 @@ export default function WorkBoardPage() {
       )}
 
       {/* ── STAFF & FREELANCERS TAB ── */}
-      {tab === 'staff' && (
+      {activeTab === 'staff' && (
         <div style={{
           background: 'var(--color-surface)',
           border: '0.5px solid var(--color-border)',
@@ -3013,7 +3015,7 @@ export default function WorkBoardPage() {
       )}
 
       {/* ── AVAILABLE TAB ── */}
-      {tab === 'available' && (
+      {activeTab === 'available' && (
         <div>
           {filteredAvailableStaff.length === 0 && filteredAvailableFreelancers.length === 0 ? (
             <div style={{
@@ -3028,12 +3030,9 @@ export default function WorkBoardPage() {
             </div>
           ) : (
             <>
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', marginBottom: '16px' }}>
-                Team members with no ongoing, pending, or overdue work.
-              </p>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                 gap: '16px',
               }}>
                 {/* Available Staff */}
@@ -3077,7 +3076,7 @@ export default function WorkBoardPage() {
         onProgressChange={handleProgressChange}
         onReassign={handleReassign}
         onUpdateItem={handleUpdateWorkItem}
-        staff={staff}
+        staff={effectiveStaff}
         freelancers={freelancers}
         isStaff={isStaff}
       />

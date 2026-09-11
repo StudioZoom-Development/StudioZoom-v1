@@ -68,7 +68,6 @@ export default function FreelancersListPage() {
 
   // Subscribe to real-time freelancers
   useEffect(() => {
-    setLoading(true)
     const unsub = subscribeToFreelancers(data => {
       setFreelancers(data)
       setLoading(false)

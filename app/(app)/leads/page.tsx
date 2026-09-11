@@ -72,7 +72,6 @@ export default function LeadsPage() {
 
   // Real-time Firestore subscription
   useEffect(() => {
-    setLoading(true)
     const unsub = subscribeToLeads({ source: sourceFilter }, data => {
       setLeads(data)
       setLoading(false)
