@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { Badge } from '@/components/shared/Badge'
 import { BookingWizardState } from '../bookingReducer'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   wedding:     'Wedding',
@@ -244,12 +245,64 @@ export default function StepReview({
 
         {state.bookingType === 'recurring' && (
           <>
-            <InfoRow label="Frequency" value={state.frequency} />
+            <InfoRow label="Frequency" value={state.frequency === 'weekly' ? 'Weekly' : state.frequency === 'biweekly' ? 'Bi-weekly' : 'Monthly'} />
             <InfoRow label="Period" value={`${formatDate(state.startDate)} → ${formatDate(state.endDate)}`} />
             <InfoRow label="Sessions" value={String(state.totalSessions)} />
             {(state.sessionStartTime || state.sessionEndTime) && (
               <InfoRow label="Session timing" value={`${state.sessionStartTime || '—'} – ${state.sessionEndTime || '—'}`} />
             )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+              <span style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}>
+                Scheduled Dates ({state.totalSessions})
+              </span>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                maxHeight: '160px',
+                overflowY: 'auto',
+                paddingLeft: '4px',
+              }}>
+                {computeRecurringSessionDates(
+                  state.frequency || 'weekly',
+                  state.startDate || new Date(),
+                  state.totalSessions || 1,
+                  state.sessionStartTime || '09:00',
+                  state.sessionEndTime || '18:00'
+                ).map(sess => (
+                  <div key={sess.sessionNumber} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: 'var(--color-surface-raised)',
+                  }}>
+                    <span style={{
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-inter)',
+                      color: 'var(--color-foreground)',
+                    }}>
+                      {sess.label}
+                    </span>
+                    <span style={{
+                      fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-inter)',
+                      color: 'var(--color-foreground-muted)',
+                    }}>
+                      {sess.displayDate} ({sess.dayOfWeek}) · {sess.startTime}–{sess.endTime}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </>
         )}
 

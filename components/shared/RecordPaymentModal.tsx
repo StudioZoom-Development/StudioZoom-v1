@@ -25,6 +25,7 @@ interface RecordPaymentModalProps {
   clientName?: string
   totalAmount?: number
   balanceDue?: number
+  maxBalanceDue?: number
   onSuccess?: () => void
 }
 
@@ -35,6 +36,7 @@ export function RecordPaymentModal({
   clientName,
   totalAmount = 0,
   balanceDue = 0,
+  maxBalanceDue,
   onSuccess,
 }: RecordPaymentModalProps) {
   const appUser = useAuthStore(s => s.appUser)
@@ -94,8 +96,9 @@ export function RecordPaymentModal({
       return
     }
 
-    if (balanceDue > 0 && amt > balanceDue) {
-      setPaymentError(`Amount cannot exceed the remaining balance of ₹${balanceDue.toLocaleString('en-IN')}.`)
+    const ceiling = maxBalanceDue !== undefined ? maxBalanceDue : balanceDue
+    if (ceiling > 0 && amt > ceiling) {
+      setPaymentError(`Amount cannot exceed the remaining balance of ₹${ceiling.toLocaleString('en-IN')}.`)
       return
     }
 

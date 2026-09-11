@@ -13,6 +13,7 @@ import {
   deactivateStaff,
   reactivateStaff,
 } from '@/lib/firebase/queries/staff'
+import { useUIStore } from '@/store/uiStore'
 
 function getInitials(name: string): string {
   if (!name) return 'SP'
@@ -23,6 +24,8 @@ function getInitials(name: string): string {
 
 export default function StaffListPage() {
   const router = useRouter()
+  const testDatasetMode = useUIStore(s => s.testDatasetMode)
+  const testModeCutoff = useUIStore(s => s.testModeCutoff)
   const [staffList, setStaffList] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -37,7 +40,7 @@ export default function StaffListPage() {
       setLoading(false)
     })
     return () => unsub()
-  }, [])
+  }, [testDatasetMode, testModeCutoff])
 
   const filteredStaff = staffList.filter(member => {
     const q = searchQuery.toLowerCase()
