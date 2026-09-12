@@ -339,6 +339,7 @@ function EventsBoardContent() {
   // Canvas element refs and measured port positions
   const canvasRef = useRef<HTMLDivElement>(null)
   const innerContainerRef = useRef<HTMLDivElement>(null)
+  const wheelCleanupRef = useRef<(() => void) | null>(null)
   const [ports, setPorts] = useState<Record<string, Point>>({})
   // Guard so URL params (project + stage) are only applied once on initial load,
   // not every time the projects array updates from Firestore
@@ -591,23 +592,50 @@ function EventsBoardContent() {
     }
   }, [isDragging, zoom, measurePorts])
 
-  // Mouse wheel scroll up/down for zoom in and zoom out
-  useEffect(() => {
-    const canvasEl = canvasRef.current
-    if (!canvasEl) return
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const step = 0.08
-      const delta = e.deltaY < 0 ? step : -step
-      setZoom(prev => {
-        const next = Math.round((prev + delta) * 100) / 100
-        return Math.min(1.8, Math.max(0.4, next))
-      })
+  // Mouse wheel scroll up/down for zoom in and zoom out via callback ref
+  const setCanvasRef = useCallback((node: HTMLDivElement | null) => {
+    if (wheelCleanupRef.current) {
+      wheelCleanupRef.current()
+      wheelCleanupRef.current = null
     }
 
-    canvasEl.addEventListener('wheel', onWheel, { passive: false })
-    return () => canvasEl.removeEventListener('wheel', onWheel)
+    canvasRef.current = node
+
+    if (node) {
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault()
+        const canvasRect = node.getBoundingClientRect()
+        const mouseX = e.clientX - canvasRect.left
+        const mouseY = e.clientY - canvasRect.top
+
+        const step = 0.08
+        const delta = e.deltaY < 0 ? step : -step
+
+        setZoom(prevZoom => {
+          const nextZoom = Math.min(1.8, Math.max(0.4, Math.round((prevZoom + delta) * 100) / 100))
+          if (nextZoom === prevZoom) return prevZoom
+
+          setPan(prevPan => ({
+            x: Math.round(mouseX - ((mouseX - prevPan.x) / prevZoom) * nextZoom),
+            y: Math.round(mouseY - ((mouseY - prevPan.y) / prevZoom) * nextZoom),
+          }))
+
+          return nextZoom
+        })
+      }
+
+      node.addEventListener('wheel', onWheel, { passive: false })
+      wheelCleanupRef.current = () => node.removeEventListener('wheel', onWheel)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (wheelCleanupRef.current) {
+        wheelCleanupRef.current()
+        wheelCleanupRef.current = null
+      }
+    }
   }, [])
 
   // Open stage panel on card click (only block if user actively dragged the node)
@@ -2473,18 +2501,44 @@ function EventsBoardContent() {
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
-          padding: '0 24px',
+          padding: '0 20px',
           borderBottom: '0.5px solid var(--color-border)',
           background: 'var(--color-surface)',
           zIndex: 5,
         }}>
           {selectedProject ? (
             <>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--color-foreground)' }}>
+              {/* Project title & subtitle with truncation */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                minWidth: 0,
+                flexShrink: 1,
+                maxWidth: '240px',
+              }}>
+                <span
+                  title={selectedProject.eventName || selectedProject.clientName || ''}
+                  style={{
+                    fontSize: 'var(--text-base)',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    color: 'var(--color-foreground)',
+                  }}
+                >
                   {selectedProject.eventName || selectedProject.clientName}
                 </span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                <span
+                  title={selectedProject.clientName || ''}
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-foreground-subtle)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
                   <span style={{ textTransform: 'capitalize' }}>
                     {selectedProject.eventType === 'other' && selectedProject.customEventType ? selectedProject.customEventType : selectedProject.eventType}
                   </span>
@@ -2497,22 +2551,65 @@ function EventsBoardContent() {
                   {selectedProject.clientName && ` · ${selectedProject.clientName}`}
                 </span>
               </div>
-              <Badge variant={selectedProject.stage} />
-              {isMultiEvent && (
-                <span style={{
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  background: 'var(--color-surface-raised)',
-                  color: 'var(--color-foreground-muted)',
-                  border: '0.5px solid var(--color-border)',
-                }}>
-                  {multiEventDays.length} Event Tracks
-                </span>
-              )}
-              {selectedProject.sessionIndex ? (
-                <>
+
+              {/* Badges container with responsive flex */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                flexShrink: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                flexWrap: 'nowrap',
+              }}>
+                <Badge variant={selectedProject.stage} />
+                {isMultiEvent && (
+                  <span style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: 'var(--color-surface-raised)',
+                    color: 'var(--color-foreground-muted)',
+                    border: '0.5px solid var(--color-border)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}>
+                    {multiEventDays.length} Tracks
+                  </span>
+                )}
+                {selectedProject.sessionIndex ? (
+                  <>
+                    <span style={{
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: 'var(--color-purple-muted)',
+                      color: 'var(--color-purple)',
+                      border: '0.5px solid var(--color-border)',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}>
+                      Recurring · Session {selectedProject.sessionIndex} of {selectedProject.totalSessions || ''}
+                    </span>
+                    {sessionRate > 0 && (
+                      <span style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'var(--color-surface-raised)',
+                        color: 'var(--color-foreground)',
+                        border: '0.5px solid var(--color-border)',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}>
+                        ₹{sessionRate.toLocaleString('en-IN')} / session
+                      </span>
+                    )}
+                  </>
+                ) : selectedProject.bookingType === 'recurring' && selectedProject.recurringSchedule ? (
                   <span style={{
                     fontSize: 'var(--text-xs)',
                     fontWeight: 600,
@@ -2521,139 +2618,135 @@ function EventsBoardContent() {
                     background: 'var(--color-purple-muted)',
                     color: 'var(--color-purple)',
                     border: '0.5px solid var(--color-border)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}>
-                    Recurring · Session {selectedProject.sessionIndex} of {selectedProject.totalSessions || ''}
+                    {selectedProject.recurringSchedule.totalSessions} Sessions
                   </span>
-                  {sessionRate > 0 && (
-                    <span style={{
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 600,
-                      padding: '2px 8px',
-                      borderRadius: '10px',
-                      background: 'var(--color-surface-raised)',
-                      color: 'var(--color-foreground)',
-                      border: '0.5px solid var(--color-border)',
-                    }}>
-                      ₹{sessionRate.toLocaleString('en-IN')} / session
-                    </span>
-                  )}
-                </>
-              ) : selectedProject.bookingType === 'recurring' && selectedProject.recurringSchedule ? (
-                <span style={{
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  background: 'var(--color-purple-muted)',
-                  color: 'var(--color-purple)',
-                  border: '0.5px solid var(--color-border)',
-                }}>
-                  {selectedProject.recurringSchedule.totalSessions} Sessions · {selectedProject.recurringSchedule.frequency.charAt(0).toUpperCase() + selectedProject.recurringSchedule.frequency.slice(1)}
-                </span>
-              ) : null}
+                ) : null}
+              </div>
             </>
           ) : (
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {projects.length === 0 ? 'No clients or bookings' : 'Select a project from the left rail'}
             </span>
           )}
 
-          <div style={{ flex: 1 }} />
-
-          {/* Zoom Controls */}
+          {/* Right Action Controls */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '2px',
-            background: 'var(--color-surface-raised)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '8px',
-            padding: '2px',
+            gap: '8px',
+            flexShrink: 0,
+            marginLeft: 'auto',
           }}>
-            <span
-              onClick={() => setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(1)))}
-              title="Zoom out"
-              style={{
-                width: '26px',
-                height: '26px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                color: 'var(--color-foreground-muted)',
-              }}
-            >
-              <i className="ti ti-minus" style={{ fontSize: '14px' }} />
-            </span>
-            <span
-              onClick={() => {
-                setZoom(1)
-                setPan({ x: 48, y: 48 })
-              }}
-              title="Click to reset view (100% zoom & center)"
-              style={{
-                minWidth: '44px',
-                textAlign: 'center',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--color-foreground-muted)',
-                cursor: 'pointer',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {Math.round(zoom * 100)}%
-            </span>
-            <span
-              onClick={() => setZoom(z => Math.min(1.4, +(z + 0.1).toFixed(1)))}
-              title="Zoom in"
-              style={{
-                width: '26px',
-                height: '26px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                color: 'var(--color-foreground-muted)',
-              }}
-            >
-              <i className="ti ti-plus" style={{ fontSize: '14px' }} />
-            </span>
-          </div>
-
-          {/* Reset Positions Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleResetPositions}
-            title="Reset all node positions to default layout"
-            style={{
-              height: '32px',
-              fontSize: 'var(--text-xs)',
+            {/* Zoom Controls */}
+            <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              borderColor: Object.keys(nodeOffsets).length > 0 ? 'var(--color-primary)' : 'var(--color-border)',
-              color: Object.keys(nodeOffsets).length > 0 ? 'var(--color-primary)' : 'var(--color-foreground)',
-            }}
-          >
-            <i className="ti ti-refresh" style={{ fontSize: '14px' }} />
-            Reset positions
-          </Button>
+              gap: '2px',
+              background: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '8px',
+              padding: '2px',
+              flexShrink: 0,
+            }}>
+              <span
+                onClick={() => setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(1)))}
+                title="Zoom out"
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  color: 'var(--color-foreground-muted)',
+                }}
+              >
+                <i className="ti ti-minus" style={{ fontSize: '14px' }} />
+              </span>
+              <span
+                onClick={() => {
+                  setZoom(1)
+                  setPan({ x: 48, y: 48 })
+                }}
+                title="Click to reset view (100% zoom & center)"
+                style={{
+                  minWidth: '40px',
+                  textAlign: 'center',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  color: 'var(--color-foreground-muted)',
+                  cursor: 'pointer',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {Math.round(zoom * 100)}%
+              </span>
+              <span
+                onClick={() => setZoom(z => Math.min(1.4, +(z + 0.1).toFixed(1)))}
+                title="Zoom in"
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  color: 'var(--color-foreground-muted)',
+                }}
+              >
+                <i className="ti ti-plus" style={{ fontSize: '14px' }} />
+              </span>
+            </div>
 
-          {/* Project Detail Link Button */}
-          {selectedProject?.clientId && (
+            {/* Reset Positions Button */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/clients/${selectedProject.clientId}`)}
-              style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+              onClick={handleResetPositions}
+              title="Reset all node positions to default layout"
+              style={{
+                height: '32px',
+                fontSize: 'var(--text-xs)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                borderColor: Object.keys(nodeOffsets).length > 0 ? 'var(--color-primary)' : 'var(--color-border)',
+                color: Object.keys(nodeOffsets).length > 0 ? 'var(--color-primary)' : 'var(--color-foreground)',
+              }}
             >
-              <i className="ti ti-external-link" style={{ marginRight: '4px', fontSize: '14px' }} />
-              Project detail
+              <i className="ti ti-refresh" style={{ fontSize: '14px', flexShrink: 0 }} />
+              <span>Reset positions</span>
             </Button>
-          )}
+
+            {/* Project Detail Link Button */}
+            {selectedProject?.clientId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/clients/${selectedProject.clientId}`)}
+                title="View project detail"
+                style={{
+                  height: '32px',
+                  fontSize: 'var(--text-xs)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <i className="ti ti-external-link" style={{ fontSize: '14px', flexShrink: 0 }} />
+                <span>Project detail</span>
+              </Button>
+            )}
+          </div>
         </header>
 
         {/* ─── NODE-GRAPH WORKFLOW CANVAS ───────────────────────────────── */}
@@ -2722,7 +2815,7 @@ function EventsBoardContent() {
           </div>
         ) : (
           <div
-            ref={canvasRef}
+            ref={setCanvasRef}
           onMouseDown={handleCanvasMouseDown}
           style={{
             flex: 1,

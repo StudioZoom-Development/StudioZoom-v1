@@ -2,6 +2,8 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 
+import { useUIStore } from '@/store/uiStore'
+
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':          'Dashboard',
   '/clients':            'Clients',
@@ -36,6 +38,7 @@ export function TopBar() {
   const pathname = usePathname()
   const router   = useRouter()
   const appUser  = useAuthStore(s => s.appUser)
+  const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore()
   const title = PAGE_TITLES[pathname]
     ?? Object.entries(PAGE_TITLES).find(([k]) => pathname.startsWith(k + '/'))?.[1]
     ?? 'Studio Zoom'
@@ -45,18 +48,36 @@ export function TopBar() {
       height: '56px', flexShrink: 0,
       background: 'var(--color-surface)',
       borderBottom: '0.5px solid var(--color-border)',
-      display: 'flex', alignItems: 'center', gap: '16px', padding: '0 24px',
+      display: 'flex', alignItems: 'center', gap: '12px', padding: '0 16px',
     }}>
-      {/* Page title */}
-      <div style={{
-        fontSize: 'var(--text-lg)', fontWeight: 600,
-        letterSpacing: '-0.01em', whiteSpace: 'nowrap',
-        color: 'var(--color-foreground)',
-      }}>{title}</div>
+      {/* Sidebar toggle + Page title */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <button
+          onClick={toggleSidebarCollapsed}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          style={{
+            cursor: 'pointer', background: 'none', border: 'none', padding: '6px',
+            color: 'var(--color-foreground-muted)', display: 'none', alignItems: 'center',
+            justifyContent: 'center', borderRadius: '6px',
+            transition: 'color 0.15s, background 0.15s',
+          }}
+          className="md:!flex hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
+        >
+          <i
+            className={`ti ${sidebarCollapsed ? 'ti-layout-sidebar-left-expand' : 'ti-layout-sidebar-left-collapse'}`}
+            style={{ fontSize: '18px' }}
+          />
+        </button>
+        <div style={{
+          fontSize: 'var(--text-lg)', fontWeight: 600,
+          letterSpacing: '-0.01em', whiteSpace: 'nowrap',
+          color: 'var(--color-foreground)',
+        }}>{title}</div>
+      </div>
 
       {/* Search */}
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-        <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center', padding: '0 8px' }}>
+        <div style={{ position: 'relative', width: '100%', maxWidth: '340px', minWidth: '140px' }}>
           <i className="ti ti-search" style={{
             fontSize: '16px', color: 'var(--color-foreground-subtle)',
             position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)',
@@ -75,7 +96,7 @@ export function TopBar() {
       </div>
 
       {/* Right: bell + avatar + role */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
         <div
           style={{ position: 'relative', cursor: 'pointer',
             color: 'var(--color-foreground-muted)', display: 'flex' }}
