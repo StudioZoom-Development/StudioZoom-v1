@@ -57,7 +57,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router   = useRouter()
   const appUser  = useAuthStore(s => s.appUser)
-  const { theme, toggleTheme } = useUIStore()
+  const { theme, toggleTheme, sidebarCollapsed, toggleSidebarCollapsed } = useUIStore()
   const role = appUser?.role ?? 'staff'
 
   const ALL_NAV_HREFS = [
@@ -84,15 +84,19 @@ export function Sidebar() {
 
   return (
     <aside style={{
-      width: '220px', flexShrink: 0,
+      width: sidebarCollapsed ? '64px' : '220px', flexShrink: 0,
       background: 'var(--color-surface)',
       borderRight: '0.5px solid var(--color-border)',
       display: 'flex', flexDirection: 'column', height: '100vh',
+      transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+      overflowX: 'hidden',
     }}>
       {/* Logo */}
       <div style={{
         height: '56px', display: 'flex', alignItems: 'center',
-        gap: '10px', padding: '0 16px',
+        justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+        gap: '10px',
+        padding: sidebarCollapsed ? '0' : '0 16px',
         borderBottom: '0.5px solid var(--color-border)',
         flexShrink: 0,
       }}>
@@ -102,22 +106,26 @@ export function Sidebar() {
           alt="Studio Zoom Logo"
           style={{ height: '30px', width: 'auto', objectFit: 'contain', flexShrink: 0 }}
         />
-        <div style={{
-          fontSize: 'var(--text-base)', fontWeight: 700,
-          letterSpacing: '-0.01em', whiteSpace: 'nowrap',
-          color: 'var(--color-foreground)',
-        }}>Studio Zoom</div>
+        {!sidebarCollapsed && (
+          <div style={{
+            fontSize: 'var(--text-base)', fontWeight: 700,
+            letterSpacing: '-0.01em', whiteSpace: 'nowrap',
+            color: 'var(--color-foreground)',
+          }}>Studio Zoom</div>
+        )}
       </div>
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         <div style={{
-          padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px',
+          padding: sidebarCollapsed ? '12px 6px' : '12px 10px',
+          display: 'flex', flexDirection: 'column', gap: '2px',
         }}>
           {/* Dashboard — all roles */}
           <NavLink
             href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
             active={isActive('/dashboard')}
+            collapsed={sidebarCollapsed}
           />
 
           {NAV_GROUPS.map(group => {
@@ -125,17 +133,30 @@ export function Sidebar() {
             if (!visible.length) return null
             return (
               <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <div style={{
-                  fontSize: 'var(--text-xs)', fontWeight: 600,
-                  textTransform: 'uppercase', letterSpacing: '0.04em',
-                  color: 'var(--color-foreground-subtle)',
-                  margin: '16px 0 4px', padding: '0 10px',
-                }}>{group.label}</div>
+                {sidebarCollapsed ? (
+                  <div
+                    title={group.label}
+                    style={{
+                      height: '1px',
+                      background: 'var(--color-border)',
+                      margin: '10px 6px',
+                      opacity: 0.6,
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    fontSize: 'var(--text-xs)', fontWeight: 600,
+                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                    color: 'var(--color-foreground-subtle)',
+                    margin: '16px 0 4px', padding: '0 10px',
+                  }}>{group.label}</div>
+                )}
                 {visible.map(item => (
                   <NavLink
                     key={item.id}
                     href={item.href} icon={item.icon} label={item.label}
                     active={isActive(item.href)}
+                    collapsed={sidebarCollapsed}
                   />
                 ))}
               </div>
@@ -147,85 +168,136 @@ export function Sidebar() {
       {/* Bottom: Settings + User card */}
       <div style={{
         borderTop: '0.5px solid var(--color-border)',
-        padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '8px',
+        padding: sidebarCollapsed ? '10px 6px' : '12px 10px',
+        display: 'flex', flexDirection: 'column', gap: '8px',
         flexShrink: 0,
       }}>
         {role === 'admin' && (
           <NavLink
             href="/settings" icon="ti-settings" label="Settings"
             active={isActive('/settings')}
+            collapsed={sidebarCollapsed}
           />
         )}
         {/* User card */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
-          padding: '8px 10px', borderRadius: '10px',
-          background: 'var(--color-surface-raised)',
-          border: '0.5px solid var(--color-border)',
-        }}>
+        {!sidebarCollapsed ? (
           <div style={{
-            width: '32px', height: '32px', borderRadius: '50%',
-            background: 'var(--color-primary-muted)', color: 'var(--color-primary)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 'var(--text-xs)', fontWeight: 700, flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '8px 10px', borderRadius: '10px',
+            background: 'var(--color-surface-raised)',
+            border: '0.5px solid var(--color-border)',
           }}>
-            {getInitials(appUser?.name ?? 'SZ')}
-          </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{
-              fontSize: 'var(--text-sm)', fontWeight: 600,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              color: 'var(--color-foreground)',
-            }}>{appUser?.name}</div>
-            <span style={{
-              fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)',
-              textTransform: 'capitalize',
-            }}>{role}</span>
+              width: '32px', height: '32px', borderRadius: '50%',
+              background: 'var(--color-primary-muted)', color: 'var(--color-primary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 'var(--text-xs)', fontWeight: 700, flexShrink: 0,
+            }}>
+              {getInitials(appUser?.name ?? 'SZ')}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                fontSize: 'var(--text-sm)', fontWeight: 600,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                color: 'var(--color-foreground)',
+              }}>{appUser?.name}</div>
+              <span style={{
+                fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)',
+                textTransform: 'capitalize',
+              }}>{role}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                onClick={toggleTheme}
+                style={{
+                  cursor: 'pointer', background: 'none', border: 'none', padding: '4px',
+                  color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
+                  borderRadius: '6px',
+                }}
+                title="Toggle theme"
+              >
+                <i className={`ti ${theme === 'dark' ? 'ti-sun' : 'ti-moon'}`}
+                   style={{ fontSize: '16px' }} />
+              </button>
+              <button
+                onClick={handleSignOut}
+                style={{
+                  cursor: 'pointer', background: 'none', border: 'none', padding: '4px',
+                  color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
+                  borderRadius: '6px',
+                }}
+                title="Sign out"
+              >
+                <i className="ti ti-logout" style={{ fontSize: '16px' }} />
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              onClick={toggleTheme}
+        ) : (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+            padding: '8px 4px', borderRadius: '10px',
+            background: 'var(--color-surface-raised)',
+            border: '0.5px solid var(--color-border)',
+          }}>
+            <div
+              title={`${appUser?.name || 'User'} (${role})`}
               style={{
-                cursor: 'pointer', background: 'none', border: 'none', padding: '4px',
-                color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
-                borderRadius: '6px',
+                width: '32px', height: '32px', borderRadius: '50%',
+                background: 'var(--color-primary-muted)', color: 'var(--color-primary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 'var(--text-xs)', fontWeight: 700, flexShrink: 0,
               }}
-              title="Toggle theme"
             >
-              <i className={`ti ${theme === 'dark' ? 'ti-sun' : 'ti-moon'}`}
-                 style={{ fontSize: '16px' }} />
-            </button>
-            <button
-              onClick={handleSignOut}
-              style={{
-                cursor: 'pointer', background: 'none', border: 'none', padding: '4px',
-                color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
-                borderRadius: '6px',
-              }}
-              title="Sign out"
-            >
-              <i className="ti ti-logout" style={{ fontSize: '16px' }} />
-            </button>
+              {getInitials(appUser?.name ?? 'SZ')}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+              <button
+                onClick={toggleTheme}
+                style={{
+                  cursor: 'pointer', background: 'none', border: 'none', padding: '4px',
+                  color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
+                  borderRadius: '6px',
+                }}
+                title="Toggle theme"
+              >
+                <i className={`ti ${theme === 'dark' ? 'ti-sun' : 'ti-moon'}`}
+                   style={{ fontSize: '15px' }} />
+              </button>
+              <button
+                onClick={handleSignOut}
+                style={{
+                  cursor: 'pointer', background: 'none', border: 'none', padding: '4px',
+                  color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center',
+                  borderRadius: '6px',
+                }}
+                title="Sign out"
+              >
+                <i className="ti ti-logout" style={{ fontSize: '15px' }} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </aside>
   )
 }
 
 // ── Reusable nav item ─────────────────────────────────────────────────────
-function NavLink({ href, icon, label, active }: {
-  href: string; icon: string; label: string; active: boolean
+function NavLink({ href, icon, label, active, collapsed }: {
+  href: string; icon: string; label: string; active: boolean; collapsed?: boolean
 }) {
   const [hovered, setHovered] = useState(false)
   return (
     <Link
       href={href}
+      title={collapsed ? label : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        height: '40px', padding: '0 10px', borderRadius: '8px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: collapsed ? '0' : '10px',
+        height: '40px', padding: collapsed ? '0' : '0 10px', borderRadius: '8px', cursor: 'pointer',
         fontSize: 'var(--text-sm)', fontWeight: 500, boxSizing: 'border-box',
         textDecoration: 'none',
         background: active
@@ -238,7 +310,9 @@ function NavLink({ href, icon, label, active }: {
       }}
     >
       <i className={`ti ${icon}`} style={{ fontSize: '20px', flexShrink: 0 }} />
-      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      {!collapsed && (
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      )}
     </Link>
   )
 }

@@ -24,6 +24,7 @@ import {
 import { subscribeToStaff, StaffMember } from '@/lib/firebase/queries/staff'
 import { subscribeToFreelancers } from '@/lib/firebase/queries/freelancers'
 import { checkStageGate, GateResult } from '@/lib/utils/gates'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EditClientModal } from '@/components/shared/EditClientModal'
 import { RecordPaymentModal } from '@/components/shared/RecordPaymentModal'
@@ -775,39 +776,120 @@ export default function ClientDetailPage() {
                     })}
                   </div>
                 ) : client.bookingType === 'recurring' && client.recurringSchedule ? (
-                  /* RECURRING SCHEDULE CARD */
-                  <div style={{
-                    padding: '16px',
-                    borderRadius: '10px',
-                    background: 'var(--color-surface-raised)',
-                    border: '0.5px solid var(--color-border)',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: '14px',
-                  }}>
-                    <div>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Frequency</span>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, textTransform: 'capitalize' }}>
-                        {client.recurringSchedule.frequency}
+                  /* RECURRING SCHEDULE CARD & SESSIONS */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{
+                      padding: '16px',
+                      borderRadius: '10px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '14px',
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Frequency</span>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, textTransform: 'capitalize' }}>
+                          {client.recurringSchedule.frequency}
+                        </div>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Period</span>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                          {format(new Date(client.recurringSchedule.startDate), 'd MMM yyyy')} → {format(new Date(client.recurringSchedule.endDate), 'd MMM yyyy')}
+                        </div>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Total Sessions</span>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-primary)' }}>
+                          {client.recurringSchedule.totalSessions} sessions
+                        </div>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Session Timing</span>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                          {client.recurringSchedule.sessionStartTime || '09:00'} – {client.recurringSchedule.sessionEndTime || '18:00'}
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Period</span>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                        {format(new Date(client.recurringSchedule.startDate), 'd MMM yyyy')} → {format(new Date(client.recurringSchedule.endDate), 'd MMM yyyy')}
+
+                    {/* SESSIONS LIST */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                        Sessions ({client.recurringSchedule.totalSessions})
                       </div>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Total Sessions</span>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-primary)' }}>
-                        {client.recurringSchedule.totalSessions} sessions
-                      </div>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Session Timing</span>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                        {client.recurringSchedule.sessionStartTime || '09:00'} – {client.recurringSchedule.sessionEndTime || '18:00'}
-                      </div>
+                      {computeRecurringSessionDates(
+                        client.recurringSchedule.frequency || 'weekly',
+                        client.recurringSchedule.startDate,
+                        client.recurringSchedule.totalSessions || 1,
+                        client.recurringSchedule.sessionStartTime || client.startTime || '09:00',
+                        client.recurringSchedule.sessionEndTime || client.endTime || '18:00'
+                      ).map((sess, idx) => {
+                        const sessProjId = client.projectIds && client.projectIds[idx] ? client.projectIds[idx] : project?.projectId
+                        return (
+                          <div
+                            key={sess.sessionNumber}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              borderRadius: '8px',
+                              background: 'var(--color-surface-raised)',
+                              border: '0.5px solid var(--color-border)',
+                              gap: '12px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '6px',
+                                background: 'var(--color-primary-muted)',
+                                color: 'var(--color-primary)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '8px',
+                                lineHeight: 1.1,
+                                border: '0.5px solid var(--color-border-strong)',
+                                flexShrink: 0,
+                              }}>
+                                <span>SESS</span>
+                                <span style={{ fontSize: '13px' }}>{String(sess.sessionNumber).padStart(2, '0')}</span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                                  {client.eventName} — Session {sess.sessionNumber}
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <i className="ti ti-calendar" style={{ fontSize: '13px', color: 'var(--color-primary)' }} />
+                                    <span>{format(sess.date, 'EEE, d MMM yyyy')}</span>
+                                  </span>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <i className="ti ti-clock" style={{ fontSize: '13px', color: 'var(--color-secondary)' }} />
+                                    <span>{sess.startTime} – {sess.endTime}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {sessProjId && (
+                              <Button
+                                variant="outline"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => router.push(`/events?project=${sessProjId}`)}
+                              >
+                                <span>Canvas</span>
+                                <i className="ti ti-arrow-right" style={{ fontSize: '11px' }} />
+                              </Button>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 ) : (

@@ -1,9 +1,11 @@
 'use client'
 
+import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { EventType } from '@/types'
 import { BookingWizardState, BookingAction } from '../bookingReducer'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
 
 const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
   { value: 'wedding',     label: 'Wedding' },
@@ -42,6 +44,79 @@ interface StepEventDetailsProps {
 export default function StepEventDetails({ state, dispatch }: StepEventDetailsProps): React.JSX.Element {
   const isMultiDate = state.bookingType === 'multiDate'
   const isRecurring = state.bookingType === 'recurring'
+
+  // Computed recurring session dates
+  const recurringSessions = useMemo(() => {
+    if (!isRecurring) return []
+    return computeRecurringSessionDates(
+      state.frequency || 'weekly',
+      state.startDate || new Date(),
+      state.totalSessions || 1,
+      state.sessionStartTime || '09:00',
+      state.sessionEndTime || '18:00'
+    )
+  }, [isRecurring, state.frequency, state.startDate, state.totalSessions, state.sessionStartTime, state.sessionEndTime])
+
+  const handleFrequencyChange = (newFreq: 'weekly' | 'biweekly' | 'monthly') => {
+    dispatch({ type: 'SET_FIELD', field: 'frequency', value: newFreq })
+    const updated = computeRecurringSessionDates(
+      newFreq,
+      state.startDate || new Date(),
+      state.totalSessions || 1,
+      state.sessionStartTime,
+      state.sessionEndTime
+    )
+    if (updated.length > 0) {
+      dispatch({ type: 'SET_FIELD', field: 'endDate', value: updated[updated.length - 1].dateStr })
+    }
+  }
+
+  const handleStartDateChange = (newStart: string) => {
+    dispatch({ type: 'SET_FIELD', field: 'startDate', value: newStart })
+    const updated = computeRecurringSessionDates(
+      state.frequency,
+      newStart,
+      state.totalSessions || 1,
+      state.sessionStartTime,
+      state.sessionEndTime
+    )
+    if (updated.length > 0) {
+      dispatch({ type: 'SET_FIELD', field: 'endDate', value: updated[updated.length - 1].dateStr })
+    }
+  }
+
+  const handleTotalSessionsChange = (newCount: number) => {
+    dispatch({ type: 'SET_FIELD', field: 'totalSessions', value: newCount })
+    const updated = computeRecurringSessionDates(
+      state.frequency,
+      state.startDate || new Date(),
+      newCount || 1,
+      state.sessionStartTime,
+      state.sessionEndTime
+    )
+    if (updated.length > 0) {
+      dispatch({ type: 'SET_FIELD', field: 'endDate', value: updated[updated.length - 1].dateStr })
+    }
+  }
+
+  const handleEndDateChange = (newEnd: string) => {
+    dispatch({ type: 'SET_FIELD', field: 'endDate', value: newEnd })
+    if (state.startDate && newEnd) {
+      const s = new Date(state.startDate)
+      const e = new Date(newEnd)
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e >= s) {
+        let count = 1
+        if (state.frequency === 'weekly') {
+          count = Math.max(1, Math.floor((e.getTime() - s.getTime()) / (7 * 24 * 3600 * 1000)) + 1)
+        } else if (state.frequency === 'biweekly') {
+          count = Math.max(1, Math.floor((e.getTime() - s.getTime()) / (14 * 24 * 3600 * 1000)) + 1)
+        } else if (state.frequency === 'monthly') {
+          count = Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1)
+        }
+        dispatch({ type: 'SET_FIELD', field: 'totalSessions', value: count })
+      }
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -443,7 +518,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               <select
                 style={SELECT_STYLE}
                 value={state.frequency}
-                onChange={e => dispatch({ type: 'SET_FIELD', field: 'frequency', value: e.target.value })}
+                onChange={e => handleFrequencyChange(e.target.value as 'weekly' | 'biweekly' | 'monthly')}
               >
                 <option value="weekly">Weekly</option>
                 <option value="biweekly">Bi-weekly</option>
@@ -463,7 +538,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               <Input
                 type="date"
                 value={state.startDate}
-                onChange={e => dispatch({ type: 'SET_FIELD', field: 'startDate', value: e.target.value })}
+                onChange={e => handleStartDateChange(e.target.value)}
                 className="h-9"
               />
             </div>
@@ -480,7 +555,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               <Input
                 type="date"
                 value={state.endDate}
-                onChange={e => dispatch({ type: 'SET_FIELD', field: 'endDate', value: e.target.value })}
+                onChange={e => handleEndDateChange(e.target.value)}
                 className="h-9"
               />
             </div>
@@ -501,7 +576,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                 min="1"
                 placeholder="12"
                 value={state.totalSessions > 0 ? String(state.totalSessions) : ''}
-                onChange={e => dispatch({ type: 'SET_FIELD', field: 'totalSessions', value: parseInt(e.target.value) || 0 })}
+                onChange={e => handleTotalSessionsChange(parseInt(e.target.value) || 0)}
                 className="h-9"
               />
             </div>
@@ -540,6 +615,117 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               />
             </div>
           </div>
+
+          {/* Scheduled session dates preview */}
+          {recurringSessions.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              paddingTop: '14px',
+              borderTop: '0.5px solid var(--color-border)',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    color: 'var(--color-primary)',
+                    fontFamily: 'var(--font-inter)',
+                  }}>
+                    Scheduled Sessions ({recurringSessions.length})
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'var(--color-primary-muted)',
+                    color: 'var(--color-primary)',
+                    fontFamily: 'var(--font-inter)',
+                  }}>
+                    {state.frequency === 'weekly' ? 'Every week' : state.frequency === 'biweekly' ? 'Every 2 weeks' : 'Every month'}
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-foreground-muted)',
+                  fontFamily: 'var(--font-inter)',
+                }}>
+                  {recurringSessions[0]?.displayDate} → {recurringSessions[recurringSessions.length - 1]?.displayDate}
+                </span>
+              </div>
+
+              {/* Grid of session dates */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: '8px',
+                maxHeight: '230px',
+                overflowY: 'auto',
+                paddingRight: '4px',
+              }}>
+                {recurringSessions.map((sess) => (
+                  <div
+                    key={sess.sessionNumber}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                    }}
+                  >
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: 'var(--color-primary-muted)',
+                      color: 'var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}>
+                      {sess.sessionNumber}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground)',
+                        fontFamily: 'var(--font-inter)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {sess.displayDate}
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--color-foreground-muted)',
+                        fontFamily: 'var(--font-inter)',
+                      }}>
+                        {sess.dayOfWeek} · {state.sessionStartTime || '09:00'}–{state.sessionEndTime || '18:00'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

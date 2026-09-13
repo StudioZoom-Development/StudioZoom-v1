@@ -5,6 +5,8 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { Lead } from '@/types'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
+import { useUIStore } from '@/store/uiStore'
 
 export interface LeadFilters {
   source?: string
@@ -122,11 +124,14 @@ export function subscribeToLeads(
     }
 
     // Merge Firestore docs with MEMORY_LEADS (Firestore docs take precedence for matching IDs)
+    const isTestMode = typeof window !== 'undefined' && useUIStore.getState().testDatasetMode
     const map = new Map<string, Lead>()
-    MEMORY_LEADS.forEach(l => { if (!l.isDeleted) map.set(l.leadId, l) })
+    if (!isTestMode) {
+      MEMORY_LEADS.forEach(l => { if (!l.isDeleted) map.set(l.leadId, l) })
+    }
     firestoreLeads.forEach(l => { if (!l.isDeleted) map.set(l.leadId, l) })
 
-    let combinedLeads = Array.from(map.values())
+    let combinedLeads = Array.from(map.values()).filter(l => isAllowedByTestMode(l.createdAt))
 
     // Sort by createdAt desc
     combinedLeads.sort((a, b) => {

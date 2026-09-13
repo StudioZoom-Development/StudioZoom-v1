@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { Freelancer, FreelancerPayout, Project } from '@/types'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
 
 /** Real-time subscription to all freelancers */
 export function subscribeToFreelancers(
@@ -13,15 +14,17 @@ export function subscribeToFreelancers(
 ): () => void {
   const q = query(collection(db, 'freelancers'))
   return onSnapshot(q, snap => {
-    const list = snap.docs.map(d => {
-      const data = d.data()
-      return {
-        ...data,
-        freelancerId: d.id,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-      } as Freelancer
-    })
+    const list = snap.docs
+      .map(d => {
+        const data = d.data()
+        return {
+          ...data,
+          freelancerId: d.id,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
+        } as Freelancer
+      })
+      .filter(f => !f.isDeleted && isAllowedByTestMode(f.createdAt))
     // Sort alphabetically by name
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)

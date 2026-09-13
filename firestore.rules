@@ -54,11 +54,11 @@ service cloud.firestore {
     match /workItems/{workItemId} {
       allow read:           if isSignedIn();
       allow create, delete: if isAdminOrManager();
-      // Staff can only update the status field of their own work items
+      // Staff can only update status/progress fields of their own work items
       allow update: if isAdminOrManager() || (
         isStaff() &&
         resource.data.assignedToUid == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'progressPercent', 'updatedAt', 'startDate'])
       );
     }
 

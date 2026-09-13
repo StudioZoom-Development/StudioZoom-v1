@@ -481,7 +481,8 @@ export default function SettingsPage() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const { isAdmin } = useRole()
-  useUIStore() // keep store subscribed for sidebar theme sync
+  const testDatasetMode = useUIStore(s => s.testDatasetMode)
+  const testModeCutoff = useUIStore(s => s.testModeCutoff)
 
   const [prevTabParam, setPrevTabParam] = useState<string | null>(tabParam)
   const [page, setPage] = useState<Page>(() => {
@@ -602,7 +603,7 @@ export default function SettingsPage() {
     if (page === 'User management') {
       return subscribeToAllUsers(setUsers)
     }
-  }, [page])
+  }, [page, testDatasetMode, testModeCutoff])
 
   // ── Branding save
   const handleSaveBranding = async () => {

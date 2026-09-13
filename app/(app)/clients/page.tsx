@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'    // MyDesignSystem.ShadcnButton
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
 import { subscribeToClients, softDeleteClient } from '@/lib/firebase/queries/clients'
 import { subscribeToProjects } from '@/lib/firebase/queries/projects'
 import { subscribeToFreelancers } from '@/lib/firebase/queries/freelancers'
@@ -13,6 +14,9 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EditClientModal } from '@/components/shared/EditClientModal'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
+import { computeEventProgression } from '@/lib/services/eventProgressionService'
+import { RecurringBadge, MultiDateBadge } from '@/components/shared/BookingTypeBadge'
 import { Client, Project, Freelancer } from '@/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -96,6 +100,8 @@ function getPaginationItems(current: number, total: number): (number | 'ellipsis
 export default function ClientsPage() {
   const router  = useRouter()
   const appUser = useAuthStore(s => s.appUser)
+  const testDatasetMode = useUIStore(s => s.testDatasetMode)
+  const testModeCutoff = useUIStore(s => s.testModeCutoff)
 
   const [clients,      setClients]      = useState<Client[]>([])
   const [projects,     setProjects]     = useState<Project[]>([])
@@ -127,7 +133,7 @@ export default function ClientsPage() {
       unsubFl()
       unsubSt()
     }
-  }, [])
+  }, [testDatasetMode, testModeCutoff])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -137,7 +143,7 @@ export default function ClientsPage() {
       data => { setClients(data); setLoading(false); setPage(1) }
     )
     return unsub
-  }, [filterType, filterPmt])
+  }, [filterType, filterPmt, testDatasetMode, testModeCutoff])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -180,8 +186,12 @@ export default function ClientsPage() {
       const emailMatch     = (c.email || '').toLowerCase().includes(q)
       const idMatch        = (c.clientId || '').toLowerCase().includes(q)
       const locMatch       = (c.location || '').toLowerCase().includes(q)
+      const isRec          = c.bookingType === 'recurring' || Boolean(c.recurringSchedule) || Boolean(c.bookingGroupId)
+      const recurringMatch = isRec && 'recurring'.includes(q)
+      const isMulti        = c.bookingType === 'multiDate' || (Array.isArray(c.eventDates) && c.eventDates.length > 1 && c.bookingType !== 'recurring')
+      const multiMatch     = isMulti && (q.includes('multi') || 'multi-date'.includes(q) || 'multidate'.includes(q.replace(/[-\s]/g, '')))
 
-      if (!nameMatch && !eventNameMatch && !eventTypeRaw.includes(q) && !eventTypeLabel.includes(q) && !customTypeMatch && !contactMatch && !emailMatch && !idMatch && !locMatch) {
+      if (!nameMatch && !eventNameMatch && !eventTypeRaw.includes(q) && !eventTypeLabel.includes(q) && !customTypeMatch && !contactMatch && !emailMatch && !idMatch && !locMatch && !recurringMatch && !multiMatch) {
         return false
       }
     }
@@ -189,7 +199,15 @@ export default function ClientsPage() {
     // 2. Stage Filter
     if (filterStage) {
       const stageVal = (c.stage || c.status || '').toLowerCase()
-      if (stageVal !== filterStage.toLowerCase()) return false
+      if (filterStage.toLowerCase() === 'delivered') {
+        const hasDeliveredSession = (projects || []).some(p =>
+          (p.clientId === c.clientId || (c.projectIds && c.projectIds.includes(p.projectId))) &&
+          (p.stage === 'delivered' || p.status === 'completed' || Boolean(p.stageCompletedAt?.delivered))
+        )
+        if (stageVal !== 'delivered' && !hasDeliveredSession) return false
+      } else if (stageVal !== filterStage.toLowerCase()) {
+        return false
+      }
     }
 
     // 3. Date Range Filter (From Date -> To Date)
@@ -253,6 +271,41 @@ export default function ClientsPage() {
 
   const totalPages = Math.ceil(sorted.length / pageSize) || 1
   const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize)
+
+  // ── Pre-indexed Hash Maps (DSA Optimization O(P + S + F)) ─────────────────
+  const projectsByClientId = useMemo(() => {
+    const map = new Map<string, Project[]>()
+    for (const p of projects) {
+      if (!p) continue
+      if (p.clientId) {
+        const arr = map.get(p.clientId) || []
+        arr.push(p)
+        map.set(p.clientId, arr)
+      }
+      if (p.bookingGroupId) {
+        const bgArr = map.get(p.bookingGroupId) || []
+        bgArr.push(p)
+        map.set(p.bookingGroupId, bgArr)
+      }
+    }
+    return map
+  }, [projects])
+
+  const staffMap = useMemo(() => {
+    const map = new Map<string, StaffMember>()
+    for (const s of staffMembers) {
+      if (s?.uid) map.set(s.uid, s)
+    }
+    return map
+  }, [staffMembers])
+
+  const freelancerMap = useMemo(() => {
+    const map = new Map<string, Freelancer>()
+    for (const f of freelancers) {
+      if (f?.freelancerId) map.set(f.freelancerId, f)
+    }
+    return map
+  }, [freelancers])
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget || !appUser) return
@@ -410,7 +463,7 @@ export default function ClientsPage() {
       {/* ── Table container (exact from design) ── */}
       <div style={{
         background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
-        borderRadius: '12px', overflow: 'hidden',
+        borderRadius: '12px',
       }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
@@ -483,20 +536,26 @@ export default function ClientsPage() {
                 </td>
               </tr>
             ) : (
-              paginated.map((client, idx) => (
-                <ClientRow
-                  key={client.clientId}
-                  client={client}
-                  rowNo={(page - 1) * pageSize + idx + 1}
-                  isNearBottom={idx >= Math.max(0, paginated.length - 2)}
-                  projects={projects}
-                  freelancers={freelancers}
-                  staffMembers={staffMembers}
-                  onView={() => router.push(`/clients/${client.clientId}`)}
-                  onEdit={() => setEditTarget(client)}
-                  onDelete={() => setDeleteTarget(client)}
-                />
-              ))
+              paginated.map((client, idx) => {
+                const clientLinkedProjects =
+                  projectsByClientId.get(client.clientId) ||
+                  (client.bookingGroupId ? projectsByClientId.get(client.bookingGroupId) : undefined) ||
+                  []
+                return (
+                  <ClientRow
+                    key={client.clientId}
+                    client={client}
+                    rowNo={(page - 1) * pageSize + idx + 1}
+                    isNearBottom={paginated.length >= 4 && idx >= paginated.length - 2}
+                    linkedProjects={clientLinkedProjects}
+                    freelancerMap={freelancerMap}
+                    staffMap={staffMap}
+                    onView={() => router.push(`/clients/${client.clientId}`)}
+                    onEdit={() => setEditTarget(client)}
+                    onDelete={() => setDeleteTarget(client)}
+                  />
+                )
+              })
             )}
           </tbody>
         </table>
@@ -754,28 +813,30 @@ function CrewAvatarItem({
   )
 }
 
-// ── Client row (exact structure from design file) ─────────────────────────
-function ClientRow({
+// ── Client row (exact structure from design file, optimized with React.memo and computeEventProgression) ──
+interface ClientRowProps {
+  client:         Client
+  rowNo:          number
+  isNearBottom:   boolean
+  linkedProjects: Project[]
+  freelancerMap:  Map<string, Freelancer>
+  staffMap:       Map<string, StaffMember>
+  onView:         () => void
+  onEdit:         () => void
+  onDelete:       () => void
+}
+
+const ClientRow = memo(function ClientRow({
   client,
   rowNo,
   isNearBottom,
-  projects,
-  freelancers,
-  staffMembers,
+  linkedProjects,
+  freelancerMap,
+  staffMap,
   onView,
   onEdit,
   onDelete,
-}: {
-  client:       Client
-  rowNo:        number
-  isNearBottom: boolean
-  projects?:    Project[]
-  freelancers?: Freelancer[]
-  staffMembers?: StaffMember[]
-  onView:       () => void
-  onEdit:       () => void
-  onDelete:     () => void
-}) {
+}: ClientRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLTableCellElement>(null)
 
@@ -808,7 +869,12 @@ function ClientRow({
 
   const balLabel = isPaid ? '—' : `₹${client.balanceDue.toLocaleString('en-IN')}`
 
-  // Crew avatars: staff + assigned freelancers
+  // Pure domain progression computation (Single Responsibility Principle)
+  const progression = useMemo(() => {
+    return computeEventProgression(client, linkedProjects)
+  }, [client, linkedProjects])
+
+  // Crew avatars: staff + assigned freelancers using O(1) hash maps
   const assignedCrew = useMemo(() => {
     const list: Array<{
       id: string
@@ -819,15 +885,19 @@ function ClientRow({
     }> = []
     const seen = new Set<string>()
 
-    // Find linked project for this client if available
-    const proj = projects?.find(p => (p.clientId && p.clientId === client.clientId) || (client.projectId && p.projectId === client.projectId))
+    // 1. Staff members across client and linked projects
+    const staffIds: string[] = []
+    linkedProjects.forEach(p => {
+      if (Array.isArray(p.staffUids)) staffIds.push(...p.staffUids)
+    })
+    if (Array.isArray(client.staffUids)) staffIds.push(...client.staffUids)
+    if (Array.isArray(client.assignedStaff)) staffIds.push(...client.assignedStaff)
+    if (Array.isArray(client.teamInitials)) staffIds.push(...client.teamInitials)
 
-    // 1. Staff members
-    const staffIds: string[] = proj?.staffUids || client.staffUids || client.assignedStaff || client.teamInitials || []
     staffIds.forEach(item => {
       if (!item || seen.has(item)) return
       seen.add(item)
-      const staffMember = staffMembers?.find(s => s.uid === item)
+      const staffMember = staffMap.get(item)
       const name = staffMember?.name || item
       const initials = item.length <= 2 ? item.toUpperCase() : getInitials(name)
       const role = staffMember?.role ? staffMember.role.charAt(0).toUpperCase() + staffMember.role.slice(1) : 'Staff'
@@ -840,15 +910,21 @@ function ClientRow({
       })
     })
 
-    // 2. Freelancers
-    const flIds: string[] = proj?.freelancerIds || client.freelancerIds || []
+    // 2. Freelancers across client and linked projects
+    const flIds: string[] = []
+    linkedProjects.forEach(p => {
+      if (Array.isArray(p.freelancerIds)) flIds.push(...p.freelancerIds)
+    })
+    if (Array.isArray(client.freelancerIds)) flIds.push(...client.freelancerIds)
+
     flIds.forEach(flId => {
       if (!flId || seen.has(flId)) return
       seen.add(flId)
-      const fl = freelancers?.find(f => f.freelancerId === flId)
+      const fl = freelancerMap.get(flId)
       const name = fl?.name || flId
       const initials = getInitials(name)
-      const role = proj?.freelancerAssignments?.[flId]?.role || fl?.skill || 'Freelancer'
+      const projWithFl = linkedProjects.find(p => p.freelancerAssignments?.[flId])
+      const role = projWithFl?.freelancerAssignments?.[flId]?.role || fl?.skill || 'Freelancer'
       list.push({
         id: `fl-${flId}`,
         name,
@@ -859,7 +935,7 @@ function ClientRow({
     })
 
     return list
-  }, [client, projects, staffMembers, freelancers])
+  }, [client, linkedProjects, staffMap, freelancerMap])
 
   // TD shared style
   const td: React.CSSProperties = {
@@ -878,10 +954,14 @@ function ClientRow({
         {String(rowNo).padStart(2, '0')}
       </td>
 
-      {/* Client column: primary eventName, secondary name */}
+      {/* Client column: primary eventName, secondary name + Recurring/Multi-Date badges */}
       <td style={{ ...td }}>
-        <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
-          {client.eventName || client.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+            {client.eventName || client.name}
+          </span>
+          {progression.isRecurring && <RecurringBadge />}
+          {progression.isMultiDate && <MultiDateBadge />}
         </div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
           {client.name}
@@ -890,17 +970,43 @@ function ClientRow({
 
       {/* Event type */}
       <td style={{ ...td, color: 'var(--color-foreground-muted)' }}>
-        {EVENT_TYPE_LABELS[client.eventType] ?? client.eventType}
+        <div>{EVENT_TYPE_LABELS[client.eventType] ?? client.eventType}</div>
+        {progression.isRecurring && (
+          <div style={{ fontSize: '10px', color: 'var(--color-purple)', fontWeight: 500, marginTop: '2px' }}>
+            Recurring ({progression.totalCount} sessions)
+          </div>
+        )}
+        {progression.isMultiDate && (
+          <div style={{ fontSize: '10px', color: 'var(--color-accent)', fontWeight: 500, marginTop: '2px' }}>
+            Multi-Date ({progression.totalCount} days)
+          </div>
+        )}
       </td>
 
-      {/* Event date */}
+      {/* Event date (updates to next upcoming session or day for recurring/multi-date events) */}
       <td style={{ ...td, color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap' }}>
-        {client.eventDate instanceof Date ? format(client.eventDate, 'd MMM yyyy') : '—'}
+        <div style={{ color: 'var(--color-foreground)', fontWeight: 500 }}>
+          {progression.displayDate && !isNaN(progression.displayDate.getTime())
+            ? format(progression.displayDate, 'd MMM yyyy')
+            : '—'}
+        </div>
+        {(progression.isRecurring || progression.isMultiDate) && progression.displayLabel && (
+          <div style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)', marginTop: '2px' }}>
+            {progression.displayLabel}
+          </div>
+        )}
       </td>
 
-      {/* Stage badge (exact from design) */}
+      {/* Stage badge (exact from design, with delivered n of n sessions for recurring) */}
       <td style={td}>
-        <Badge variant={client.stage || client.status || 'booked'} />
+        {progression.isRecurring && (client.stage === 'delivered' || progression.deliveredCount > 0) ? (
+          <Badge
+            variant="delivered"
+            label={`Delivered ${progression.deliveredCount} of ${progression.totalCount} sessions`}
+          />
+        ) : (
+          <Badge variant={client.stage || client.status || 'booked'} />
+        )}
       </td>
 
       {/* Balance due */}
@@ -930,9 +1036,8 @@ function ClientRow({
                   border: '2px solid var(--color-surface)',
                   color: 'var(--color-foreground-subtle)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '10px', fontWeight: 700,
-                  marginLeft: '-8px',
-                  flexShrink: 0,
+                  fontSize: '10px', fontWeight: 600,
+                  marginLeft: '-8px', flexShrink: 0,
                   cursor: 'default',
                 }}
               >
@@ -943,32 +1048,37 @@ function ClientRow({
         )}
       </td>
 
-      {/* Actions — ti-dots-vertical + dropdown */}
+      {/* Action menu */}
       <td
         ref={menuRef}
+        style={{ ...td, width: '48px', textAlign: 'right', position: 'relative' }}
         onClick={e => e.stopPropagation()}
-        style={{ ...td, textAlign: 'right', color: 'var(--color-foreground-subtle)', position: 'relative' }}
       >
         <button
-          onClick={() => setMenuOpen(o => !o)}
+          onClick={() => setMenuOpen(prev => !prev)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--color-foreground-subtle)', padding: '4px 8px', borderRadius: '6px',
+            color: 'var(--color-foreground-muted)', padding: '4px',
+            borderRadius: '4px', display: 'inline-flex', alignItems: 'center',
+            fontSize: '16px',
           }}
+          title="Actions"
         >
-          <i className="ti ti-dots-vertical" style={{ fontSize: '16px' }} />
+          <i className="ti ti-dots-vertical" />
         </button>
 
+        {/* Dropdown menu */}
         {menuOpen && (
           <div
             style={{
               position: 'absolute', right: '8px',
-              ...(isNearBottom ? { bottom: '38px' } : { top: '40px' }),
-              zIndex: 50,
+              ...(isNearBottom ? { bottom: '100%', marginBottom: '4px' } : { top: '100%', marginTop: '4px' }),
+              zIndex: 100,
               background: 'var(--color-surface-overlay)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '10px', overflow: 'hidden', minWidth: '140px',
               boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+              textAlign: 'left',
             }}
           >
             {[
@@ -1000,4 +1110,4 @@ function ClientRow({
       </td>
     </tr>
   )
-}
+})

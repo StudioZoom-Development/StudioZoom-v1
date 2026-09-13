@@ -4,6 +4,7 @@ import {
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
 
 export interface StaffMember {
   uid:         string
@@ -12,6 +13,7 @@ export interface StaffMember {
   contact?:    string
   jobTitle?:   string
   role:        'admin' | 'manager' | 'staff'
+  skills?:     string[]
   joinDate?:   Date
   exitDate?:   Date
   baseSalary?: number
@@ -39,7 +41,7 @@ export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () =
   )
   return onSnapshot(q, snap => {
     const list = snap.docs
-      .filter(d => !d.data().isDeleted)
+      .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
       .map(d => {
         const data = d.data()
         return {
@@ -53,6 +55,8 @@ export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () =
     // In-memory sort by name (alphabetical)
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)
+  }, err => {
+    console.warn('subscribeToStaff listener error:', err.message)
   })
 }
 
@@ -64,7 +68,7 @@ export function subscribeToStaffOnly(callback: (staff: StaffMember[]) => void): 
   )
   return onSnapshot(q, snap => {
     const list = snap.docs
-      .filter(d => !d.data().isDeleted)
+      .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
       .map(d => {
         const data = d.data()
         return {
@@ -77,6 +81,8 @@ export function subscribeToStaffOnly(callback: (staff: StaffMember[]) => void): 
       })
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)
+  }, err => {
+    console.warn('subscribeToStaffOnly listener error:', err.message)
   })
 }
 
