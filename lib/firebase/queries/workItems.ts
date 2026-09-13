@@ -45,7 +45,6 @@ export function subscribeToWorkItems(
         const timeB = b.createdAt instanceof Date && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0
         return timeB - timeA
       })
-    cleanupDuplicateWorkItems(list).catch(() => {})
     callback(list)
   }, err => {
     console.error('subscribeToWorkItems error:', err)
@@ -124,13 +123,15 @@ export async function updateWorkItemStatus(
     done:       100,
   }
   const isSynthetic = workItemId.startsWith('assign-') || workItemId.startsWith('proj-') || workItemId.startsWith('postprod-')
+  const alreadyHasStartDate = hasExistingStartDate || Boolean(fullItemFallback?.startDate)
+
   if (isSynthetic && fullItemFallback) {
     const fallbackItem: WorkItem = {
       ...fullItemFallback,
       status,
       progressPercent: progressMap[status],
     }
-    if (status === 'inProgress' && !hasExistingStartDate && !fallbackItem.startDate) {
+    if (status === 'inProgress' && !alreadyHasStartDate) {
       fallbackItem.startDate = new Date()
     }
     await saveWorkItemDetails(fallbackItem)
@@ -142,7 +143,7 @@ export async function updateWorkItemStatus(
     progressPercent: progressMap[status],
     updatedAt: serverTimestamp(),
   }
-  if (status === 'inProgress' && !hasExistingStartDate) {
+  if (status === 'inProgress' && !alreadyHasStartDate) {
     payload.startDate = serverTimestamp()
   }
 
@@ -165,8 +166,14 @@ export async function cleanupDuplicateWorkItems(items: WorkItem[]): Promise<void
       seen.set(key, item)
     } else {
       const prev = seen.get(key)!
-      const rank = (s: WorkItemStatus) => s === 'done' ? 4 : s === 'review' ? 3 : s === 'inProgress' ? 2 : 1
-      if (rank(item.status) > rank(prev.status)) {
+      const getTime = (w: WorkItem): number => {
+        const u = w.updatedAt instanceof Date && !isNaN(w.updatedAt.getTime()) ? w.updatedAt.getTime() : 0
+        const c = w.createdAt instanceof Date && !isNaN(w.createdAt.getTime()) ? w.createdAt.getTime() : 0
+        return Math.max(u, c)
+      }
+      const itemTime = getTime(item)
+      const prevTime = getTime(prev)
+      if (itemTime >= prevTime) {
         if (!prev.workItemId.startsWith('proj-') && !prev.workItemId.startsWith('assign-') && !prev.workItemId.startsWith('postprod-')) {
           duplicatesToDelete.push(prev.workItemId)
         }

@@ -53,9 +53,11 @@ function getInitials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function formatDate(d?: Date): string {
+function formatDate(d?: Date | string | null): string {
   if (!d) return '—'
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const dateObj = d instanceof Date ? d : new Date(d as string)
+  if (isNaN(dateObj.getTime())) return '—'
+  return dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 function isOverdue(item: WorkItem): boolean {
@@ -1950,9 +1952,6 @@ export default function WorkBoardPage() {
 
         if (newStatus !== item.status || newProgress !== item.progressPercent) {
           combined[i] = { ...item, status: newStatus, progressPercent: newProgress }
-          if (!item.workItemId.startsWith('postprod-') && !item.workItemId.startsWith('assign-') && !item.workItemId.startsWith('proj-')) {
-            updateWorkItemStatus(item.workItemId, newStatus).catch(() => {})
-          }
         }
       } else if (!item.postProdTrackKey && proj.stage === 'delivered' && item.status !== 'done') {
         combined[i] = { ...item, status: 'done', progressPercent: 100 }
@@ -2141,6 +2140,7 @@ export default function WorkBoardPage() {
             priority: 'medium',
             estimatedHours: 6,
             progressPercent: st.progressPercent,
+            startDate: pt.designing?.startDate,
             dueDate: pt.designing?.dueDate,
             postProdTrackKey: 'photoTrack',
             postProdStageKey: 'designing',
@@ -2178,6 +2178,7 @@ export default function WorkBoardPage() {
             priority: 'medium',
             estimatedHours: 6,
             progressPercent: st1.progressPercent,
+            startDate: at.albumDesigning?.startDate,
             dueDate: at.albumDesigning?.dueDate,
             postProdTrackKey: 'albumTrack',
             postProdStageKey: 'albumDesigning',
@@ -2207,6 +2208,7 @@ export default function WorkBoardPage() {
             priority: 'medium',
             estimatedHours: 6,
             progressPercent: st2.progressPercent,
+            startDate: at.creatingAlbum?.startDate,
             dueDate: at.creatingAlbum?.dueDate,
             postProdTrackKey: 'albumTrack',
             postProdStageKey: 'creatingAlbum',
@@ -2243,6 +2245,7 @@ export default function WorkBoardPage() {
             priority: 'medium',
             estimatedHours: 6,
             progressPercent: st.progressPercent,
+            startDate: vt.highlights?.startDate,
             dueDate: vt.highlights?.dueDate,
             postProdTrackKey: 'videoTrack',
             postProdStageKey: 'highlights',
@@ -2279,6 +2282,7 @@ export default function WorkBoardPage() {
             priority: 'medium',
             estimatedHours: 6,
             progressPercent: st.progressPercent,
+            startDate: fvt.fullVideoEditing?.startDate,
             dueDate: fvt.fullVideoEditing?.dueDate,
             postProdTrackKey: 'fullVideoTrack',
             postProdStageKey: 'fullVideoEditing',
@@ -2307,16 +2311,34 @@ export default function WorkBoardPage() {
       if (!existing) {
         seenWork.set(workKey, item)
       } else {
-        const statusRank = (s: WorkItemStatus) => s === 'done' ? 4 : s === 'review' ? 3 : s === 'inProgress' ? 2 : 1
-        const itemRank = statusRank(item.status)
-        const existingRank = statusRank(existing.status)
-        if (itemRank > existingRank) {
-          seenWork.set(workKey, item)
-        } else if (itemRank === existingRank) {
-          if (existing.workItemId.startsWith('proj-') && !item.workItemId.startsWith('proj-')) {
-            seenWork.set(workKey, item)
-          }
+        const resolvedStartDate = existing.startDate || item.startDate
+        const resolvedDueDate = existing.dueDate || item.dueDate
+        const isItemLocal = localItems.some(l => l.workItemId === item.workItemId)
+        const isExistingLocal = localItems.some(l => l.workItemId === existing.workItemId)
+        const isItemSynthetic = item.workItemId.startsWith('proj-') || item.workItemId.startsWith('assign-') || item.workItemId.startsWith('postprod-')
+        const isExistingSynthetic = existing.workItemId.startsWith('proj-') || existing.workItemId.startsWith('assign-') || existing.workItemId.startsWith('postprod-')
+
+        const getItemTime = (w: WorkItem): number => {
+          const u = w.updatedAt instanceof Date && !isNaN(w.updatedAt.getTime()) ? w.updatedAt.getTime() : 0
+          const c = w.createdAt instanceof Date && !isNaN(w.createdAt.getTime()) ? w.createdAt.getTime() : 0
+          return Math.max(u, c)
         }
+
+        let itemWins = false
+        if (isItemLocal && !isExistingLocal) {
+          itemWins = true
+        } else if (isExistingLocal && !isItemLocal) {
+          itemWins = false
+        } else if (!isItemSynthetic && isExistingSynthetic) {
+          itemWins = true
+        } else if (isItemSynthetic && !isExistingSynthetic) {
+          itemWins = false
+        } else {
+          itemWins = getItemTime(item) >= getItemTime(existing)
+        }
+
+        const chosen = itemWins ? item : existing
+        seenWork.set(workKey, { ...chosen, startDate: resolvedStartDate, dueDate: resolvedDueDate })
       }
     }
     const finalItems = Array.from(seenWork.values())
