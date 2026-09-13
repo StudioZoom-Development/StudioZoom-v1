@@ -1887,8 +1887,8 @@ export default function WorkBoardPage() {
 
         const getStageWorkStatus = (stageStatus?: PostProdStageStatus, clientReviewStatus?: string): { status: WorkItemStatus; progressPercent: number } => {
           if (stageStatus === 'completed' || stageStatus === 'approved') return { status: 'done', progressPercent: 100 }
-          if (stageStatus === 'waitingClient' || clientReviewStatus === 'waitingClient') return { status: 'review', progressPercent: 80 }
           if (stageStatus === 'inProgress') return { status: 'inProgress', progressPercent: 50 }
+          if (stageStatus === 'waitingClient' || clientReviewStatus === 'waitingClient') return { status: 'review', progressPercent: 80 }
           return { status: 'pending', progressPercent: 0 }
         }
 
@@ -1908,13 +1908,23 @@ export default function WorkBoardPage() {
             newStatus = 'done'
             newProgress = 100
           } else if (item.postProdStageKey === 'albumDesigning') {
-            const mapped = getStageWorkStatus(at.albumDesigning?.status, at.clientReview?.status)
-            newStatus = mapped.status
-            newProgress = mapped.progressPercent
+            if (at.albumDesigning?.status === 'completed' || at.albumDesigning?.status === 'approved') {
+              newStatus = 'done'
+              newProgress = 100
+            } else {
+              const mapped = getStageWorkStatus(at.albumDesigning?.status, at.clientReview?.status)
+              newStatus = mapped.status
+              newProgress = mapped.progressPercent
+            }
           } else if (item.postProdStageKey === 'creatingAlbum') {
-            const mapped = getStageWorkStatus(at.creatingAlbum?.status)
-            newStatus = mapped.status
-            newProgress = mapped.progressPercent
+            if (at.creatingAlbum?.status === 'completed' || at.creatingAlbum?.status === 'approved') {
+              newStatus = 'done'
+              newProgress = 100
+            } else {
+              const mapped = getStageWorkStatus(at.creatingAlbum?.status)
+              newStatus = mapped.status
+              newProgress = mapped.progressPercent
+            }
           }
         } else if (item.postProdTrackKey === 'videoTrack' && pp.videoTrack) {
           const vt = pp.videoTrack
@@ -2099,8 +2109,8 @@ export default function WorkBoardPage() {
 
       const getStageWorkStatus = (stageStatus?: PostProdStageStatus, clientReviewStatus?: string): { status: WorkItemStatus; progressPercent: number } => {
         if (stageStatus === 'completed' || stageStatus === 'approved') return { status: 'done', progressPercent: 100 }
-        if (clientReviewStatus === 'waitingClient' || stageStatus === 'waitingClient') return { status: 'review', progressPercent: 80 }
         if (stageStatus === 'inProgress') return { status: 'inProgress', progressPercent: 50 }
+        if (stageStatus === 'waitingClient' || clientReviewStatus === 'waitingClient') return { status: 'review', progressPercent: 80 }
         return { status: 'pending', progressPercent: 0 }
       }
 
@@ -2112,7 +2122,7 @@ export default function WorkBoardPage() {
           const isFree = Boolean(pt.assignment.freelancerId)
           const assigneeUid = isFree ? (pt.assignment.freelancerId || '') : pt.assignment.staffUid
           const assigneeName = isFree ? (pt.assignment.freelancerName || '') : pt.assignment.staffName
-          const st = pt.status === 'completed'
+          const st = pt.status === 'completed' || pt.designing?.status === 'completed' || pt.designing?.status === 'approved'
             ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
             : getStageWorkStatus(pt.designing?.status, pt.clientReview?.status)
           combined.push({
@@ -2149,7 +2159,7 @@ export default function WorkBoardPage() {
 
         const exists1 = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'albumTrack' && w.postProdStageKey === 'albumDesigning')
         if (!exists1) {
-          const st1 = at.status === 'completed'
+          const st1 = at.status === 'completed' || at.albumDesigning?.status === 'completed' || at.albumDesigning?.status === 'approved'
             ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
             : getStageWorkStatus(at.albumDesigning?.status, at.clientReview?.status)
           combined.push({
@@ -2178,7 +2188,7 @@ export default function WorkBoardPage() {
 
         const exists2 = combined.some(w => w.projectId === p.projectId && w.postProdTrackKey === 'albumTrack' && w.postProdStageKey === 'creatingAlbum')
         if (!exists2) {
-          const st2 = at.status === 'completed'
+          const st2 = at.status === 'completed' || at.creatingAlbum?.status === 'completed' || at.creatingAlbum?.status === 'approved'
             ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
             : getStageWorkStatus(at.creatingAlbum?.status)
           combined.push({
@@ -2214,7 +2224,7 @@ export default function WorkBoardPage() {
           const isFree = Boolean(vt.assignment.freelancerId)
           const assigneeUid = isFree ? (vt.assignment.freelancerId || '') : vt.assignment.staffUid
           const assigneeName = isFree ? (vt.assignment.freelancerName || '') : vt.assignment.staffName
-          const st = vt.status === 'completed'
+          const st = vt.status === 'completed' || vt.highlights?.status === 'completed' || vt.highlights?.status === 'approved'
             ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
             : getStageWorkStatus(vt.highlights?.status, vt.clientReview?.status)
           combined.push({
@@ -2250,7 +2260,7 @@ export default function WorkBoardPage() {
           const isFree = Boolean(fvt.assignment.freelancerId)
           const assigneeUid = isFree ? (fvt.assignment.freelancerId || '') : fvt.assignment.staffUid
           const assigneeName = isFree ? (fvt.assignment.freelancerName || '') : fvt.assignment.staffName
-          const st = fvt.status === 'completed'
+          const st = fvt.status === 'completed' || fvt.fullVideoEditing?.status === 'completed' || fvt.fullVideoEditing?.status === 'approved'
             ? { status: 'done' as WorkItemStatus, progressPercent: 100 }
             : getStageWorkStatus(fvt.fullVideoEditing?.status, fvt.clientReview?.status)
           combined.push({

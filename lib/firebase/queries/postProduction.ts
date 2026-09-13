@@ -172,6 +172,8 @@ export async function updateTrackStageStatus(
   // If stage transitions to waitingClient, sync the track clientReview status
   if (status === 'waitingClient') {
     updates[`postProduction.${trackKey}.clientReview.status`] = 'waitingClient'
+  } else if (status === 'inProgress' || status === 'pending') {
+    updates[`postProduction.${trackKey}.clientReview.status`] = 'pending'
   }
 
   // Update track status to inProgress if not already
