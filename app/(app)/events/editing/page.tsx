@@ -1,1 +1,5 @@
-export default function Page() { return <div style={{color:'var(--color-foreground-muted)',padding:'40px',textAlign:'center',fontFamily:'var(--font-inter)'}}><i className="ti ti-tools" style={{fontSize:'32px',display:'block',marginBottom:'12px'}}/>Editing Queue — coming in next build</div> }
+import { redirect } from 'next/navigation'
+
+export default function EditingQueuePage() {
+  redirect('/events/work-board')
+}

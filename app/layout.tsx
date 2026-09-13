@@ -1,11 +1,18 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
   title:       'Studio Zoom',
   description: 'Photography & Video Studio Management — CRM, HRMS, ERP',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.png',
+    apple: '/icon.png',
+  },
 }
 
 export default function RootLayout({
@@ -16,6 +23,8 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+        <link rel="icon" type="image/png" href="/icon.png" />
+        <link rel="shortcut icon" href="/favicon.png" />
         {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link rel="stylesheet" href="/_ds_bundle.css" />
         <script dangerouslySetInnerHTML={{ __html: 'window.module = { exports: {} };' }} />
@@ -24,6 +33,8 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
+        <Analytics />
+        <SpeedInsights />
         {/* Load the Design System bundle using Next.js Script */}
         <Script
           src="/_ds/nova-design-system-8ef438d5-a323-412b-8d58-405071468e1d/_ds_bundle.js"

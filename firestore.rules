@@ -31,6 +31,11 @@ service cloud.firestore {
       }
     }
 
+    match /bookingDrafts/{draftId} {
+      // Allow signed-in staff/managers/admins to save and resume booking drafts
+      allow read, write: if isSignedIn();
+    }
+
     match /leads/{leadId} {
       allow read, write: if isAdminOrManager();
       allow delete:      if isAdmin();
@@ -49,11 +54,11 @@ service cloud.firestore {
     match /workItems/{workItemId} {
       allow read:           if isSignedIn();
       allow create, delete: if isAdminOrManager();
-      // Staff can only update the status field of their own work items
+      // Staff can only update status/progress fields of their own work items
       allow update: if isAdminOrManager() || (
         isStaff() &&
         resource.data.assignedToUid == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'progressPercent', 'updatedAt', 'startDate'])
       );
     }
 
@@ -73,17 +78,29 @@ service cloud.firestore {
     }
 
     match /timeLogs/{logId} {
-      allow read: if isAdminOrManager() ||
-        (isStaff() && resource.data.staffUid == request.auth.uid);
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.staffUid || isAdminOrManager()
+      );
       // Staff can create their own check-in record
       allow create: if isSignedIn() &&
         request.resource.data.staffUid == request.auth.uid;
       // Staff can update only their own open sessions (check-out)
       allow update: if isAdminOrManager() || (
-        isStaff() &&
+        isSignedIn() &&
         resource.data.staffUid == request.auth.uid &&
         resource.data.status == 'open'
       );
+    }
+
+    match /leaveRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.staffUid || isAdminOrManager()
+      );
+      // Staff can submit their own leave/permission requests
+      allow create: if isSignedIn() &&
+        request.resource.data.staffUid == request.auth.uid;
+      // Admins/managers can review/approve/reject requests
+      allow update, delete: if isAdminOrManager();
     }
 
     match /salaries/{salaryId}    { allow read, write: if isAdmin(); }
@@ -98,11 +115,12 @@ service cloud.firestore {
     match /expenses/{expenseId}         { allow read, write: if isAdmin(); }
     match /budgets/{budgetId}           { allow read, write: if isAdmin(); }
     match /quotations/{quotationId}     { allow read, write: if isAdminOrManager(); }
-    match /invoices/{invoiceId}         { allow read, write: if isAdmin(); }
+    match /invoices/{invoiceId}         { allow read, write: if isAdminOrManager(); }
 
     match /studioSettings/{doc} {
       allow read:  if isSignedIn();
-      allow write: if isAdmin();
+      // Allow managers and admins to update numbering counters and runtime config
+      allow write: if isAdminOrManager();
     }
   }
 }

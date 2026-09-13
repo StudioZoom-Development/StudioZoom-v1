@@ -1,6 +1,6 @@
 'use client'
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -11,6 +11,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { appUser, loading } = useAuthStore()
   const { theme }            = useUIStore()
   const router               = useRouter()
+  const pathname             = usePathname()
+
+  const isFullBleed = pathname === '/events'
 
   // Sync theme attribute to document element and body for global CSS variables
   useEffect(() => {
@@ -65,16 +68,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Main content area */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <TopBar />
-        <main style={{
-          flex: 1, overflowY: 'auto', overflowX: 'hidden',
-          background: 'var(--color-background)',
-          // Extra bottom padding on mobile for the bottom nav bar
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}>
-          <div className="md:pb-0 pb-20" style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
+        {isFullBleed ? (
+          <main style={{
+            flex: 1,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            background: 'var(--color-background)',
+          }}>
             {children}
-          </div>
-        </main>
+          </main>
+        ) : (
+          <main style={{
+            flex: 1, overflowY: 'auto', overflowX: 'hidden',
+            background: 'var(--color-background)',
+            // Extra bottom padding on mobile for the bottom nav bar
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}>
+            <div className="md:pb-0 pb-20" style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
+              {children}
+            </div>
+          </main>
+        )}
       </div>
 
       {/* Mobile bottom nav */}

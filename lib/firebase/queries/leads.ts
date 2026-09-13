@@ -5,6 +5,8 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { Lead } from '@/types'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
+import { useUIStore } from '@/store/uiStore'
 
 export interface LeadFilters {
   source?: string
@@ -24,71 +26,10 @@ export const PACKAGE_OPTIONS: PackageOption[] = [
   { id: 'other', name: 'Other', defaultPrice: 0 },
 ]
 
-export const MOCK_LEADS: Lead[] = [
-  {
-    leadId:            'lead-1',
-    name:              'Janani & Hari',
-    contact:           '+91 98844 32109',
-    eventType:         'Wedding',
-    tentativeDate:     '2026-11-20',
-    interestedPackage: 'Gold · ₹2,80,000',
-    source:            'Referral — Aishwarya & Naveen',
-    status:            'inquiry',
-    notes:             'Wedding at Kanchipuram, Nov 20–21. Wants candid + traditional mix.',
-    createdAt:         new Date('2026-07-19'),
-  },
-  {
-    leadId:            'lead-2',
-    name:              'Suresh Kumar',
-    contact:           '+91 97100 54321',
-    eventType:         'Corporate',
-    tentativeDate:     '2026-09-15',
-    interestedPackage: 'Silver · ₹1,60,000',
-    source:            'Online',
-    status:            'inquiry',
-    notes:             'Annual corporate gala dinner photography.',
-    createdAt:         new Date('2026-07-20'),
-  },
-  {
-    leadId:            'lead-3',
-    name:              'Pavithra & Dinesh',
-    contact:           '+91 94440 12345',
-    eventType:         'Engagement',
-    tentativeDate:     '2026-08-30',
-    interestedPackage: 'Gold · ₹2,80,000',
-    source:            'Walk-in',
-    status:            'inquiry',
-    notes:             'Half day event shoot with 2 photographers.',
-    createdAt:         new Date('2026-07-21'),
-  },
-  {
-    leadId:            'lead-4',
-    name:              'Revathi Studio Shoot',
-    contact:           '+91 98400 98765',
-    eventType:         'Portrait',
-    tentativeDate:     '2026-08-10',
-    interestedPackage: 'Silver · ₹1,60,000',
-    source:            'Online',
-    status:            'inquiry',
-    notes:             'Personal branding session in studio.',
-    createdAt:         new Date('2026-07-22'),
-  },
-  {
-    leadId:            'lead-5',
-    name:              'Manoj & Keerthana',
-    contact:           '+91 99620 45678',
-    eventType:         'Pre-Wedding',
-    tentativeDate:     '2026-10-05',
-    interestedPackage: 'Platinum · ₹4,50,000',
-    source:            'Referral — Vignesh',
-    status:            'inquiry',
-    notes:             'Outdoor pre-wedding shoot at Mahabalipuram.',
-    createdAt:         new Date('2026-07-23'),
-  },
-]
+export const MOCK_LEADS: Lead[] = []
 
-// In-memory store initialized with MOCK_LEADS to ensure instant persistence
-let MEMORY_LEADS: Lead[] = [...MOCK_LEADS]
+// In-memory store for newly created leads offline/instant fallback
+let MEMORY_LEADS: Lead[] = []
 
 /** Real-time subscription — returns unsubscribe function */
 export function subscribeToLeads(
@@ -122,11 +63,14 @@ export function subscribeToLeads(
     }
 
     // Merge Firestore docs with MEMORY_LEADS (Firestore docs take precedence for matching IDs)
+    const isTestMode = typeof window !== 'undefined' && useUIStore.getState().testDatasetMode
     const map = new Map<string, Lead>()
-    MEMORY_LEADS.forEach(l => { if (!l.isDeleted) map.set(l.leadId, l) })
+    if (!isTestMode) {
+      MEMORY_LEADS.forEach(l => { if (!l.isDeleted) map.set(l.leadId, l) })
+    }
     firestoreLeads.forEach(l => { if (!l.isDeleted) map.set(l.leadId, l) })
 
-    let combinedLeads = Array.from(map.values())
+    let combinedLeads = Array.from(map.values()).filter(l => isAllowedByTestMode(l.createdAt))
 
     // Sort by createdAt desc
     combinedLeads.sort((a, b) => {

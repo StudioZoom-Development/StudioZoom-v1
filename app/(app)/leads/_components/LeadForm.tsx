@@ -401,37 +401,6 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
             >
               {saving ? 'Saving...' : 'Save'}
             </Button>
-
-            {/* Static hover state button */}
-            <span
-              onClick={() => console.log('Convert to booking triggered from LeadForm')}
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: '#ffffff',
-                cursor: 'pointer',
-                padding: '0 16px',
-                height: '36px',
-                borderRadius: '8px',
-                background: 'var(--color-primary)',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                userSelect: 'none',
-                transition: 'none',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'var(--color-primary)'
-                e.currentTarget.style.color = '#ffffff'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'var(--color-primary)'
-                e.currentTarget.style.color = '#ffffff'
-              }}
-            >
-              Convert to booking →
-            </span>
           </div>
         </div>
       </form>

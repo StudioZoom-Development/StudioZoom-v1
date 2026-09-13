@@ -1,0 +1,762 @@
+'use client'
+
+import { useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
+import { TimeField } from '@/components/shared/TimeField'
+import { EventType } from '@/types'
+import { BookingWizardState, BookingAction } from '../bookingReducer'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
+
+const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
+  { value: 'wedding',     label: 'Wedding' },
+  { value: 'reception',   label: 'Reception' },
+  { value: 'preWedding',  label: 'Pre-Wedding' },
+  { value: 'engagement',  label: 'Engagement' },
+  { value: 'birthday',    label: 'Birthday' },
+  { value: 'babyShower',  label: 'Baby Shower' },
+  { value: 'puberty',     label: 'Puberty' },
+  { value: 'corporate',   label: 'Corporate' },
+  { value: 'schoolEvent', label: 'School Event' },
+  { value: 'portrait',    label: 'Portrait' },
+  { value: 'studio',      label: 'Studio' },
+  { value: 'other',       label: 'Other' },
+]
+
+const SELECT_STYLE: React.CSSProperties = {
+  fontFamily: 'var(--font-inter)',
+  height: '36px',
+  width: '100%',
+  background: 'var(--color-surface-raised)',
+  border: '0.5px solid var(--color-border)',
+  borderRadius: '8px',
+  padding: '0 10px',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--color-foreground)',
+  outline: 'none',
+  cursor: 'pointer',
+}
+
+interface StepEventDetailsProps {
+  state:    BookingWizardState
+  dispatch: React.Dispatch<BookingAction>
+}
+
+export default function StepEventDetails({ state, dispatch }: StepEventDetailsProps): React.JSX.Element {
+  const isMultiDate = state.bookingType === 'multiDate'
+  const isRecurring = state.bookingType === 'recurring'
+
+  // Computed recurring session dates
+  const recurringSessions = useMemo(() => {
+    if (!isRecurring) return []
+    return computeRecurringSessionDates(
+      state.frequency || 'weekly',
+      state.startDate || new Date(),
+      state.totalSessions || 1,
+      state.sessionStartTime || '09:00',
+      state.sessionEndTime || '18:00'
+    )
+  }, [isRecurring, state.frequency, state.startDate, state.totalSessions, state.sessionStartTime, state.sessionEndTime])
+
+  const handleFrequencyChange = (newFreq: 'weekly' | 'biweekly' | 'monthly') => {
+    dispatch({ type: 'SET_FIELD', field: 'frequency', value: newFreq })
+    const updated = computeRecurringSessionDates(
+      newFreq,
+      state.startDate || new Date(),
+      state.totalSessions || 1,
+      state.sessionStartTime,
+      state.sessionEndTime
+    )
+    if (updated.length > 0) {
+      dispatch({ type: 'SET_FIELD', field: 'endDate', value: updated[updated.length - 1].dateStr })
+    }
+  }
+
+  const handleStartDateChange = (newStart: string) => {
+    dispatch({ type: 'SET_FIELD', field: 'startDate', value: newStart })
+    const updated = computeRecurringSessionDates(
+      state.frequency,
+      newStart,
+      state.totalSessions || 1,
+      state.sessionStartTime,
+      state.sessionEndTime
+    )
+    if (updated.length > 0) {
+      dispatch({ type: 'SET_FIELD', field: 'endDate', value: updated[updated.length - 1].dateStr })
+    }
+  }
+
+  const handleTotalSessionsChange = (newCount: number) => {
+    dispatch({ type: 'SET_FIELD', field: 'totalSessions', value: newCount })
+    const updated = computeRecurringSessionDates(
+      state.frequency,
+      state.startDate || new Date(),
+      newCount || 1,
+      state.sessionStartTime,
+      state.sessionEndTime
+    )
+    if (updated.length > 0) {
+      dispatch({ type: 'SET_FIELD', field: 'endDate', value: updated[updated.length - 1].dateStr })
+    }
+  }
+
+  const handleEndDateChange = (newEnd: string) => {
+    dispatch({ type: 'SET_FIELD', field: 'endDate', value: newEnd })
+    if (state.startDate && newEnd) {
+      const s = new Date(state.startDate)
+      const e = new Date(newEnd)
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e >= s) {
+        let count = 1
+        if (state.frequency === 'weekly') {
+          count = Math.max(1, Math.floor((e.getTime() - s.getTime()) / (7 * 24 * 3600 * 1000)) + 1)
+        } else if (state.frequency === 'biweekly') {
+          count = Math.max(1, Math.floor((e.getTime() - s.getTime()) / (14 * 24 * 3600 * 1000)) + 1)
+        } else if (state.frequency === 'monthly') {
+          count = Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1)
+        }
+        dispatch({ type: 'SET_FIELD', field: 'totalSessions', value: count })
+      }
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Header */}
+      <div>
+        <h2 style={{
+          fontSize: 'var(--text-xl)',
+          fontWeight: 600,
+          color: 'var(--color-foreground)',
+          fontFamily: 'var(--font-inter)',
+          margin: 0,
+        }}>
+          Event details
+        </h2>
+        <p style={{
+          fontSize: 'var(--text-sm)',
+          color: 'var(--color-foreground-muted)',
+          fontFamily: 'var(--font-inter)',
+          marginTop: '6px',
+        }}>
+          {isMultiDate
+            ? 'Add all dates for this multi-date booking.'
+            : isRecurring
+              ? 'Set the recurring schedule for this contract.'
+              : 'Describe the event being booked.'}
+        </p>
+      </div>
+
+      {/* Event Name */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <label style={{
+          fontSize: 'var(--text-sm)',
+          fontWeight: 500,
+          fontFamily: 'var(--font-inter)',
+          color: 'var(--color-foreground)',
+        }}>
+          Event name <span style={{ color: 'var(--color-danger)' }}>*</span>
+        </label>
+        <Input
+          placeholder="e.g. Karthik weds Priya"
+          value={state.eventName}
+          onChange={e => dispatch({ type: 'SET_FIELD', field: 'eventName', value: e.target.value })}
+          className="h-9"
+        />
+      </div>
+
+      {/* Event Type + Location (always shown) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            fontFamily: 'var(--font-inter)',
+            color: 'var(--color-foreground)',
+          }}>
+            Event type <span style={{ color: 'var(--color-danger)' }}>*</span>
+          </label>
+          <select
+            style={SELECT_STYLE}
+            value={state.eventType}
+            onChange={e => dispatch({ type: 'SET_EVENT_TYPE', payload: e.target.value as EventType })}
+          >
+            {EVENT_TYPES.map(et => (
+              <option key={et.value} value={et.value}>{et.label}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            fontFamily: 'var(--font-inter)',
+            color: 'var(--color-foreground)',
+          }}>
+            Location
+          </label>
+          <Input
+            placeholder="Venue, city"
+            value={state.location}
+            onChange={e => dispatch({ type: 'SET_FIELD', field: 'location', value: e.target.value })}
+            className="h-9"
+          />
+        </div>
+      </div>
+
+      {/* Custom Event Type Input (when 'other' is selected) */}
+      {state.eventType === 'other' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            fontFamily: 'var(--font-inter)',
+            color: 'var(--color-foreground)',
+          }}>
+            Specify other event type <span style={{ color: 'var(--color-danger)' }}>*</span>
+          </label>
+          <Input
+            placeholder="e.g. Housewarming, Naming ceremony, Fashion shoot…"
+            value={state.customEventType}
+            onChange={e => dispatch({ type: 'SET_FIELD', field: 'customEventType', value: e.target.value })}
+            className="h-9"
+          />
+        </div>
+      )}
+
+      {/* ──── ONE-TIME: Single date & timings ──── */}
+      {!isMultiDate && !isRecurring && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 500,
+              fontFamily: 'var(--font-inter)',
+              color: 'var(--color-foreground)',
+            }}>
+              Event date <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
+            <DateField
+              value={state.eventDate}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'eventDate', value: val })}
+              className="h-9"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 500,
+              fontFamily: 'var(--font-inter)',
+              color: 'var(--color-foreground)',
+            }}>
+              Start time
+            </label>
+            <TimeField
+              value={state.startTime}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'startTime', value: val })}
+              className="h-9"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 500,
+              fontFamily: 'var(--font-inter)',
+              color: 'var(--color-foreground)',
+            }}>
+              End time
+            </label>
+            <TimeField
+              value={state.endTime}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'endTime', value: val })}
+              className="h-9"
+              align="right"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ──── MULTI-DATE: Date list builder ──── */}
+      {isMultiDate && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            color: 'var(--color-foreground-subtle)',
+            fontFamily: 'var(--font-inter)',
+          }}>
+            Event dates &amp; schedule
+          </div>
+
+          <AnimatePresence initial={false}>
+            {state.eventDates.map((ed, idx) => (
+              <motion.div
+                key={ed.id}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  position: 'relative',
+                  zIndex: state.eventDates.length - idx + 10,
+                }}
+              >
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 150px 125px 125px 1fr 36px',
+                  gap: '8px',
+                  alignItems: 'end',
+                  paddingBottom: '8px',
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {idx === 0 && (
+                      <label style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        fontFamily: 'var(--font-inter)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Label
+                      </label>
+                    )}
+                    <Input
+                      placeholder="e.g. Engagement"
+                      value={ed.label}
+                      onChange={e => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'label',
+                        value: e.target.value,
+                      })}
+                      className="h-9"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {idx === 0 && (
+                      <label style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        fontFamily: 'var(--font-inter)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Date
+                      </label>
+                    )}
+                    <DateField
+                      value={ed.date}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'date',
+                        value: val,
+                      })}
+                      className="h-9"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {idx === 0 && (
+                      <label style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        fontFamily: 'var(--font-inter)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Start
+                      </label>
+                    )}
+                    <TimeField
+                      value={ed.startTime || '09:00'}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'startTime',
+                        value: val,
+                      })}
+                      className="h-9"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {idx === 0 && (
+                      <label style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        fontFamily: 'var(--font-inter)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        End
+                      </label>
+                    )}
+                    <TimeField
+                      value={ed.endTime || '18:00'}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'endTime',
+                        value: val,
+                      })}
+                      className="h-9"
+                      align="right"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {idx === 0 && (
+                      <label style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        fontFamily: 'var(--font-inter)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Location
+                      </label>
+                    )}
+                    <Input
+                      placeholder="Venue (optional)"
+                      value={ed.location}
+                      onChange={e => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'location',
+                        value: e.target.value,
+                      })}
+                      className="h-9"
+                    />
+                  </div>
+
+                  {/* Remove button (hidden for first row if only one) */}
+                  <motion.button
+                    onClick={() => dispatch({ type: 'REMOVE_EVENT_DATE', id: ed.id })}
+                    disabled={state.eventDates.length <= 1}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '8px',
+                      border: '0.5px solid var(--color-border)',
+                      background: 'transparent',
+                      color: state.eventDates.length <= 1
+                        ? 'var(--color-foreground-subtle)'
+                        : 'var(--color-danger)',
+                      cursor: state.eventDates.length <= 1 ? 'not-allowed' : 'pointer',
+                      fontSize: '16px',
+                    }}
+                    whileHover={state.eventDates.length > 1 ? { scale: 1.05 } : {}}
+                    whileTap={state.eventDates.length > 1 ? { scale: 0.95 } : {}}
+                  >
+                    <i className="ti ti-trash" />
+                  </motion.button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Add date button */}
+          <motion.button
+            onClick={() => dispatch({ type: 'ADD_EVENT_DATE' })}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '8px 0',
+              borderRadius: '8px',
+              border: '0.5px dashed var(--color-border-strong)',
+              background: 'transparent',
+              fontSize: 'var(--text-sm)',
+              fontFamily: 'var(--font-inter)',
+              fontWeight: 500,
+              color: 'var(--color-primary)',
+              cursor: 'pointer',
+            }}
+            whileHover={{ scale: 1.01, borderColor: 'var(--color-primary)' }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <i className="ti ti-plus" style={{ fontSize: '16px' }} />
+            Add another date
+          </motion.button>
+        </div>
+      )}
+
+      {/* ──── RECURRING: Schedule builder ──── */}
+      {isRecurring && (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          padding: '16px',
+          borderRadius: '10px',
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+        }}>
+          <div style={{
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            color: 'var(--color-foreground-subtle)',
+            fontFamily: 'var(--font-inter)',
+          }}>
+            Recurring schedule &amp; timings
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground)',
+              }}>
+                Frequency
+              </label>
+              <select
+                style={SELECT_STYLE}
+                value={state.frequency}
+                onChange={e => handleFrequencyChange(e.target.value as 'weekly' | 'biweekly' | 'monthly')}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Bi-weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground)',
+              }}>
+                Start date
+              </label>
+              <DateField
+                value={state.startDate}
+                onChange={handleStartDateChange}
+                className="h-9"
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground)',
+              }}>
+                End date
+              </label>
+              <DateField
+                value={state.endDate}
+                onChange={handleEndDateChange}
+                className="h-9"
+                align="right"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground)',
+              }}>
+                Total sessions
+              </label>
+              <Input
+                type="number"
+                min="1"
+                placeholder="12"
+                value={state.totalSessions > 0 ? String(state.totalSessions) : ''}
+                onChange={e => handleTotalSessionsChange(parseInt(e.target.value) || 0)}
+                className="h-9"
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground)',
+              }}>
+                Session start time
+              </label>
+              <TimeField
+                value={state.sessionStartTime}
+                onChange={val => dispatch({ type: 'SET_FIELD', field: 'sessionStartTime', value: val })}
+                className="h-9"
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                color: 'var(--color-foreground)',
+              }}>
+                Session end time
+              </label>
+              <TimeField
+                value={state.sessionEndTime}
+                onChange={val => dispatch({ type: 'SET_FIELD', field: 'sessionEndTime', value: val })}
+                className="h-9"
+                align="right"
+              />
+            </div>
+          </div>
+
+          {/* Scheduled session dates preview */}
+          {recurringSessions.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              paddingTop: '14px',
+              borderTop: '0.5px solid var(--color-border)',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    color: 'var(--color-primary)',
+                    fontFamily: 'var(--font-inter)',
+                  }}>
+                    Scheduled Sessions ({recurringSessions.length})
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'var(--color-primary-muted)',
+                    color: 'var(--color-primary)',
+                    fontFamily: 'var(--font-inter)',
+                  }}>
+                    {state.frequency === 'weekly' ? 'Every week' : state.frequency === 'biweekly' ? 'Every 2 weeks' : 'Every month'}
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-foreground-muted)',
+                  fontFamily: 'var(--font-inter)',
+                }}>
+                  {recurringSessions[0]?.displayDate} → {recurringSessions[recurringSessions.length - 1]?.displayDate}
+                </span>
+              </div>
+
+              {/* Grid of session dates */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: '8px',
+                maxHeight: '230px',
+                overflowY: 'auto',
+                paddingRight: '4px',
+              }}>
+                {recurringSessions.map((sess) => (
+                  <div
+                    key={sess.sessionNumber}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                    }}
+                  >
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: 'var(--color-primary-muted)',
+                      color: 'var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}>
+                      {sess.sessionNumber}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground)',
+                        fontFamily: 'var(--font-inter)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {sess.displayDate}
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--color-foreground-muted)',
+                        fontFamily: 'var(--font-inter)',
+                      }}>
+                        {sess.dayOfWeek} · {state.sessionStartTime || '09:00'}–{state.sessionEndTime || '18:00'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notes */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <label style={{
+          fontSize: 'var(--text-sm)',
+          fontWeight: 500,
+          fontFamily: 'var(--font-inter)',
+          color: 'var(--color-foreground)',
+        }}>
+          Notes
+        </label>
+        <textarea
+          placeholder="Special instructions, timings, preferences…"
+          value={state.notes}
+          onChange={e => dispatch({ type: 'SET_FIELD', field: 'notes', value: e.target.value })}
+          rows={3}
+          style={{
+            fontFamily: 'var(--font-inter)',
+            width: '100%',
+            background: 'var(--color-surface-raised)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--color-foreground)',
+            outline: 'none',
+            resize: 'vertical',
+          }}
+        />
+      </div>
+    </div>
+  )
+}

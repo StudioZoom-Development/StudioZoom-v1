@@ -13,20 +13,48 @@ export interface AppUser {
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────
 export type EventType =
-  | 'wedding' | 'preWedding' | 'engagement'
-  | 'corporate' | 'portrait' | 'studio' | 'other'
+  | 'wedding' | 'reception' | 'preWedding' | 'engagement'
+  | 'birthday' | 'babyShower' | 'puberty'
+  | 'corporate' | 'schoolEvent'
+  | 'portrait' | 'studio' | 'other'
 
-export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
+export type BookingType = 'oneTime' | 'multiDate' | 'recurring'
+
+export interface EventDateEntry {
+  id:         string
+  date:       Date
+  label:      string        // e.g. "Engagement", "Wedding Day 1", "Reception"
+  location?:  string        // optional per-date location override
+  startTime?: string        // e.g. "09:00"
+  endTime?:   string        // e.g. "18:00"
+}
+
+export interface RecurringSchedule {
+  frequency:         'weekly' | 'biweekly' | 'monthly'
+  startDate:         Date
+  endDate:           Date
+  totalSessions:     number
+  perSessionRate:    number
+  paymentType?:      'perSession' | 'custom'
+  sessionStartTime?: string
+  sessionEndTime?:   string
+}
+
+export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'overdue'
 export type ClientStatus  = 'inquiry' | 'booked'
 
 export interface Client {
   clientId:       string
+  projectId?:     string
   name:           string
   contact:        string
   email:          string
   eventName:      string
   eventType:      EventType
+  customEventType?: string
   eventDate:      Date
+  startTime?:     string
+  endTime?:       string
   location:       string
   packageType:    string
   totalAmount:    number
@@ -34,23 +62,32 @@ export interface Client {
   paymentStatus:  PaymentStatus
   invoiceNumber:  string
   status:         ClientStatus
-  notes?:         string
-  isDeleted?:     boolean
-  staffUids?:     string[]
-  assignedStaff?: string[]
-  teamInitials?:  string[]
-  createdBy:      string
-  createdAt:      Date
-  updatedAt:      Date
+  stage?:         ProjectStage
+  notes?:              string
+  isDeleted?:          boolean
+  staffUids?:          string[]
+  assignedStaff?:      string[]
+  teamInitials?:       string[]
+  freelancerIds?:      string[]
+  bookingType?:        BookingType
+  eventDates?:         EventDateEntry[]
+  recurringSchedule?:  RecurringSchedule
+  bookingGroupId?:     string
+  projectIds?:         string[]          // IDs of all sibling session projects for recurring bookings
+  createdBy:           string
+  createdAt:           Date
+  updatedAt:           Date
 }
 
 export interface Payment {
-  paymentId:   string
-  instalment:  '1st' | '2nd' | '3rd'
-  amount:      number
-  date:        Date
-  method:      'cash' | 'gpay' | 'bankTransfer' | 'cheque'
-  recordedBy:  string
+  paymentId:       string
+  instalment:      '1st' | '2nd' | '3rd'
+  amount:          number
+  date:            Date
+  method:          'cash' | 'gpay' | 'bankTransfer' | 'cheque'
+  transactionId?:  string
+  recordedBy:      string
+  recordedByName?: string
 }
 
 // ─── PROJECT ──────────────────────────────────────────────────────────────
@@ -60,26 +97,161 @@ export type ProjectStage =
 
 export type ProjectStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
 
+export interface FreelancerProjectAssignment {
+  role:     string
+  days:     number
+  dayRate:  number
+}
+
 export interface Project {
-  projectId:       string
-  clientId:        string
-  eventDate:       Date              // DENORMALIZED from client
-  eventName:       string            // DENORMALIZED from client
-  clientName:      string            // DENORMALIZED from client
-  eventType:       EventType         // DENORMALIZED from client
-  stage:           ProjectStage
-  status:          ProjectStatus
-  callTime?:       string
-  engagementDate?: Date
-  preWeddingDate?: Date
-  staffUids:       string[]          // DENORMALIZED for array-contains queries
-  freelancerIds:   string[]
-  milestones:      Partial<Record<MilestoneKey, Date>>
-  override?:       { by: string; reason: string; at: Date }
-  isDeleted?:      boolean
-  createdBy:       string
-  createdAt:       Date
-  updatedAt:       Date
+  projectId:              string
+  clientId:               string
+  eventDate:              Date              // DENORMALIZED from client
+  eventName:              string            // DENORMALIZED from client
+  clientName:             string            // DENORMALIZED from client
+  eventType:              EventType         // DENORMALIZED from client
+  customEventType?:       string            // DENORMALIZED from client
+  startTime?:             string            // DENORMALIZED from client
+  endTime?:               string            // DENORMALIZED from client
+  stage:                  ProjectStage
+  status:                 ProjectStatus
+  callTime?:              string
+  engagementDate?:        Date
+  preWeddingDate?:        Date
+  staffUids:              string[]          // DENORMALIZED for array-contains queries
+  freelancerIds:          string[]
+  freelancerAssignments?: Record<string, FreelancerProjectAssignment>
+  freelancerRates?:       Record<string, number>
+  milestones:             Partial<Record<MilestoneKey, Date>>
+  photoMilestones?:       Record<string, boolean>
+  videoMilestones?:       Record<string, boolean>
+  postProdRequirements?:  PostProdRequirements      // Configured at Booked stage
+  postProduction?:        PostProductionData         // Populated at Post-Production entry
+  override?:              { by: string; reason: string; at: Date }
+  bookingType?:           BookingType
+  bookingGroupId?:        string             // links sibling projects in multi-date bookings
+  sessionIndex?:          number             // 1-indexed session number for recurring discrete sessions
+  totalSessions?:         number             // total session count for recurring discrete contract
+  sessionRate?:           number             // per-session billing rate
+  dateLabel?:             string             // "Engagement", "Reception", etc.
+  location?:              string
+  eventDates?:            EventDateEntry[]
+  recurringSchedule?:     RecurringSchedule
+  sessionMilestones?:     Record<string, SessionMilestoneState>
+  stageCompletedAt?:      Partial<Record<ProjectStage, Date>>
+  stageGates?:            Record<string, Record<string, boolean>>
+  isDeleted?:             boolean
+  createdBy:              string
+  createdAt:              Date
+  updatedAt:              Date
+}
+
+// ─── POST-PRODUCTION REQUIREMENTS (configured at Booked stage) ───────
+export interface PostProdServiceRequirement {
+  required: boolean
+  clientReviewRequired: boolean
+}
+
+export interface PostProdRequirements {
+  photography: PostProdServiceRequirement
+  album: PostProdServiceRequirement
+  videoHighlights: PostProdServiceRequirement
+  fullVideo: PostProdServiceRequirement
+}
+
+// ─── POST-PRODUCTION TRACK STATUS & DATA ─────────────────────────────
+export type PostProdTrackStatus = 'notStarted' | 'inProgress' | 'completed'
+
+export type PostProdStageStatus =
+  | 'pending'         // Not yet started
+  | 'inProgress'      // Staff actively working
+  | 'completed'       // Work finished
+  | 'waitingClient'   // Sent for client review
+  | 'approved'        // Client approved
+  | 'notApproved'     // Client rejected → goes back
+  | 'notRequired'     // Client review not required (auto-pass)
+
+export interface ClientReviewEntry {
+  decision: 'approved' | 'notApproved'
+  reviewedAt: Date
+  reviewedBy: string
+  notes?: string
+}
+
+export interface PostProdStageData {
+  status: PostProdStageStatus
+  startDate?: Date          // Auto-set on first transition to inProgress
+  dueDate?: Date            // Set by admin during Post-Prod setup
+}
+
+export interface PostProdTrackAssignment {
+  staffUid: string
+  staffName: string
+  freelancerId?: string
+  freelancerName?: string
+}
+
+export interface PostProdClientReview {
+  status: PostProdStageStatus  // waitingClient | approved | notApproved | notRequired
+  required: boolean            // From Booked stage config
+  history: ClientReviewEntry[]
+}
+
+// ── Photo Track ──
+export interface PostProdPhotoTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  selectedPhotos: boolean
+  rawDelivered: boolean
+  designing: PostProdStageData
+  clientReview: PostProdClientReview
+}
+
+// ── Album Track ──
+export interface PostProdAlbumTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  albumDesigning: PostProdStageData
+  clientReview: PostProdClientReview
+  creatingAlbum: PostProdStageData
+  delivered: boolean
+}
+
+// ── Video Highlights Track ──
+export interface PostProdVideoTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  selectedVideo: boolean
+  rawVideoDelivered: boolean
+  highlights: PostProdStageData
+  clientReview: PostProdClientReview
+}
+
+// ── Full Video Track ──
+export interface PostProdFullVideoTrack {
+  status: PostProdTrackStatus
+  assignment: PostProdTrackAssignment
+  fullVideoEditing: PostProdStageData
+  clientReview: PostProdClientReview
+  delivered: boolean
+}
+
+// ── Post-Production Container ──
+export interface PostProductionData {
+  isConfigured: boolean       // false until admin saves Post-Prod setup
+  configuredAt?: Date
+  configuredBy?: string
+  photoTrack?: PostProdPhotoTrack         // Only present if photography required
+  albumTrack?: PostProdAlbumTrack         // Only present if album required
+  videoTrack?: PostProdVideoTrack         // Only present if videoHighlights required
+  fullVideoTrack?: PostProdFullVideoTrack // Only present if fullVideo required
+}
+export interface SessionMilestoneState {
+  photoMilestones?: Record<string, boolean>
+  videoMilestones?: Record<string, boolean>
+  delivered?: boolean
+  deliveredAt?: Date
+  stageCompletedAt?: Partial<Record<ProjectStage, Date>>
 }
 
 export type MilestoneKey =
@@ -98,6 +270,7 @@ export interface StaffAssignment {
   projectId:     string
   clientId:      string
   staffUid:      string
+  staffName?:    string
   eventDate:     string   // ← "YYYY-MM-DD" STRING, not Timestamp — required for equality queries
   role:          AssignmentRole
   status:        'confirmed' | 'tentative'
@@ -108,26 +281,42 @@ export interface StaffAssignment {
 export type WorkItemType =
   | 'photography' | 'videography' | 'photoEditing'
   | 'videoEditing' | 'albumDesign' | 'highlights' | 'fullFilm'
+  | 'photoDesigning' | 'albumDesigning' | 'albumCreating'
+  | 'highlightsEditing' | 'fullVideoEditing'
 
-export type WorkItemStatus = 'todo' | 'inProgress' | 'review' | 'done'
+export type PostProdTrackKey = 'photoTrack' | 'albumTrack' | 'videoTrack' | 'fullVideoTrack'
+export type PostProdStageKey = 'designing' | 'albumDesigning' | 'creatingAlbum' | 'highlights' | 'fullVideoEditing'
+
+export type WorkItemStatus = 'pending' | 'todo' | 'inProgress' | 'review' | 'done'
 export type WorkTrack      = 'photo' | 'video'
 
+export type WorkItemPriority = 'low' | 'medium' | 'high'
+
 export interface WorkItem {
-  workItemId:      string
-  projectId:       string
-  clientId:        string
-  eventDate:       Date
-  eventName:       string           // DENORMALIZED
-  type:            WorkItemType
-  track:           WorkTrack
-  assignedToUid:   string
-  assignedToName:  string           // DENORMALIZED
-  status:          WorkItemStatus
-  startDate?:      Date
-  dueDate?:        Date
-  notes?:          string
-  createdBy:       string
-  createdAt:       Date
+  workItemId:       string
+  projectId:        string
+  clientId:         string
+  eventDate:        Date
+  eventName:        string           // DENORMALIZED
+  clientName?:      string           // DENORMALIZED
+  type:             WorkItemType
+  track:            WorkTrack
+  assignedToUid:    string
+  assignedToName:   string           // DENORMALIZED
+  isFreelancer?:    boolean
+  status:           WorkItemStatus
+  priority?:        WorkItemPriority
+  estimatedHours?:  number
+  progressPercent?: number           // 0–100
+  startDate?:       Date
+  dueDate?:         Date
+  notes?:           string
+  postProdTrackKey?: PostProdTrackKey   // Links to source track
+  postProdStageKey?: PostProdStageKey   // Links to stage within track
+  isDeleted?:       boolean
+  createdBy:        string
+  createdAt:        Date
+  updatedAt?:       Date
 }
 
 // ─── EQUIPMENT ────────────────────────────────────────────────────────────
@@ -211,8 +400,24 @@ export interface TimeLog {
   standardMinutes:   540            // 9 hours — constant
   variance?:         number         // positive = overtime, negative = shortfall
   status:            'open' | 'closed' | 'flagged'
+  overrideStatus?:   'In' | 'Late' | 'Not in'
   correctedBy?:      string
   correctionReason?: string
+}
+
+// ─── LEAVE REQUESTS ───────────────────────────────────────────────────────────
+export type LeaveRequestType   = 'leave' | 'permission'
+export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export interface LeaveRequest {
+  requestId:   string
+  staffUid:    string
+  date:        string               // "YYYY-MM-DD"
+  type:        LeaveRequestType
+  status:      LeaveRequestStatus
+  createdAt:   Date
+  reviewedBy?: string
+  reviewedAt?: Date
 }
 
 // ─── SALARY ───────────────────────────────────────────────────────────────
@@ -247,10 +452,14 @@ export interface Payslip {
 export interface Freelancer {
   freelancerId: string
   name:         string
-  skill:        'photographer' | 'videographer' | 'editor' | 'designer'
+  skill:        'photographer' | 'videographer' | 'editor' | 'designer' | 'other'
   dayRate:      number
   contact:      string
+  notes?:       string
   isActive:     boolean
+  isDeleted?:   boolean
+  createdAt?:   Date
+  updatedAt?:   Date
 }
 
 export interface FreelancerPayout {
@@ -258,11 +467,15 @@ export interface FreelancerPayout {
   freelancerId:    string
   freelancerName:  string
   projectId:       string
+  eventName?:      string
   days:            number
   dayRate:         number
   amount:          number
   paidDate:        Date
+  method?:         'cash' | 'gpay' | 'bankTransfer'
   postedExpenseId: string    // links to auto-created expense doc
+  recordedBy?:     string
+  createdAt?:      Date
 }
 
 // ─── EXPENSES ─────────────────────────────────────────────────────────────
@@ -365,10 +578,26 @@ export interface Lead {
   source?:        string
   status:         LeadStatus | string
   notes?:         string
+  convertedClientId?: string
   isDeleted?:     boolean
   createdBy?:     string
   createdAt?:     Date
   updatedAt?:     Date
+}
+
+// ─── BOOKING DRAFTS ───────────────────────────────────────────────────────
+export interface BookingDraft {
+  draftId:        string
+  name:           string
+  clientName:     string
+  eventName?:     string
+  eventType:      EventType | string
+  totalAmount:    number
+  currentStep:    number
+  state:          unknown
+  createdBy:      string
+  createdAt:      Date
+  updatedAt:      Date
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────

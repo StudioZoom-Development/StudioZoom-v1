@@ -1,0 +1,387 @@
+import {
+  collection, query, where, onSnapshot,
+  doc, getDoc, updateDoc, setDoc, getDocs,
+  serverTimestamp, Timestamp
+} from 'firebase/firestore'
+import { db } from '@/lib/firebase/config'
+import { isAllowedByTestMode } from '@/lib/utils/testMode'
+
+export interface StaffMember {
+  uid:         string
+  name:        string
+  email:       string
+  contact?:    string
+  jobTitle?:   string
+  role:        'admin' | 'manager' | 'staff'
+  skills?:     string[]
+  joinDate?:   Date
+  exitDate?:   Date
+  baseSalary?: number
+  isActive:    boolean
+  photoURL?:   string | null
+  createdAt?:  Date
+  updatedAt?:  Date
+}
+
+export interface NewStaffInput {
+  name:       string
+  email:      string
+  contact:    string
+  jobTitle:   string
+  role:       'staff' | 'manager'
+  joinDate:   string
+  baseSalary: number
+}
+
+function mapUserDocToStaffMember(id: string, data: Record<string, unknown>): StaffMember {
+  const isActive = data.isActive !== undefined
+    ? Boolean(data.isActive)
+    : data.status !== undefined
+      ? data.status === 'active'
+      : true
+
+  const baseSalary = data.baseSalary !== undefined
+    ? Number(data.baseSalary)
+    : data.monthlySalary !== undefined
+      ? Number(data.monthlySalary)
+      : undefined
+
+  let joinDate: Date | undefined = undefined
+  if (data.joinDate instanceof Timestamp) {
+    joinDate = data.joinDate.toDate()
+  } else if (data.joinDate && typeof data.joinDate === 'string' && !isNaN(new Date(data.joinDate).getTime())) {
+    joinDate = new Date(data.joinDate)
+  }
+
+  return {
+    ...data,
+    uid: id,
+    isActive,
+    baseSalary,
+    jobTitle: typeof data.jobTitle === 'string' ? data.jobTitle : '',
+    joinDate,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt as string | number | Date) : undefined,
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt as string | number | Date) : undefined,
+  } as unknown as StaffMember
+}
+
+/** Real-time list — staff + managers, alphabetical */
+export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () => void {
+  const q = query(
+    collection(db, 'users'),
+    where('role', 'in', ['staff', 'manager'])
+  )
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
+      .map(d => mapUserDocToStaffMember(d.id, d.data()))
+    // In-memory sort by name (alphabetical)
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    callback(list)
+  }, err => {
+    console.warn('subscribeToStaff listener error:', err.message)
+  })
+}
+
+/** Real-time list — staff ONLY (excluding admins & managers), alphabetical */
+export function subscribeToStaffOnly(callback: (staff: StaffMember[]) => void): () => void {
+  const q = query(
+    collection(db, 'users'),
+    where('role', '==', 'staff')
+  )
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
+      .map(d => mapUserDocToStaffMember(d.id, d.data()))
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    callback(list)
+  }, err => {
+    console.warn('subscribeToStaffOnly listener error:', err.message)
+  })
+}
+
+/** Real-time list — ALL team members (admin, manager, staff), alphabetical */
+export function subscribeToAllTeamMembers(callback: (staff: StaffMember[]) => void): () => void {
+  const q = query(
+    collection(db, 'users'),
+    where('role', 'in', ['admin', 'manager', 'staff'])
+  )
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .filter(d => !d.data().isDeleted)
+      .map(d => mapUserDocToStaffMember(d.id, d.data()))
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    callback(list)
+  })
+}
+
+/** Single staff by UID */
+export async function getStaffMember(uid: string): Promise<StaffMember | null> {
+  const snap = await getDoc(doc(db, 'users', uid))
+  if (!snap.exists()) return null
+  return mapUserDocToStaffMember(snap.id, snap.data())
+}
+
+/** Update profile fields */
+export async function updateStaffProfile(
+  uid: string,
+  updates: { name?: string; contact?: string; email?: string; jobTitle?: string; joinDate?: string; baseSalary?: number }
+): Promise<void> {
+  const payload: Record<string, unknown> = { updatedAt: serverTimestamp() }
+  if (updates.name)       payload.name       = updates.name
+  if (updates.contact)    payload.contact    = updates.contact
+  if (updates.email)      payload.email      = updates.email
+  if (updates.jobTitle)   payload.jobTitle   = updates.jobTitle
+  if (updates.baseSalary !== undefined) payload.baseSalary = updates.baseSalary
+  if (updates.joinDate)   payload.joinDate   = Timestamp.fromDate(new Date(updates.joinDate))
+  await updateDoc(doc(db, 'users', uid), payload)
+}
+
+/** Soft deactivate / reactivate */
+export async function deactivateStaff(uid: string): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { isActive: false, status: 'inactive', updatedAt: serverTimestamp() })
+}
+export async function reactivateStaff(uid: string): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { isActive: true, status: 'active', updatedAt: serverTimestamp() })
+}
+
+/** Add staff — writes Firestore only (Auth user creation requires Admin SDK/Cloud Function) */
+export async function addStaffMember(data: NewStaffInput): Promise<string> {
+  const tempUid = `staff_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  await setDoc(doc(db, 'users', tempUid), {
+    uid:        tempUid,
+    name:       data.name,
+    email:      data.email,
+    contact:    data.contact.startsWith('+91') ? data.contact : `+91 ${data.contact.trim()}`,
+    jobTitle:   data.jobTitle,
+    role:       data.role,
+    joinDate:   data.joinDate ? Timestamp.fromDate(new Date(data.joinDate)) : serverTimestamp(),
+    baseSalary: data.baseSalary,
+    status:     'active',
+    isActive:   true,
+    photoURL:   null,
+    createdAt:  serverTimestamp(),
+    updatedAt:  serverTimestamp(),
+  })
+  return tempUid
+}
+
+/** Attendance summary for detail page — direct getDoc via ID pattern */
+export async function getAttendanceSummary(
+  uid: string, year: number, month: number
+): Promise<{ present: number; late: number; absent: number; totalMinutes: number } | null> {
+  try {
+    const snap = await getDoc(doc(db, 'attendance', `${uid}_${year}_${month}`))
+    if (!snap.exists()) return null
+    return snap.data().summary as { present: number; late: number; absent: number; totalMinutes: number }
+  } catch (err) {
+    console.error('Failed to get attendance summary:', err)
+    return null
+  }
+}
+
+/** Real-time subscription to ALL attendance documents for a given year & month */
+export function subscribeToAllAttendanceRecords(
+  year: number,
+  month: number,
+  callback: (recordsMap: Record<string, import('@/types').AttendanceRecord>) => void
+): () => void {
+  const q = query(
+    collection(db, 'attendance'),
+    where('year', '==', year),
+    where('month', '==', month)
+  )
+
+  return onSnapshot(q, snap => {
+    const map: Record<string, import('@/types').AttendanceRecord> = {}
+    for (const d of snap.docs) {
+      const data = d.data()
+      map[data.staffUid] = {
+        attendanceId: d.id,
+        staffUid: data.staffUid as string,
+        year: data.year as number,
+        month: data.month as number,
+        dailyStatus: (data.dailyStatus as Record<string, import('@/types').AttendanceStatus>) || {},
+        dailyHours: (data.dailyHours as Record<string, number>) || {},
+        summary: data.summary as import('@/types').AttendanceRecord['summary'],
+      }
+    }
+    callback(map)
+  }, err => {
+    console.error('[staff] subscribeToAllAttendanceRecords error:', err)
+    callback({})
+  })
+}
+
+/** Payslip history for detail page */
+export async function getPayslipHistory(uid: string): Promise<Array<{
+  payslipId: string; payslipNumber: string; month: number; year: number; netPay: number
+}>> {
+  try {
+    const q = query(collection(db, 'payslips'), where('staffUid', '==', uid))
+    const snap = await getDocs(q)
+    const list = snap.docs.map(d => ({
+      payslipId:     d.id,
+      payslipNumber: d.data().payslipNumber ?? '',
+      month:         d.data().month as number,
+      year:          d.data().year as number,
+      netPay:        d.data().netPay as number,
+    }))
+    list.sort((a, b) => b.year - a.year || b.month - a.month)
+    return list
+  } catch (err) {
+    console.error('Failed to get payslip history:', err)
+    return []
+  }
+}
+
+const DEMO_STAFF_WORK: Record<string, Array<{ projectId: string; eventName: string; eventDate: string; role: string; stage: string }>> = {
+  'staff-kavya': [
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Wedding', eventDate: '2026-09-09', role: 'photographer', stage: 'preProduction' },
+    { projectId: 'demo-proj-5', eventName: 'Priya & Karthik Reception', eventDate: '2026-05-18', role: 'lead_photo', stage: 'delivered' },
+    { projectId: 'demo-proj-3', eventName: 'Sneha & Rahul Sangeet', eventDate: '2026-07-22', role: 'photographer', stage: 'delivered' },
+  ],
+  'staff-deepak': [
+    { projectId: 'demo-proj-6', eventName: 'Aishwarya & Naveen Wedding', eventDate: '2026-06-10', role: 'videographer', stage: 'preProduction' },
+    { projectId: 'demo-proj-1', eventName: 'Meera & Rohan Engagement', eventDate: '2026-08-15', role: 'lead_video', stage: 'eventDay' },
+  ],
+  'staff-siva': [
+    { projectId: 'demo-proj-3', eventName: 'Sneha & Rahul Sangeet', eventDate: '2026-07-22', role: 'videographer', stage: 'delivered' },
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Wedding', eventDate: '2026-09-09', role: 'drone', stage: 'preProduction' },
+  ],
+  'staff-ramesh': [
+    { projectId: 'demo-proj-4', eventName: 'Ananya & Vikram Wedding', eventDate: '2026-04-05', role: 'editor', stage: 'delivered' },
+    { projectId: 'demo-proj-1', eventName: 'Meera & Rohan Highlights', eventDate: '2026-08-20', role: 'videoEditing', stage: 'postProduction' },
+  ],
+  'staff-naresh': [
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Wedding', eventDate: '2026-09-09', role: 'lead_photo', stage: 'preProduction' },
+    { projectId: 'demo-proj-4', eventName: 'Ananya & Vikram Wedding', eventDate: '2026-04-05', role: 'lead_photo', stage: 'delivered' },
+  ],
+  'staff-anitha': [
+    { projectId: 'demo-proj-2', eventName: 'Divya & Arjun Album', eventDate: '2026-09-15', role: 'albumDesign', stage: 'postProduction' },
+    { projectId: 'demo-proj-5', eventName: 'Priya & Karthik Photo Edit', eventDate: '2026-05-25', role: 'photoEditing', stage: 'delivered' },
+  ],
+}
+
+/** Work history for detail page — via projects (staffUids), workItems (assignedToUid), and staffAssignments */
+export async function getWorkHistory(uid: string): Promise<Array<{
+  projectId: string; eventName: string; eventDate: string; role: string; stage: string
+}>> {
+  try {
+    const historyMap = new Map<string, {
+      projectId: string; eventName: string; eventDate: string; role: string; stage: string
+    }>()
+
+    // 1. Query projects where staffUids contains uid
+    try {
+      const projQ = query(
+        collection(db, 'projects'),
+        where('staffUids', 'array-contains', uid)
+      )
+      const projSnap = await getDocs(projQ)
+      projSnap.docs.forEach(d => {
+        const p = d.data()
+        if (p.isDeleted) return
+        const evDate = p.eventDate
+          ? (typeof p.eventDate.toDate === 'function'
+              ? p.eventDate.toDate().toISOString().split('T')[0]
+              : new Date(p.eventDate).toISOString().split('T')[0])
+          : ''
+        historyMap.set(`proj-${d.id}`, {
+          projectId: d.id,
+          eventName: p.eventName || 'Unnamed Event',
+          eventDate: evDate,
+          role: 'staff',
+          stage: p.stage || 'booked',
+        })
+      })
+    } catch (err) {
+      console.warn('Could not query projects by staffUids:', err)
+    }
+
+    // 2. Query workItems where assignedToUid == uid
+    try {
+      const workQ = query(
+        collection(db, 'workItems'),
+        where('assignedToUid', '==', uid)
+      )
+      const workSnap = await getDocs(workQ)
+      workSnap.docs.forEach(d => {
+        const w = d.data()
+        if (w.isDeleted) return
+        const evDate = w.eventDate
+          ? (typeof w.eventDate.toDate === 'function'
+              ? w.eventDate.toDate().toISOString().split('T')[0]
+              : new Date(w.eventDate).toISOString().split('T')[0])
+          : ''
+        const stage = w.status === 'done'
+          ? 'delivered'
+          : w.status === 'review'
+          ? 'postProduction'
+          : w.status === 'inProgress'
+          ? 'eventDay'
+          : 'planning'
+
+        const key = `work-${w.projectId || d.id}-${w.type || 'task'}`
+        historyMap.set(key, {
+          projectId: w.projectId || d.id,
+          eventName: w.eventName || 'Unnamed Work',
+          eventDate: evDate,
+          role: w.type || 'editor',
+          stage,
+        })
+      })
+    } catch (err) {
+      console.warn('Could not query workItems by assignedToUid:', err)
+    }
+
+    // 3. Query staffAssignments (legacy / direct assignments)
+    try {
+      const assignQ = query(
+        collection(db, 'staffAssignments'),
+        where('staffUid', '==', uid)
+      )
+      const assignSnap = await getDocs(assignQ)
+      for (const d of assignSnap.docs) {
+        const a = d.data()
+        let eventName = '—'
+        let stage = '—'
+        if (a.projectId) {
+          try {
+            const proj = await getDoc(doc(db, 'projects', a.projectId))
+            if (proj.exists()) {
+              const p = proj.data()
+              eventName = p?.eventName ?? '—'
+              stage = p?.stage ?? '—'
+            }
+          } catch {
+            // fallback
+          }
+        }
+        const key = `assign-${d.id}`
+        historyMap.set(key, {
+          projectId: a.projectId ?? '',
+          eventName,
+          eventDate: (a.eventDate as string) || '',
+          role: (a.role as string) || 'staff',
+          stage,
+        })
+      }
+    } catch (err) {
+      console.warn('Could not query staffAssignments:', err)
+    }
+
+    const list = Array.from(historyMap.values())
+
+    // If no records found in database, check demo fallback for mock staff members
+    if (list.length === 0 && DEMO_STAFF_WORK[uid]) {
+      return DEMO_STAFF_WORK[uid]
+    }
+
+    list.sort((a, b) => (b.eventDate || '').localeCompare(a.eventDate || ''))
+    return list.slice(0, 30)
+  } catch (err) {
+    console.error('Failed to get work history:', err)
+    return DEMO_STAFF_WORK[uid] || []
+  }
+}

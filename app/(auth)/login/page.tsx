@@ -127,18 +127,19 @@ export default function LoginPage() {
         }}>
           {/* Logo + Brand */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '16px',
-              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px var(--color-primary-muted)',
-            }}>
-              <i className="ti ti-aperture" style={{ fontSize: '32px', color: '#ffffff' }} />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="Studio Zoom Logo"
+              style={{
+                maxHeight: '96px',
+                maxWidth: '240px',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 8px 16px rgba(198, 83, 159, 0.25))',
+              }}
+            />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textAlign: 'center' }}>
               <h1 style={{
                 margin: 0,

@@ -32,6 +32,19 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   inProgress:      { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
   review:          { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   done:            { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  // Time Clock
+  active:          { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  in:              { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  notIn:           { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  // Attendance
+  present:         { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  late:            { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  halfDay:         { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
+  leave:           { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  absent:          { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  pending:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  weekOff:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  permission:      { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
 }
 
 const LABELS: Record<string, string> = {
@@ -43,6 +56,17 @@ const LABELS: Record<string, string> = {
   todo:           'To Do',
   review:         'In Review',
   done:           'Done',
+  in:             'In',
+  notIn:          'Not in',
+  // Attendance
+  present:        'P',
+  late:           'L',
+  halfDay:        'H',
+  leave:          'LV',
+  absent:         'AB',
+  pending:        'Pending',
+  weekOff:        'WO',
+  permission:     'PR',
 }
 
 export function Badge({ variant, label }: BadgeProps) {
