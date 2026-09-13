@@ -1,5 +1,5 @@
 import {
-  collection, query, onSnapshot, getDocs,
+  collection, query, onSnapshot, getDocs, getDoc,
   addDoc, updateDoc, doc, setDoc,
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
@@ -123,13 +123,17 @@ export async function updateWorkItemStatus(
     review:     80,
     done:       100,
   }
-  const isSynthetic = workItemId.startsWith('assign-') || workItemId.startsWith('proj-')
+  const isSynthetic = workItemId.startsWith('assign-') || workItemId.startsWith('proj-') || workItemId.startsWith('postprod-')
   if (isSynthetic && fullItemFallback) {
-    await saveWorkItemDetails({
+    const fallbackItem: WorkItem = {
       ...fullItemFallback,
       status,
       progressPercent: progressMap[status],
-    })
+    }
+    if (status === 'inProgress' && !hasExistingStartDate && !fallbackItem.startDate) {
+      fallbackItem.startDate = new Date()
+    }
+    await saveWorkItemDetails(fallbackItem)
     return
   }
 
@@ -163,12 +167,12 @@ export async function cleanupDuplicateWorkItems(items: WorkItem[]): Promise<void
       const prev = seen.get(key)!
       const rank = (s: WorkItemStatus) => s === 'done' ? 4 : s === 'review' ? 3 : s === 'inProgress' ? 2 : 1
       if (rank(item.status) > rank(prev.status)) {
-        if (!prev.workItemId.startsWith('proj-') && !prev.workItemId.startsWith('assign-')) {
+        if (!prev.workItemId.startsWith('proj-') && !prev.workItemId.startsWith('assign-') && !prev.workItemId.startsWith('postprod-')) {
           duplicatesToDelete.push(prev.workItemId)
         }
         seen.set(key, item)
       } else {
-        if (!item.workItemId.startsWith('proj-') && !item.workItemId.startsWith('assign-')) {
+        if (!item.workItemId.startsWith('proj-') && !item.workItemId.startsWith('assign-') && !item.workItemId.startsWith('postprod-')) {
           duplicatesToDelete.push(item.workItemId)
         }
       }
@@ -210,7 +214,7 @@ export async function updateWorkItemAssignee(
 export async function saveWorkItemDetails(
   item: WorkItem
 ): Promise<void> {
-  const isSynthetic = item.workItemId.startsWith('assign-') || item.workItemId.startsWith('proj-')
+  const isSynthetic = item.workItemId.startsWith('assign-') || item.workItemId.startsWith('proj-') || item.workItemId.startsWith('postprod-')
   const payload: Record<string, unknown> = {
     projectId:       item.projectId,
     clientId:        item.clientId,
@@ -296,6 +300,24 @@ export async function syncWorkItemForTrackStage(
       }
       await updateDoc(doc(db, 'workItems', d.id), updateData)
     }
+
+    // Also directly update synthetic document if it exists in Firestore
+    const syntheticId = `postprod-${projectId}-${trackKey}-${stageKey}`
+    if (!matchingDocs.some(d => d.id === syntheticId)) {
+      const synDocRef = doc(db, 'workItems', syntheticId)
+      const synSnap = await getDoc(synDocRef)
+      if (synSnap.exists() && !synSnap.data()?.isDeleted) {
+        const updateData: Record<string, unknown> = {
+          status: mapped.status,
+          progressPercent: mapped.progressPercent,
+          updatedAt: serverTimestamp(),
+        }
+        if (mapped.status === 'inProgress' && !synSnap.data()?.startDate) {
+          updateData.startDate = serverTimestamp()
+        }
+        await updateDoc(synDocRef, updateData)
+      }
+    }
   } catch (err) {
     console.warn('syncWorkItemForTrackStage error:', err)
   }
@@ -327,6 +349,22 @@ export async function completeWorkItemsForTrack(
         progressPercent: 100,
         updatedAt: serverTimestamp(),
       })
+    }
+
+    const syntheticStageKeys = ['designing', 'albumDesigning', 'creatingAlbum', 'highlights', 'fullVideoEditing']
+    for (const sKey of syntheticStageKeys) {
+      const sId = `postprod-${projectId}-${trackKey}-${sKey}`
+      if (!matchingDocs.some(d => d.id === sId)) {
+        const synDocRef = doc(db, 'workItems', sId)
+        const synSnap = await getDoc(synDocRef)
+        if (synSnap.exists() && !synSnap.data()?.isDeleted && synSnap.data()?.status !== 'done') {
+          await updateDoc(synDocRef, {
+            status: 'done',
+            progressPercent: 100,
+            updatedAt: serverTimestamp(),
+          })
+        }
+      }
     }
   } catch (err) {
     console.warn('completeWorkItemsForTrack error:', err)
