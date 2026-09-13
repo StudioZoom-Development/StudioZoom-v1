@@ -34,7 +34,25 @@ function getServiceAccount(): { projectId: string; clientEmail: string; privateK
     } catch {}
   }
 
-  const parsed = JSON.parse(raw) as ServiceAccount
+  let parsed: ServiceAccount
+  try {
+    parsed = JSON.parse(raw) as ServiceAccount
+  } catch {
+    // Resilient fallback: extract fields directly via regex if unescaped control characters exist
+    const projectMatch = raw.match(/"project_?id"\s*:\s*"([^"]+)"/i)
+    const emailMatch = raw.match(/"client_?email"\s*:\s*"([^"]+)"/i)
+    const keyMatch = raw.match(/"private_?key"\s*:\s*"([\s\S]*?)(?<!\\)"/i)
+    if (emailMatch && keyMatch) {
+      parsed = {
+        projectId: projectMatch ? projectMatch[1] : undefined,
+        clientEmail: emailMatch[1],
+        privateKey: keyMatch[1].replace(/\\n/g, '\n'),
+      }
+    } else {
+      throw new Error('Failed to parse FIREBASE_ADMIN_SERVICE_ACCOUNT: invalid JSON or control characters.')
+    }
+  }
+
   const projectId   = parsed.project_id   || parsed.projectId   || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-zoom'
   const clientEmail = parsed.client_email || parsed.clientEmail || ''
   let   privateKey  = parsed.private_key  || parsed.privateKey  || ''
