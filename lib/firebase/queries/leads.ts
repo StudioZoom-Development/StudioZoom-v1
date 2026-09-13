@@ -6,7 +6,6 @@ import {
 import { db } from '@/lib/firebase/config'
 import { Lead } from '@/types'
 import { isAllowedByTestMode } from '@/lib/utils/testMode'
-import { useUIStore } from '@/store/uiStore'
 
 export interface LeadFilters {
   source?: string

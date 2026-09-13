@@ -18,7 +18,6 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [showResults, setShowResults] = useState(false)
   const [contactTouched, setContactTouched] = useState(false)
-  const [emailTouched, setEmailTouched] = useState(false)
 
   const rawContactDigits = state.contact.replace(/\D/g, '')
 
@@ -447,7 +446,6 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                   placeholder="name@email.com"
                   value={state.email}
                   onChange={e => dispatch({ type: 'SET_FIELD', field: 'email', value: e.target.value })}
-                  onBlur={() => setEmailTouched(true)}
                   style={emailError ? { border: '0.5px solid var(--color-danger)' } : undefined}
                   className="h-9"
                 />
