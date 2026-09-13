@@ -8,9 +8,7 @@ service cloud.firestore {
     }
     function isAdmin()          { return isSignedIn() && getRole() == 'admin'; }
     function isManager()        { return isSignedIn() && getRole() == 'manager'; }
-    function isStaff()          { return isSignedIn() && getRole() == 'staff'; }
     function isAdminOrManager() { return isAdmin() || isManager(); }
-    function isOwner(uid)       { return isSignedIn() && request.auth.uid == uid; }
 
     match /users/{uid} {
       // Any signed-in user can read their own doc (avoids recursive getRole() deadlock)
@@ -43,7 +41,10 @@ service cloud.firestore {
 
     match /projects/{projectId} {
       allow read:  if isSignedIn();
-      allow write: if isAdminOrManager();
+      allow write: if isAdminOrManager() || (
+        isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['postProduction', 'updatedAt'])
+      );
     }
 
     match /staffAssignments/{assignmentId} {
@@ -52,13 +53,12 @@ service cloud.firestore {
     }
 
     match /workItems/{workItemId} {
-      allow read:           if isSignedIn();
-      allow create, delete: if isAdminOrManager();
-      // Staff can only update status/progress fields of their own work items
+      allow read:   if isSignedIn();
+      allow delete: if isAdminOrManager();
+      allow create: if isSignedIn();
       allow update: if isAdminOrManager() || (
-        isStaff() &&
-        resource.data.assignedToUid == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'progressPercent', 'updatedAt', 'startDate'])
+        isSignedIn() &&
+        (resource.data.assignedToUid == request.auth.uid || request.resource.data.assignedToUid == request.auth.uid)
       );
     }
 
