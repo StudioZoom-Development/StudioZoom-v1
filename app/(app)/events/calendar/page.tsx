@@ -150,13 +150,26 @@ export default function CalendarPage() {
           if (item.projectId && e.projectId && item.projectId === e.projectId) return true
           if (item.clientId && e.clientId && item.clientId === e.clientId) return true
         }
+
+        // Cross-match: if one is a session/func and the other is a main/parent event of the same client or project,
+        // they represent the exact same event on that date
+        const sameEntity = (item.clientId && e.clientId && item.clientId === e.clientId) ||
+                           (item.projectId && e.projectId && item.projectId === e.projectId)
+        if (sameEntity && (itemSessionMatch || eSessionMatch)) {
+          return true
+        }
+
         return false
       })
 
       if (existingIdx !== -1) {
         const existing = map[item.dateStr][existingIdx]
+        const itemIsSession = item.id.includes('-session-') || item.id.includes('-func-')
+        const existingIsSession = existing.id.includes('-session-') || existing.id.includes('-func-')
+        const preferItem = itemIsSession && !existingIsSession
+
         map[item.dateStr][existingIdx] = {
-          ...existing,
+          ...(preferItem ? item : existing),
           projectId: item.projectId || existing.projectId,
           clientId:  item.clientId || existing.clientId,
           stage:     item.stage || existing.stage,
@@ -188,59 +201,64 @@ export default function CalendarPage() {
       const team = teamNames.map(n => ({ name: n, init: getInitials(n) }))
 
       // 1. Recurring schedule: for legacy clients without discrete projects, expand sessions
-      if (client.bookingType === 'recurring' && (!Array.isArray(client.projectIds) || client.projectIds.length === 0) && client.recurringSchedule) {
-        const rs = client.recurringSchedule
-        const sessions = computeRecurringSessionDates(
-          rs.frequency || 'weekly',
-          rs.startDate,
-          rs.totalSessions || 1,
-          rs.sessionStartTime || client.startTime || '09:00',
-          rs.sessionEndTime || client.endTime || '18:00'
-        )
+      if (client.bookingType === 'recurring') {
+        if ((!Array.isArray(client.projectIds) || client.projectIds.length === 0) && client.recurringSchedule) {
+          const rs = client.recurringSchedule
+          const sessions = computeRecurringSessionDates(
+            rs.frequency || 'weekly',
+            rs.startDate,
+            rs.totalSessions || 1,
+            rs.sessionStartTime || client.startTime || '09:00',
+            rs.sessionEndTime || client.endTime || '18:00'
+          )
 
-        sessions.forEach(sess => {
-          addEvent({
-            id: `client-${client.clientId}-session-${sess.sessionNumber}`,
-            clientId: client.clientId,
-            projectId: client.projectId,
-            name: `${client.eventName || client.name || 'Untitled Event'} — ${sess.label}`,
-            clientName: client.name || '',
-            eventType: client.eventType || 'other',
-            stage,
-            dateStr: sess.dateStr,
-            startTime: sess.startTime,
-            endTime: sess.endTime,
-            location: client.location || '',
-            callTime: sess.startTime,
-            team,
-          })
-        })
-      } else if (client.bookingType === 'multiDate' && Array.isArray(client.eventDates) && client.eventDates.length > 0) {
-        // 2. Multi-date functions
-        client.eventDates.forEach((ed, idx) => {
-          if (!ed || !ed.date) return
-          const d = ed.date instanceof Date ? ed.date : new Date(ed.date)
-          if (!isNaN(d.getTime())) {
-            const dateStr = format(d, 'yyyy-MM-dd')
+          sessions.forEach(sess => {
             addEvent({
-              id: `client-${client.clientId}-func-${ed.id || idx}`,
+              id: `client-${client.clientId}-session-${sess.sessionNumber}`,
               clientId: client.clientId,
               projectId: client.projectId,
-              name: `${client.name || 'Client'} — ${ed.label || 'Function'}`,
+              name: `${client.eventName || client.name || 'Untitled Event'} — ${sess.label}`,
               clientName: client.name || '',
               eventType: client.eventType || 'other',
               stage,
-              dateStr,
-              startTime: ed?.startTime || client?.startTime || '09:00',
-              endTime: ed?.endTime || client?.endTime || '18:00',
-              location: ed?.location || client?.location || '',
-              callTime: ed?.startTime || client?.startTime,
+              dateStr: sess.dateStr,
+              startTime: sess.startTime,
+              endTime: sess.endTime,
+              location: client.location || '',
+              callTime: sess.startTime,
               team,
             })
-          }
-        })
+          })
+        }
+        // If client has discrete projects in client.projectIds, projects.forEach handles them below.
+        // Never fall through to primary event date for recurring bookings!
+      } else if (client.bookingType === 'multiDate') {
+        if (Array.isArray(client.eventDates) && client.eventDates.length > 0) {
+          client.eventDates.forEach((ed, idx) => {
+            if (!ed || !ed.date) return
+            const d = ed.date instanceof Date ? ed.date : new Date(ed.date)
+            if (!isNaN(d.getTime())) {
+              const dateStr = format(d, 'yyyy-MM-dd')
+              addEvent({
+                id: `client-${client.clientId}-func-${ed.id || idx}`,
+                clientId: client.clientId,
+                projectId: client.projectId,
+                name: `${client.name || 'Client'} — ${ed.label || 'Function'}`,
+                clientName: client.name || '',
+                eventType: client.eventType || 'other',
+                stage,
+                dateStr,
+                startTime: ed?.startTime || client?.startTime || '09:00',
+                endTime: ed?.endTime || client?.endTime || '18:00',
+                location: ed?.location || client?.location || '',
+                callTime: ed?.startTime || client?.startTime,
+                team,
+              })
+            }
+          })
+        }
       } else if (client.eventDate) {
-        // 3. Primary event date (for oneTime or bookings without recurring/multiDate)
+        // 3. Primary event date (for oneTime bookings)
         const d = client.eventDate instanceof Date ? client.eventDate : new Date(client.eventDate)
         if (!isNaN(d.getTime())) {
           const dateStr = format(d, 'yyyy-MM-dd')
@@ -303,34 +321,36 @@ export default function CalendarPage() {
             team,
           })
         }
-      } else if (proj.bookingType === 'recurring' && proj.recurringSchedule) {
-        // Legacy monolithic recurring project fallback
-        const rs = proj.recurringSchedule
-        const sessions = computeRecurringSessionDates(
-          rs.frequency || 'weekly',
-          rs.startDate,
-          rs.totalSessions || 1,
-          rs.sessionStartTime || proj.startTime || client?.startTime || '09:00',
-          rs.sessionEndTime || proj.endTime || client?.endTime || '18:00'
-        )
+      } else if (proj.bookingType === 'recurring') {
+        // Legacy monolithic recurring project fallback (only if no sessionIndex)
+        if (proj.recurringSchedule) {
+          const rs = proj.recurringSchedule
+          const sessions = computeRecurringSessionDates(
+            rs.frequency || 'weekly',
+            rs.startDate,
+            rs.totalSessions || 1,
+            rs.sessionStartTime || proj.startTime || client?.startTime || '09:00',
+            rs.sessionEndTime || proj.endTime || client?.endTime || '18:00'
+          )
 
-        sessions.forEach(sess => {
-          addEvent({
-            id: `proj-${proj.projectId}-session-${sess.sessionNumber}`,
-            clientId: proj.clientId,
-            projectId: proj.projectId,
-            name: `${proj.eventName || client?.eventName || proj.clientName || 'Untitled Project'} — ${sess.label}`,
-            clientName: proj.clientName || client?.name || '',
-            eventType: proj.eventType || client?.eventType || 'other',
-            stage,
-            dateStr: sess.dateStr,
-            startTime: sess.startTime,
-            endTime: sess.endTime,
-            location: client?.location || '',
-            callTime: proj.callTime || sess.startTime,
-            team,
+          sessions.forEach(sess => {
+            addEvent({
+              id: `proj-${proj.projectId}-session-${sess.sessionNumber}`,
+              clientId: proj.clientId,
+              projectId: proj.projectId,
+              name: `${proj.eventName || client?.eventName || proj.clientName || 'Untitled Project'} — ${sess.label}`,
+              clientName: proj.clientName || client?.name || '',
+              eventType: proj.eventType || client?.eventType || 'other',
+              stage,
+              dateStr: sess.dateStr,
+              startTime: sess.startTime,
+              endTime: sess.endTime,
+              location: client?.location || '',
+              callTime: proj.callTime || sess.startTime,
+              team,
+            })
           })
-        })
+        }
       } else if (proj.bookingType === 'multiDate' && Array.isArray(proj.eventDates) && proj.eventDates.length > 0) {
         // 2. Multi-date on project
         proj.eventDates.forEach((ed, idx) => {
@@ -356,7 +376,7 @@ export default function CalendarPage() {
           }
         })
       } else if (proj.eventDate) {
-        // 3. Primary event date
+        // 3. Primary event date (for oneTime projects)
         const d = proj.eventDate instanceof Date ? proj.eventDate : new Date(proj.eventDate)
         if (!isNaN(d.getTime())) {
           const dateStr = format(d, 'yyyy-MM-dd')

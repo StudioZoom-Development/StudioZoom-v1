@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
 import {
   subscribeToWorkItems,
   createWorkItem,
@@ -703,21 +704,11 @@ function WorkItemSidePanel({
               <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', display: 'block', marginBottom: '6px' }}>
                 Due Date
               </label>
-              <input
-                type="date"
+              <DateField
                 value={editDueDate}
-                onChange={e => setEditDueDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '8px',
-                  color: 'var(--color-foreground)',
-                  fontSize: 'var(--text-sm)',
-                  fontFamily: 'var(--font-inter)',
-                  outline: 'none',
-                }}
+                onChange={val => setEditDueDate(val)}
+                allowEmpty
+                className="h-10"
               />
             </div>
 
@@ -1435,21 +1426,21 @@ function CreateWorkModal({
           {/* Start Date */}
           <div>
             <label style={labelStyle}>Start Date</label>
-            <Input
-              type="date"
+            <DateField
               value={form.startDate}
-              onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-              style={{ ...inputStyle }}
+              onChange={val => setForm(f => ({ ...f, startDate: val }))}
+              allowEmpty
+              className="h-9"
             />
           </div>
           {/* Due Date */}
           <div>
             <label style={labelStyle}>Due Date</label>
-            <Input
-              type="date"
+            <DateField
               value={form.dueDate}
-              onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-              style={{ ...inputStyle }}
+              onChange={val => setForm(f => ({ ...f, dueDate: val }))}
+              allowEmpty
+              className="h-9"
             />
           </div>
         </div>

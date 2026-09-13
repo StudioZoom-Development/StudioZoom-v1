@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
 import { useAuthStore } from '@/store/authStore'
 import { recordPayment, subscribeToPayments } from '@/lib/firebase/queries/clients'
 
@@ -99,11 +100,6 @@ export function RecordPaymentModal({
     const ceiling = maxBalanceDue !== undefined ? maxBalanceDue : balanceDue
     if (ceiling > 0 && amt > ceiling) {
       setPaymentError(`Amount cannot exceed the remaining balance of ₹${ceiling.toLocaleString('en-IN')}.`)
-      return
-    }
-
-    if (paymentMethod !== 'cash' && !transactionId.trim()) {
-      setPaymentError('Transaction ID is required for non-cash payments.')
       return
     }
 
@@ -258,10 +254,9 @@ export function RecordPaymentModal({
             <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
               Date
             </label>
-            <Input
-              type="date"
+            <DateField
               value={paymentDate}
-              onChange={e => setPaymentDate(e.target.value)}
+              onChange={val => setPaymentDate(val)}
               className="h-9"
             />
           </div>
@@ -297,7 +292,7 @@ export function RecordPaymentModal({
           {paymentMethod !== 'cash' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                Transaction ID / Ref <span style={{ color: 'var(--color-danger)' }}>*</span>
+                Transaction ID / Ref (Optional)
               </label>
               <Input
                 type="text"

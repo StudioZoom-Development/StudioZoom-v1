@@ -401,34 +401,6 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
             >
               {saving ? 'Saving...' : 'Save'}
             </Button>
-
-            {/* Convert to booking button */}
-            <span
-              onClick={() => {
-                if (leadId) {
-                  router.push(`/clients/new?leadId=${leadId}`)
-                }
-              }}
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: '#ffffff',
-                cursor: leadId ? 'pointer' : 'default',
-                padding: '0 16px',
-                height: '36px',
-                borderRadius: '8px',
-                background: 'var(--color-primary)',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                userSelect: 'none',
-                opacity: leadId ? 1 : 0.6,
-                transition: 'opacity 0.15s ease',
-              }}
-            >
-              Convert to booking →
-            </span>
           </div>
         </div>
       </form>

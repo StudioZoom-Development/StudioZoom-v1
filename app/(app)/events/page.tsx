@@ -25,6 +25,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Badge } from '@/components/shared/Badge'
 import { Button } from '@/components/ui/button'
+import { DateField } from '@/components/shared/DateField'
 import { RecordPaymentModal } from '@/components/shared/RecordPaymentModal'
 import {
   PostProdRequirements,
@@ -4680,20 +4681,10 @@ function EventsBoardContent() {
                             <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
                               Designing Due Date <span style={{ color: 'var(--color-danger)' }}>*</span>
                             </label>
-                            <input
-                              type="date"
+                            <DateField
                               value={postProdSetupDueDates['photo_designing'] || defaultDateStr(10)}
-                              onChange={(e) => setPostProdSetupDueDates(prev => ({ ...prev, photo_designing: e.target.value }))}
-                              style={{
-                                width: '100%',
-                                padding: '6px 8px',
-                                borderRadius: '6px',
-                                background: 'var(--color-surface)',
-                                border: '0.5px solid var(--color-border)',
-                                color: 'var(--color-foreground)',
-                                fontSize: 'var(--text-xs)',
-                                outline: 'none',
-                              }}
+                              onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, photo_designing: val }))}
+                              className="h-8"
                             />
                           </div>
                         </div>
@@ -4777,20 +4768,10 @@ function EventsBoardContent() {
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
                                 Album Designing Due <span style={{ color: 'var(--color-danger)' }}>*</span>
                               </label>
-                              <input
-                                type="date"
+                              <DateField
                                 value={postProdSetupDueDates['album_designing'] || defaultDateStr(14)}
-                                onChange={(e) => setPostProdSetupDueDates(prev => ({ ...prev, album_designing: e.target.value }))}
-                                style={{
-                                  width: '100%',
-                                  padding: '6px 8px',
-                                  borderRadius: '6px',
-                                  background: 'var(--color-surface)',
-                                  border: '0.5px solid var(--color-border)',
-                                  color: 'var(--color-foreground)',
-                                  fontSize: 'var(--text-xs)',
-                                  outline: 'none',
-                                }}
+                                onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, album_designing: val }))}
+                                className="h-8"
                               />
                             </div>
 
@@ -4798,20 +4779,10 @@ function EventsBoardContent() {
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
                                 Creating Album Due <span style={{ color: 'var(--color-danger)' }}>*</span>
                               </label>
-                              <input
-                                type="date"
+                              <DateField
                                 value={postProdSetupDueDates['album_creating'] || defaultDateStr(21)}
-                                onChange={(e) => setPostProdSetupDueDates(prev => ({ ...prev, album_creating: e.target.value }))}
-                                style={{
-                                  width: '100%',
-                                  padding: '6px 8px',
-                                  borderRadius: '6px',
-                                  background: 'var(--color-surface)',
-                                  border: '0.5px solid var(--color-border)',
-                                  color: 'var(--color-foreground)',
-                                  fontSize: 'var(--text-xs)',
-                                  outline: 'none',
-                                }}
+                                onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, album_creating: val }))}
+                                className="h-8"
                               />
                             </div>
                           </div>
@@ -4895,20 +4866,10 @@ function EventsBoardContent() {
                             <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
                               Highlights Due Date <span style={{ color: 'var(--color-danger)' }}>*</span>
                             </label>
-                            <input
-                              type="date"
+                            <DateField
                               value={postProdSetupDueDates['video_highlights'] || defaultDateStr(12)}
-                              onChange={(e) => setPostProdSetupDueDates(prev => ({ ...prev, video_highlights: e.target.value }))}
-                              style={{
-                                width: '100%',
-                                padding: '6px 8px',
-                                borderRadius: '6px',
-                                background: 'var(--color-surface)',
-                                border: '0.5px solid var(--color-border)',
-                                color: 'var(--color-foreground)',
-                                fontSize: 'var(--text-xs)',
-                                outline: 'none',
-                              }}
+                              onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, video_highlights: val }))}
+                              className="h-8"
                             />
                           </div>
                         </div>
@@ -4991,20 +4952,10 @@ function EventsBoardContent() {
                             <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
                               Full Video Editing Due Date <span style={{ color: 'var(--color-danger)' }}>*</span>
                             </label>
-                            <input
-                              type="date"
+                            <DateField
                               value={postProdSetupDueDates['full_video_editing'] || defaultDateStr(25)}
-                              onChange={(e) => setPostProdSetupDueDates(prev => ({ ...prev, full_video_editing: e.target.value }))}
-                              style={{
-                                width: '100%',
-                                padding: '6px 8px',
-                                borderRadius: '6px',
-                                background: 'var(--color-surface)',
-                                border: '0.5px solid var(--color-border)',
-                                color: 'var(--color-foreground)',
-                                fontSize: 'var(--text-xs)',
-                                outline: 'none',
-                              }}
+                              onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, full_video_editing: val }))}
+                              className="h-8"
                             />
                           </div>
                         </div>

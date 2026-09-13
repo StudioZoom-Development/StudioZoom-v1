@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
 import { Badge } from '@/components/shared/Badge'
 import { useAuthStore } from '@/store/authStore'
 import {
@@ -1733,10 +1734,9 @@ export default function ClientDetailPage() {
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
                   Date
                 </label>
-                <Input
-                  type="date"
+                <DateField
                   value={editDate}
-                  onChange={e => setEditDate(e.target.value)}
+                  onChange={val => setEditDate(val)}
                   className="h-9"
                 />
               </div>

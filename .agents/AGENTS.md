@@ -224,10 +224,14 @@ Font is ALWAYS `var(--font-inter)`. Do not use Tailwind font utilities.
 ### Shared components — reuse, never recreate
 
 From `/components/shared/`:
+- `DateField.tsx` — ALL date inputs across the application (custom theme popover calendar; never use native `<input type="date">`)
+- `TimeField.tsx` — ALL time inputs across the application (custom theme popover clock with AM/PM, hours, minutes, and presets; never use native `<input type="time">`)
 - `Badge.tsx` — all stage/status/payment pills
 - `EmptyState.tsx` — empty list states
 - `ConfirmModal.tsx` — destructive confirmation dialogs
 - `LoadingSkeleton.tsx` — (Skeleton + TableRowSkeleton) loading placeholders
+- `EditClientModal.tsx` — client & booking edit modal (single day, multi-date, and recurring schedule)
+- `RecordPaymentModal.tsx` — payment recording modal
 
 ### shadcn components — these only:
 ```typescript
@@ -337,6 +341,8 @@ import { Timeline }        from '@/components/ui/timeline'           // events c
 ### What is NEVER built from component libraries
 - Tables → plain `<table>` with inline CSS tokens
 - Badges / pills → `<Badge variant="..." />` from `/components/shared/Badge.tsx`
+- Date pickers → `<DateField value={...} onChange={...} />` from `/components/shared/DateField.tsx` (never use native `<input type="date">`)
+- Time pickers → `<TimeField value={...} onChange={...} />` from `/components/shared/TimeField.tsx` (never use native `<input type="time">`)
 - Avatars / initials → hand-built `<div>` circles with `var(--color-primary-muted)`
 - Kanban cards → plain `<div>` with `var(--color-surface)` and `var(--color-border)`
 - Calendar grid → hand-built with `var(--color-surface-raised)` cells

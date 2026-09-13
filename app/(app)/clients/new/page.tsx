@@ -212,16 +212,27 @@ function NewBookingPageContent(): React.JSX.Element {
           return false
         }
         break
-      case 1:
+      case 1: {
         if (!state.clientName.trim()) {
           setError('Please enter the client name')
           return false
         }
-        if (!state.contact.trim()) {
-          setError('Please enter a contact number')
+        const contactDigits = state.contact.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '')
+        if (!contactDigits) {
+          setError('Contact number is mandatory')
+          return false
+        }
+        if (contactDigits.length !== 10) {
+          setError('Contact number must be exactly 10 digits')
+          return false
+        }
+        const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/
+        if (state.email.trim() && !EMAIL_REGEX.test(state.email.trim())) {
+          setError('Please enter a valid email address')
           return false
         }
         break
+      }
       case 2:
         if (!state.eventName.trim()) {
           setError('Please enter an event name')
@@ -521,8 +532,8 @@ function NewBookingPageContent(): React.JSX.Element {
         <div style={{
           flex: 1,
           padding: '24px 32px',
-          maxWidth: '720px',
-          overflow: 'hidden',
+          maxWidth: '860px',
+          overflow: 'visible',
           position: 'relative',
         }}>
           {/* Error banner */}

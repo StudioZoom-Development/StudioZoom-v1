@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/shared/LoadingSkeleton'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
@@ -1346,11 +1347,10 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
                   Paid Date *
                 </label>
-                <Input
-                  type="date"
-                  required
+                <DateField
                   value={payoutDate}
-                  onChange={e => setPayoutDate(e.target.value)}
+                  onChange={val => setPayoutDate(val)}
+                  className="h-9"
                 />
               </div>
 

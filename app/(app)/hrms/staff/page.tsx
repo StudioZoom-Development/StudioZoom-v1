@@ -139,7 +139,7 @@ export default function StaffListPage() {
                 padding: '12px 16px',
                 borderBottom: '0.5px solid var(--color-border-strong)'
               }}>
-                ROLE
+                JOB TITLE
               </th>
               <th style={{
                 textAlign: 'left',

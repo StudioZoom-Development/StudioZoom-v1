@@ -6,6 +6,7 @@ import { format, parseISO, isValid } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
+import { useRole } from '@/hooks/useAuth'
 
 import {
   StaffMember,
@@ -98,6 +99,9 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   const resolvedParams = use(params)
   const uid = resolvedParams.id
   const router = useRouter()
+
+  const { isAdmin, isManager } = useRole()
+  const canViewHours = isAdmin || isManager
 
   const [staff, setStaff] = useState<StaffMember | null>(null)
   const [loading, setLoading] = useState(true)
@@ -315,10 +319,10 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
             />
           </div>
 
-          {/* Role */}
+          {/* Job title */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Role
+              Job title
             </label>
             <Input
               value={form.jobTitle}
@@ -398,7 +402,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
           {/* Tab 1: Attendance */}
           {activeTab === 'attendance' && (
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: canViewHours ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: '10px' }}>
                 
                 {/* Present */}
                 <div style={{
@@ -457,24 +461,26 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                   </span>
                 </div>
 
-                {/* Hours */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '2px',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '10px',
-                  padding: '12px 4px'
-                }}>
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                    {Math.floor((attData?.totalMinutes ?? 9600) / 60)}h
-                  </span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Hours
-                  </span>
-                </div>
+                {/* Hours — only shown in admin/manager login */}
+                {canViewHours && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '10px',
+                    padding: '12px 4px'
+                  }}>
+                    <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                      {Math.floor((attData?.totalMinutes ?? 9600) / 60)}h
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                      Hours
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
