@@ -351,9 +351,15 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                     +91
                   </span>
                   <input
-                    placeholder="98400 12345"
-                    value={state.contact.replace(/^\+91/, '')}
-                    onChange={e => dispatch({ type: 'SET_FIELD', field: 'contact', value: e.target.value })}
+                    placeholder="9840012345"
+                    value={state.contact.replace(/^\+91\s*/, '')}
+                    maxLength={10}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      dispatch({ type: 'SET_FIELD', field: 'contact', value: digits ? `+91 ${digits}` : '' })
+                    }}
                     style={{
                       fontFamily: 'var(--font-inter)',
                       flex: 1,

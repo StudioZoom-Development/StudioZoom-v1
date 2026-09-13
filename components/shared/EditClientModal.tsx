@@ -1,11 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { format } from 'date-fns'
+import { useState, useMemo } from 'react'
+import { format, addMonths } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
+import { TimeField } from '@/components/shared/TimeField'
 import { Client, EventType, BookingType } from '@/types'
 import { updateClient } from '@/lib/firebase/queries/clients'
+import { computeRecurringSessionDates } from '@/lib/utils/dates'
 import { useAuthStore } from '@/store/authStore'
 
 interface EditClientModalProps {
@@ -86,6 +89,68 @@ function EditClientModalInner({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Recurring Schedule State
+  const [frequency, setFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>(
+    client.recurringSchedule?.frequency || 'weekly'
+  )
+  const [recurringStartDate, setRecurringStartDate] = useState<string>(() => {
+    if (client.recurringSchedule?.startDate) {
+      return format(new Date(client.recurringSchedule.startDate), 'yyyy-MM-dd')
+    }
+    if (client.eventDate) {
+      return format(new Date(client.eventDate), 'yyyy-MM-dd')
+    }
+    return format(new Date(), 'yyyy-MM-dd')
+  })
+  const [recurringEndDate, setRecurringEndDate] = useState<string>(() => {
+    if (client.recurringSchedule?.endDate) {
+      return format(new Date(client.recurringSchedule.endDate), 'yyyy-MM-dd')
+    }
+    return format(addMonths(new Date(), 3), 'yyyy-MM-dd')
+  })
+  const [totalSessions, setTotalSessions] = useState<number>(
+    client.recurringSchedule?.totalSessions || 12
+  )
+  const [sessionStartTime, setSessionStartTime] = useState<string>(
+    client.recurringSchedule?.sessionStartTime || client.startTime || '09:00'
+  )
+  const [sessionEndTime, setSessionEndTime] = useState<string>(
+    client.recurringSchedule?.sessionEndTime || client.endTime || '18:00'
+  )
+  const [perSessionRate, setPerSessionRate] = useState<string>(
+    client.recurringSchedule?.perSessionRate ? String(client.recurringSchedule.perSessionRate) : ''
+  )
+  const [paymentType, setPaymentType] = useState<'perSession' | 'custom'>(
+    client.recurringSchedule?.paymentType || 'perSession'
+  )
+
+  const recurringPreviewSessions = useMemo(() => {
+    if (bookingType !== 'recurring') return []
+    return computeRecurringSessionDates(
+      frequency,
+      recurringStartDate,
+      totalSessions,
+      sessionStartTime,
+      sessionEndTime
+    )
+  }, [bookingType, frequency, recurringStartDate, totalSessions, sessionStartTime, sessionEndTime])
+
+  const handleBookingTypeChange = (newType: BookingType) => {
+    setBookingType(newType)
+    if (newType === 'multiDate' && eventDates.length === 0) {
+      setEventDates([
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          label: 'Day 1',
+          date: eventDate || format(new Date(), 'yyyy-MM-dd'),
+          location: location || '',
+          startTime: startTime || '09:00',
+          endTime: endTime || '18:00',
+        },
+      ])
+    }
+  }
+
   const handleAddDate = () => {
     setEventDates(prev => [
       ...prev,
@@ -136,6 +201,8 @@ function EditClientModalInner({
       const parsedTotal = parseFloat(totalAmount) || 0
       const primaryEventDate = bookingType === 'multiDate' && eventDates.length > 0
         ? new Date(eventDates[0].date)
+        : bookingType === 'recurring' && recurringStartDate
+        ? new Date(recurringStartDate)
         : new Date(eventDate || new Date())
 
       await updateClient(
@@ -147,8 +214,8 @@ function EditClientModalInner({
           eventName,
           eventType,
           customEventType: eventType === 'other' ? customEventType.trim() : '',
-          startTime,
-          endTime,
+          startTime: bookingType === 'recurring' ? sessionStartTime : startTime,
+          endTime: bookingType === 'recurring' ? sessionEndTime : endTime,
           location,
           notes,
           packageType,
@@ -157,6 +224,16 @@ function EditClientModalInner({
           bookingType,
           eventDate: primaryEventDate,
           eventDates: bookingType === 'multiDate' ? eventDates : [],
+          recurringSchedule: bookingType === 'recurring' ? {
+            frequency,
+            startDate: new Date(recurringStartDate),
+            endDate: new Date(recurringEndDate),
+            totalSessions: Number(totalSessions) || 1,
+            perSessionRate: parseFloat(perSessionRate) || 0,
+            paymentType,
+            sessionStartTime,
+            sessionEndTime,
+          } : undefined,
         },
         appUser?.uid || 'system'
       )
@@ -191,7 +268,7 @@ function EditClientModalInner({
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '720px',
+          maxWidth: '820px',
           maxHeight: '90vh',
           background: 'var(--color-surface-overlay)',
           border: '0.5px solid var(--color-border)',
@@ -312,7 +389,7 @@ function EditClientModalInner({
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Booking Format</label>
                 <select
                   value={bookingType}
-                  onChange={e => setBookingType(e.target.value as BookingType)}
+                  onChange={e => handleBookingTypeChange(e.target.value as BookingType)}
                   style={{
                     fontFamily: 'var(--font-inter)',
                     height: '36px',
@@ -345,15 +422,15 @@ function EditClientModalInner({
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Event Date</label>
-                  <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="h-9 mt-1" />
+                  <DateField value={eventDate} onChange={val => setEventDate(val)} className="h-9 mt-1" />
                 </div>
                 <div>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Start Time</label>
-                  <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="h-9 mt-1" />
+                  <TimeField value={startTime} onChange={val => setStartTime(val)} className="h-9 mt-1" />
                 </div>
                 <div>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>End Time</label>
-                  <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="h-9 mt-1" />
+                  <TimeField value={endTime} onChange={val => setEndTime(val)} className="h-9 mt-1" align="right" />
                 </div>
               </div>
             ) : bookingType === 'multiDate' ? (
@@ -381,12 +458,33 @@ function EditClientModalInner({
                   </button>
                 </div>
 
+                {eventDates.length > 0 && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1.1fr 140px 115px 115px 1fr 32px',
+                    gap: '8px',
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--color-foreground-subtle)',
+                  }}>
+                    <span>LABEL</span>
+                    <span>DATE</span>
+                    <span>START</span>
+                    <span>END</span>
+                    <span>VENUE / LOCATION</span>
+                    <span></span>
+                  </div>
+                )}
+
                 {eventDates.map((ed, idx) => (
                   <div
                     key={ed.id}
                     style={{
+                      position: 'relative',
+                      zIndex: eventDates.length - idx + 10,
                       display: 'grid',
-                      gridTemplateColumns: '1.2fr 130px 96px 96px 1fr 32px',
+                      gridTemplateColumns: '1.1fr 140px 115px 115px 1fr 32px',
                       gap: '8px',
                       alignItems: 'center',
                       background: 'var(--color-surface-raised)',
@@ -401,23 +499,21 @@ function EditClientModalInner({
                       placeholder={`Event ${idx + 1}`}
                       className="h-8 text-xs"
                     />
-                    <Input
-                      type="date"
+                    <DateField
                       value={ed.date}
-                      onChange={e => handleUpdateDate(ed.id, 'date', e.target.value)}
+                      onChange={val => handleUpdateDate(ed.id, 'date', val)}
                       className="h-8 text-xs"
                     />
-                    <Input
-                      type="time"
+                    <TimeField
                       value={ed.startTime || '09:00'}
-                      onChange={e => handleUpdateDate(ed.id, 'startTime', e.target.value)}
+                      onChange={val => handleUpdateDate(ed.id, 'startTime', val)}
                       className="h-8 text-xs"
                     />
-                    <Input
-                      type="time"
+                    <TimeField
                       value={ed.endTime || '18:00'}
-                      onChange={e => handleUpdateDate(ed.id, 'endTime', e.target.value)}
+                      onChange={val => handleUpdateDate(ed.id, 'endTime', val)}
                       className="h-8 text-xs"
+                      align="right"
                     />
                     <Input
                       value={ed.location}
@@ -440,6 +536,171 @@ function EditClientModalInner({
                     </button>
                   </div>
                 ))}
+              </div>
+            ) : bookingType === 'recurring' ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                background: 'var(--color-surface-raised)',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '0.5px solid var(--color-border)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="ti ti-repeat" style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
+                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-foreground)' }}>
+                    Recurring Schedule &amp; Timings
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Frequency</label>
+                    <select
+                      value={frequency}
+                      onChange={e => setFrequency(e.target.value as 'weekly' | 'biweekly' | 'monthly')}
+                      style={{
+                        height: '36px',
+                        width: '100%',
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '8px',
+                        padding: '0 10px',
+                        fontSize: 'var(--text-sm)',
+                        color: 'var(--color-foreground)',
+                        marginTop: '4px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Bi-weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Start Date</label>
+                    <DateField value={recurringStartDate} onChange={val => setRecurringStartDate(val)} className="h-9 mt-1" />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>End Date</label>
+                    <DateField value={recurringEndDate} onChange={val => setRecurringEndDate(val)} className="h-9 mt-1" align="right" />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Total Sessions</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="12"
+                      value={totalSessions > 0 ? String(totalSessions) : ''}
+                      onChange={e => setTotalSessions(parseInt(e.target.value) || 0)}
+                      className="h-9 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Session Start Time</label>
+                    <TimeField value={sessionStartTime} onChange={val => setSessionStartTime(val)} className="h-9 mt-1" />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Session End Time</label>
+                    <TimeField value={sessionEndTime} onChange={val => setSessionEndTime(val)} className="h-9 mt-1" align="right" />
+                  </div>
+                </div>
+
+                {/* Per Session Rate & Payment Type */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Per-Session Rate (₹)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 5000"
+                      value={perSessionRate}
+                      onChange={e => {
+                        setPerSessionRate(e.target.value)
+                        const rate = parseFloat(e.target.value) || 0
+                        if (paymentType === 'perSession' && rate > 0) {
+                          setTotalAmount(String(rate * (totalSessions || 1)))
+                        }
+                      }}
+                      className="h-9 mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Payment Type</label>
+                    <select
+                      value={paymentType}
+                      onChange={e => setPaymentType(e.target.value as 'perSession' | 'custom')}
+                      style={{
+                        height: '36px',
+                        width: '100%',
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '8px',
+                        padding: '0 10px',
+                        fontSize: 'var(--text-sm)',
+                        color: 'var(--color-foreground)',
+                        marginTop: '4px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="perSession">Per Session Billing</option>
+                      <option value="custom">Fixed Contract Amount</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Scheduled Sessions Preview */}
+                {recurringPreviewSessions.length > 0 && (
+                  <div style={{
+                    marginTop: '4px',
+                    padding: '10px 12px',
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    maxHeight: '140px',
+                    overflowY: 'auto',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-subtle)', textTransform: 'uppercase' }}>
+                        Scheduled Sessions ({recurringPreviewSessions.length})
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>
+                        {frequency === 'weekly' ? 'Every week' : frequency === 'biweekly' ? 'Every 2 weeks' : 'Every month'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '6px' }}>
+                      {recurringPreviewSessions.map(s => (
+                        <div key={s.sessionNumber} style={{
+                          padding: '6px 8px',
+                          background: 'var(--color-surface-raised)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          fontSize: 'var(--text-xs)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                        }}>
+                          <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                            {s.label} · {s.displayDate}
+                          </span>
+                          <span style={{ color: 'var(--color-foreground-subtle)', fontSize: '10px' }}>
+                            {s.dayOfWeek} · {s.startTime} - {s.endTime}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>

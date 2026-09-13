@@ -17,12 +17,14 @@ import {
 } from 'date-fns'
 
 export interface DateFieldProps {
-  value: string // ISO string "YYYY-MM-DD"
+  value: string // 'yyyy-MM-dd' or empty
   onChange: (isoDate: string) => void
   placeholder?: string
   disabled?: boolean
   className?: string
   style?: React.CSSProperties
+  align?: 'left' | 'right' | 'auto'
+  allowEmpty?: boolean
 }
 
 export function DateField({
@@ -32,17 +34,19 @@ export function DateField({
   disabled = false,
   className = '',
   style,
+  align = 'auto',
+  allowEmpty = false,
 }: DateFieldProps) {
-  // Compute initial today date if value is empty
+  // Compute initial today date if value is empty and allowEmpty is false
   const getTodayISO = () => format(new Date(), 'yyyy-MM-dd')
-  const effectiveISO = value || getTodayISO()
+  const effectiveISO = value || (allowEmpty ? '' : getTodayISO())
 
-  // Make sure parent is notified of initial today date if empty
+  // Make sure parent is notified of initial today date if empty and required
   useEffect(() => {
-    if (!value) {
+    if (!value && !allowEmpty) {
       onChange(getTodayISO())
     }
-  }, [value, onChange])
+  }, [value, onChange, allowEmpty])
 
   const parseCurrentDate = (isoStr: string): Date => {
     if (!isoStr) return new Date()
@@ -55,16 +59,51 @@ export function DateField({
   // Track prop changes for render-time sync
   const [prevISO, setPrevISO] = useState(effectiveISO)
   const [viewDate, setViewDate] = useState<Date>(() => parseCurrentDate(effectiveISO))
-  const [inputText, setInputText] = useState<string>(() => formatDisplay(parseCurrentDate(effectiveISO)))
+  const [inputText, setInputText] = useState<string>(() => (effectiveISO ? formatDisplay(parseCurrentDate(effectiveISO)) : ''))
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [autoAlign, setAutoAlign] = useState<'left' | 'right'>('left')
+  const effectiveAlign: 'left' | 'right' = align === 'right' || align === 'left' ? align : autoAlign
+
+  useEffect(() => {
+    if (align !== 'auto') return
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const viewportOverflow = rect.left + 290 > window.innerWidth - 16
+      const inRightHalf = rect.left > window.innerWidth * 0.52
+
+      let parentOverflow = false
+      let el: HTMLElement | null = containerRef.current.parentElement
+      while (el && el !== document.body) {
+        const cs = window.getComputedStyle(el)
+        if (cs.maxWidth || cs.overflow === 'hidden' || cs.overflowX === 'hidden') {
+          const pRect = el.getBoundingClientRect()
+          if (rect.left + 280 > pRect.right - 8) {
+            parentOverflow = true
+            break
+          }
+        }
+        el = el.parentElement
+      }
+
+      if (viewportOverflow || parentOverflow || inRightHalf) {
+        setAutoAlign('right')
+      } else {
+        setAutoAlign('left')
+      }
+    }
+  }, [isOpen, align])
 
   // Sync state during render when prop changes
   if (effectiveISO !== prevISO) {
     setPrevISO(effectiveISO)
-    const d = parseCurrentDate(effectiveISO)
-    setInputText(formatDisplay(d))
-    setViewDate(d)
+    if (effectiveISO) {
+      const d = parseCurrentDate(effectiveISO)
+      setInputText(formatDisplay(d))
+      setViewDate(d)
+    } else {
+      setInputText('')
+    }
   }
 
   const selectedDate = parseCurrentDate(effectiveISO)
@@ -168,9 +207,10 @@ export function DateField({
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
-            left: 0,
-            zIndex: 100,
+            ...(effectiveAlign === 'right' ? { right: 0 } : { left: 0 }),
+            zIndex: 9999,
             width: '280px',
+            maxWidth: 'calc(100vw - 32px)',
             background: 'var(--color-surface-overlay)',
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px',

@@ -206,3 +206,40 @@ export async function adminDisableUser(uid: string): Promise<boolean> {
 
   return true
 }
+
+export async function adminGetUserByEmail(email: string): Promise<{ uid: string; email: string } | null> {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+  if (!apiKey) throw new Error('NEXT_PUBLIC_FIREBASE_API_KEY env var is required')
+
+  try {
+    const accessToken = await getAccessToken()
+
+    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        email: [email.trim()],
+      }),
+    })
+
+    if (!res.ok) {
+      return null
+    }
+
+    const data = await res.json() as { users?: Array<{ localId?: string; email?: string }> }
+    if (data.users && data.users.length > 0 && data.users[0].localId) {
+      return {
+        uid: data.users[0].localId,
+        email: data.users[0].email || email,
+      }
+    }
+  } catch (err) {
+    console.warn('[adminGetUserByEmail] Lookup failed:', err)
+  }
+
+  return null
+}
+

@@ -33,6 +33,38 @@ export interface NewStaffInput {
   baseSalary: number
 }
 
+function mapUserDocToStaffMember(id: string, data: Record<string, unknown>): StaffMember {
+  const isActive = data.isActive !== undefined
+    ? Boolean(data.isActive)
+    : data.status !== undefined
+      ? data.status === 'active'
+      : true
+
+  const baseSalary = data.baseSalary !== undefined
+    ? Number(data.baseSalary)
+    : data.monthlySalary !== undefined
+      ? Number(data.monthlySalary)
+      : undefined
+
+  let joinDate: Date | undefined = undefined
+  if (data.joinDate instanceof Timestamp) {
+    joinDate = data.joinDate.toDate()
+  } else if (data.joinDate && typeof data.joinDate === 'string' && !isNaN(new Date(data.joinDate).getTime())) {
+    joinDate = new Date(data.joinDate)
+  }
+
+  return {
+    ...data,
+    uid: id,
+    isActive,
+    baseSalary,
+    jobTitle: typeof data.jobTitle === 'string' ? data.jobTitle : '',
+    joinDate,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt as string | number | Date) : undefined,
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt as string | number | Date) : undefined,
+  } as unknown as StaffMember
+}
+
 /** Real-time list — staff + managers, alphabetical */
 export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () => void {
   const q = query(
@@ -42,16 +74,7 @@ export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () =
   return onSnapshot(q, snap => {
     const list = snap.docs
       .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
-      .map(d => {
-        const data = d.data()
-        return {
-          ...data,
-          uid: d.id,
-          joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
-          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-        } as StaffMember
-      })
+      .map(d => mapUserDocToStaffMember(d.id, d.data()))
     // In-memory sort by name (alphabetical)
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)
@@ -69,16 +92,7 @@ export function subscribeToStaffOnly(callback: (staff: StaffMember[]) => void): 
   return onSnapshot(q, snap => {
     const list = snap.docs
       .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
-      .map(d => {
-        const data = d.data()
-        return {
-          ...data,
-          uid: d.id,
-          joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
-          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-        } as StaffMember
-      })
+      .map(d => mapUserDocToStaffMember(d.id, d.data()))
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)
   }, err => {
@@ -95,16 +109,7 @@ export function subscribeToAllTeamMembers(callback: (staff: StaffMember[]) => vo
   return onSnapshot(q, snap => {
     const list = snap.docs
       .filter(d => !d.data().isDeleted)
-      .map(d => {
-        const data = d.data()
-        return {
-          ...data,
-          uid: d.id,
-          joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
-          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
-          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-        } as StaffMember
-      })
+      .map(d => mapUserDocToStaffMember(d.id, d.data()))
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     callback(list)
   })
@@ -114,14 +119,7 @@ export function subscribeToAllTeamMembers(callback: (staff: StaffMember[]) => vo
 export async function getStaffMember(uid: string): Promise<StaffMember | null> {
   const snap = await getDoc(doc(db, 'users', uid))
   if (!snap.exists()) return null
-  const data = snap.data()
-  return {
-    ...data,
-    uid: snap.id,
-    joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
-    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-  } as StaffMember
+  return mapUserDocToStaffMember(snap.id, snap.data())
 }
 
 /** Update profile fields */
@@ -141,10 +139,10 @@ export async function updateStaffProfile(
 
 /** Soft deactivate / reactivate */
 export async function deactivateStaff(uid: string): Promise<void> {
-  await updateDoc(doc(db, 'users', uid), { isActive: false, updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, 'users', uid), { isActive: false, status: 'inactive', updatedAt: serverTimestamp() })
 }
 export async function reactivateStaff(uid: string): Promise<void> {
-  await updateDoc(doc(db, 'users', uid), { isActive: true, updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, 'users', uid), { isActive: true, status: 'active', updatedAt: serverTimestamp() })
 }
 
 /** Add staff — writes Firestore only (Auth user creation requires Admin SDK/Cloud Function) */
@@ -159,6 +157,7 @@ export async function addStaffMember(data: NewStaffInput): Promise<string> {
     role:       data.role,
     joinDate:   data.joinDate ? Timestamp.fromDate(new Date(data.joinDate)) : serverTimestamp(),
     baseSalary: data.baseSalary,
+    status:     'active',
     isActive:   true,
     photoURL:   null,
     createdAt:  serverTimestamp(),

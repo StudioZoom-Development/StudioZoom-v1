@@ -3,6 +3,8 @@
 import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
+import { TimeField } from '@/components/shared/TimeField'
 import { EventType } from '@/types'
 import { BookingWizardState, BookingAction } from '../bookingReducer'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
@@ -234,10 +236,9 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             }}>
               Event date <span style={{ color: 'var(--color-danger)' }}>*</span>
             </label>
-            <Input
-              type="date"
+            <DateField
               value={state.eventDate}
-              onChange={e => dispatch({ type: 'SET_FIELD', field: 'eventDate', value: e.target.value })}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'eventDate', value: val })}
               className="h-9"
             />
           </div>
@@ -250,10 +251,9 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             }}>
               Start time
             </label>
-            <Input
-              type="time"
+            <TimeField
               value={state.startTime}
-              onChange={e => dispatch({ type: 'SET_FIELD', field: 'startTime', value: e.target.value })}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'startTime', value: val })}
               className="h-9"
             />
           </div>
@@ -266,11 +266,11 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             }}>
               End time
             </label>
-            <Input
-              type="time"
+            <TimeField
               value={state.endTime}
-              onChange={e => dispatch({ type: 'SET_FIELD', field: 'endTime', value: e.target.value })}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'endTime', value: val })}
               className="h-9"
+              align="right"
             />
           </div>
         </div>
@@ -298,11 +298,14 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
-                style={{ overflow: 'hidden' }}
+                style={{
+                  position: 'relative',
+                  zIndex: state.eventDates.length - idx + 10,
+                }}
               >
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '1.2fr 130px 96px 96px 1fr 36px',
+                  gridTemplateColumns: '1.2fr 150px 125px 125px 1fr 36px',
                   gap: '8px',
                   alignItems: 'end',
                   paddingBottom: '8px',
@@ -342,14 +345,13 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                         Date
                       </label>
                     )}
-                    <Input
-                      type="date"
+                    <DateField
                       value={ed.date}
-                      onChange={e => dispatch({
+                      onChange={val => dispatch({
                         type: 'UPDATE_EVENT_DATE',
                         id: ed.id,
                         field: 'date',
-                        value: e.target.value,
+                        value: val,
                       })}
                       className="h-9"
                     />
@@ -366,14 +368,13 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                         Start
                       </label>
                     )}
-                    <Input
-                      type="time"
+                    <TimeField
                       value={ed.startTime || '09:00'}
-                      onChange={e => dispatch({
+                      onChange={val => dispatch({
                         type: 'UPDATE_EVENT_DATE',
                         id: ed.id,
                         field: 'startTime',
-                        value: e.target.value,
+                        value: val,
                       })}
                       className="h-9"
                     />
@@ -390,16 +391,16 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                         End
                       </label>
                     )}
-                    <Input
-                      type="time"
+                    <TimeField
                       value={ed.endTime || '18:00'}
-                      onChange={e => dispatch({
+                      onChange={val => dispatch({
                         type: 'UPDATE_EVENT_DATE',
                         id: ed.id,
                         field: 'endTime',
-                        value: e.target.value,
+                        value: val,
                       })}
                       className="h-9"
+                      align="right"
                     />
                   </div>
 
@@ -535,10 +536,9 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               }}>
                 Start date
               </label>
-              <Input
-                type="date"
+              <DateField
                 value={state.startDate}
-                onChange={e => handleStartDateChange(e.target.value)}
+                onChange={handleStartDateChange}
                 className="h-9"
               />
             </div>
@@ -552,11 +552,11 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               }}>
                 End date
               </label>
-              <Input
-                type="date"
+              <DateField
                 value={state.endDate}
-                onChange={e => handleEndDateChange(e.target.value)}
+                onChange={handleEndDateChange}
                 className="h-9"
+                align="right"
               />
             </div>
           </div>
@@ -590,10 +590,9 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               }}>
                 Session start time
               </label>
-              <Input
-                type="time"
+              <TimeField
                 value={state.sessionStartTime}
-                onChange={e => dispatch({ type: 'SET_FIELD', field: 'sessionStartTime', value: e.target.value })}
+                onChange={val => dispatch({ type: 'SET_FIELD', field: 'sessionStartTime', value: val })}
                 className="h-9"
               />
             </div>
@@ -607,11 +606,11 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
               }}>
                 Session end time
               </label>
-              <Input
-                type="time"
+              <TimeField
                 value={state.sessionEndTime}
-                onChange={e => dispatch({ type: 'SET_FIELD', field: 'sessionEndTime', value: e.target.value })}
+                onChange={val => dispatch({ type: 'SET_FIELD', field: 'sessionEndTime', value: val })}
                 className="h-9"
+                align="right"
               />
             </div>
           </div>

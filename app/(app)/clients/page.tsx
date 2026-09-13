@@ -13,8 +13,8 @@ import { Badge } from '@/components/shared/Badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EditClientModal } from '@/components/shared/EditClientModal'
+import { DateField } from '@/components/shared/DateField'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
-import { computeRecurringSessionDates } from '@/lib/utils/dates'
 import { computeEventProgression } from '@/lib/services/eventProgressionService'
 import { RecurringBadge, MultiDateBadge } from '@/components/shared/BookingTypeBadge'
 import { Client, Project, Freelancer } from '@/types'
@@ -47,20 +47,6 @@ const SELECT_STYLE: React.CSSProperties = {
   color:        'var(--color-foreground)',
   outline:      'none',
   cursor:       'pointer',
-}
-
-const DATE_INPUT_STYLE: React.CSSProperties = {
-  fontFamily:   'var(--font-inter)',
-  height:       '36px',
-  background:   'var(--color-surface-raised)',
-  border:       '0.5px solid var(--color-border)',
-  borderRadius: '8px',
-  padding:      '0 8px',
-  fontSize:     'var(--text-sm)',
-  color:        'var(--color-foreground)',
-  outline:      'none',
-  cursor:       'pointer',
-  boxSizing:    'border-box',
 }
 
 type SortField = 'client' | 'eventType' | 'eventDate' | 'stage' | 'balanceDue'
@@ -121,8 +107,6 @@ export default function ClientsPage() {
   const [deleting,     setDeleting]     = useState(false)
   const [page,         setPage]         = useState(1)
   const [pageSize,     setPageSize]     = useState(10)
-  const fromDateRef = useRef<HTMLInputElement>(null)
-  const toDateRef   = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const unsubProj = subscribeToProjects(data => setProjects(data || []))
@@ -380,42 +364,25 @@ export default function ClientsPage() {
         </select>
 
         {/* Event Date Range Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-surface)', padding: '0 4px', borderRadius: '8px', border: '0.5px solid var(--color-border)' }}>
-          <div
-            onClick={() => { try { fromDateRef.current?.showPicker?.() } catch { fromDateRef.current?.focus() } }}
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-          >
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500, paddingLeft: '4px', userSelect: 'none' }}>From:</span>
-            <input
-              ref={fromDateRef}
-              type="date"
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ width: '145px' }}>
+            <DateField
               value={fromDate}
-              onChange={e => { setFromDate(e.target.value); setPage(1) }}
-              onClick={e => {
-                e.stopPropagation()
-                try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch {}
-              }}
-              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent', cursor: 'pointer' }}
-              title="Filter events from date"
+              onChange={val => { setFromDate(val); setPage(1) }}
+              allowEmpty
+              placeholder="From date"
+              className="h-9"
             />
           </div>
-          <div style={{ width: '1px', height: '20px', background: 'var(--color-border)' }} />
-          <div
-            onClick={() => { try { toDateRef.current?.showPicker?.() } catch { toDateRef.current?.focus() } }}
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-          >
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500, userSelect: 'none' }}>To:</span>
-            <input
-              ref={toDateRef}
-              type="date"
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>to</span>
+          <div style={{ width: '145px' }}>
+            <DateField
               value={toDate}
-              onChange={e => { setToDate(e.target.value); setPage(1) }}
-              onClick={e => {
-                e.stopPropagation()
-                try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch {}
-              }}
-              style={{ ...DATE_INPUT_STYLE, border: 'none', background: 'transparent', cursor: 'pointer' }}
-              title="Filter events to date"
+              onChange={val => { setToDate(val); setPage(1) }}
+              allowEmpty
+              placeholder="To date"
+              className="h-9"
+              align="right"
             />
           </div>
         </div>

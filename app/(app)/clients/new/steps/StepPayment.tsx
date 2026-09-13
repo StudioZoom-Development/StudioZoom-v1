@@ -1,6 +1,7 @@
 'use client'
 
 import { Input } from '@/components/ui/input'
+import { DateField } from '@/components/shared/DateField'
 import { BookingWizardState, BookingAction } from '../bookingReducer'
 
 const SELECT_STYLE: React.CSSProperties = {
@@ -83,10 +84,9 @@ export default function StepPayment({ state, dispatch }: StepPaymentProps): Reac
             }}>
               Advance date
             </label>
-            <Input
-              type="date"
+            <DateField
               value={state.advanceDate}
-              onChange={e => dispatch({ type: 'SET_FIELD', field: 'advanceDate', value: e.target.value })}
+              onChange={val => dispatch({ type: 'SET_FIELD', field: 'advanceDate', value: val })}
               className="h-9"
             />
           </div>
