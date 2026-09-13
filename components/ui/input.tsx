@@ -3,10 +3,13 @@ import * as React from 'react'
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className = '', style, ...props }, ref) => {
+  ({ className = '', style, type, onClick, ...props }, ref) => {
+    const isPickerType = type === 'date' || type === 'time' || type === 'datetime-local'
+
     return (
       <input
         ref={ref}
+        type={type}
         className={`flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
         style={{
           fontFamily: 'var(--font-inter)',
@@ -18,7 +21,18 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           fontSize: 'var(--text-sm)',
           color: 'var(--color-foreground)',
           outline: 'none',
+          cursor: isPickerType ? 'pointer' : undefined,
           ...style,
+        }}
+        onClick={(e) => {
+          if (isPickerType) {
+            try {
+              e.currentTarget.showPicker?.()
+            } catch {
+              // fallback if showPicker not supported
+            }
+          }
+          onClick?.(e)
         }}
         {...props}
       />

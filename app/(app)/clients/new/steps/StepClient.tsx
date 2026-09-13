@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { Client } from '@/types'
@@ -17,6 +17,30 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
   const [allClients, setAllClients] = useState<Client[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [showResults, setShowResults] = useState(false)
+  const [contactTouched, setContactTouched] = useState(false)
+  const [emailTouched, setEmailTouched] = useState(false)
+
+  const rawContactDigits = state.contact.replace(/\D/g, '')
+
+  const contactError = useMemo(() => {
+    if (!contactTouched && !rawContactDigits) return ''
+    if (contactTouched && !rawContactDigits) return 'Contact number is required'
+    if (rawContactDigits.length > 0 && rawContactDigits.length !== 10) {
+      return 'Contact number must be exactly 10 digits'
+    }
+    return ''
+  }, [contactTouched, rawContactDigits])
+
+  const emailError = useMemo(() => {
+    if (!state.email) return ''
+    const trimmed = state.email.trim()
+    if (!trimmed) return ''
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z0-9.-]*[cC][oO][mM]$/
+    if (!emailRegex.test(trimmed)) {
+      return 'Email must be a valid address ending with .com'
+    }
+    return ''
+  }, [state.email])
 
   // Subscribe to all clients for search
   useEffect(() => {
@@ -324,7 +348,7 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
             </div>
 
             {/* Contact + Email */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{
                   fontSize: 'var(--text-sm)',
@@ -341,7 +365,7 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                     alignItems: 'center',
                     padding: '0 10px',
                     background: 'var(--color-surface-overlay)',
-                    border: '0.5px solid var(--color-border)',
+                    border: `0.5px solid ${contactError ? 'var(--color-danger)' : 'var(--color-border)'}`,
                     borderRight: 'none',
                     borderRadius: '8px 0 0 8px',
                     fontSize: 'var(--text-sm)',
@@ -351,15 +375,41 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                     +91
                   </span>
                   <input
-                    placeholder="98400 12345"
-                    value={state.contact.replace(/^\+91/, '')}
-                    onChange={e => dispatch({ type: 'SET_FIELD', field: 'contact', value: e.target.value })}
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
+                    placeholder="9840012345"
+                    value={rawContactDigits}
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      dispatch({ type: 'SET_FIELD', field: 'contact', value: digits })
+                    }}
+                    onKeyDown={e => {
+                      if ([
+                        'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+                        'Tab', 'Home', 'End', 'Enter'
+                      ].includes(e.key) || (e.ctrlKey || e.metaKey)) {
+                        return
+                      }
+                      if (!/^[0-9]$/.test(e.key)) {
+                        e.preventDefault()
+                      }
+                    }}
+                    onPaste={e => {
+                      e.preventDefault()
+                      const pasted = e.clipboardData.getData('text')
+                      const digits = pasted.replace(/\D/g, '').slice(0, 10)
+                      dispatch({ type: 'SET_FIELD', field: 'contact', value: digits })
+                      setContactTouched(true)
+                    }}
+                    onBlur={() => setContactTouched(true)}
                     style={{
                       fontFamily: 'var(--font-inter)',
                       flex: 1,
                       height: '36px',
                       background: 'var(--color-surface-raised)',
-                      border: '0.5px solid var(--color-border)',
+                      border: `0.5px solid ${contactError ? 'var(--color-danger)' : 'var(--color-border)'}`,
                       borderRadius: '0 8px 8px 0',
                       padding: '0 12px',
                       fontSize: 'var(--text-sm)',
@@ -368,6 +418,19 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                     }}
                   />
                 </div>
+                {contactError && (
+                  <span style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginTop: '2px',
+                  }}>
+                    <i className="ti ti-alert-circle" style={{ fontSize: '13px' }} />
+                    {contactError}
+                  </span>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -384,8 +447,23 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                   placeholder="name@email.com"
                   value={state.email}
                   onChange={e => dispatch({ type: 'SET_FIELD', field: 'email', value: e.target.value })}
+                  onBlur={() => setEmailTouched(true)}
+                  style={emailError ? { border: '0.5px solid var(--color-danger)' } : undefined}
                   className="h-9"
                 />
+                {emailError && (
+                  <span style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginTop: '2px',
+                  }}>
+                    <i className="ti ti-alert-circle" style={{ fontSize: '13px' }} />
+                    {emailError}
+                  </span>
+                )}
               </div>
             </div>
           </motion.div>

@@ -46,7 +46,6 @@ export function RecordPaymentModal({
   const [paymentAmount, setPaymentAmount] = useState<string>('')
   const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gpay' | 'bankTransfer' | 'cheque'>('gpay')
-  const [transactionId, setTransactionId] = useState<string>('')
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [submittingPayment, setSubmittingPayment] = useState<boolean>(false)
 
@@ -67,7 +66,6 @@ export function RecordPaymentModal({
     if (!isOpen) return
     const timer = setTimeout(() => {
       setPaymentError(null)
-      setTransactionId('')
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'))
       setPaymentAmount(balanceDue > 0 ? String(balanceDue) : '')
 
@@ -102,11 +100,6 @@ export function RecordPaymentModal({
       return
     }
 
-    if (paymentMethod !== 'cash' && !transactionId.trim()) {
-      setPaymentError('Transaction ID is required for non-cash payments.')
-      return
-    }
-
     setSubmittingPayment(true)
     try {
       const instalmentLabel = instalment === 'settlement' ? 'Final Settlement' : `${instalment} Instalment`
@@ -117,7 +110,6 @@ export function RecordPaymentModal({
           amount: amt,
           date: new Date(paymentDate),
           method: paymentMethod,
-          transactionId: transactionId.trim() || undefined,
         },
         appUser?.uid || 'system',
         appUser?.name || 'Studio Admin'
@@ -293,21 +285,6 @@ export function RecordPaymentModal({
               <option value="cheque">Cheque</option>
             </select>
           </div>
-
-          {paymentMethod !== 'cash' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                Transaction ID / Ref <span style={{ color: 'var(--color-danger)' }}>*</span>
-              </label>
-              <Input
-                type="text"
-                placeholder="e.g. UPI Ref / UTR / Cheque No."
-                value={transactionId}
-                onChange={e => setTransactionId(e.target.value)}
-                className="h-9"
-              />
-            </div>
-          )}
         </div>
 
         <div style={{

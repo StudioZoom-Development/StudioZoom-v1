@@ -217,7 +217,6 @@ export default function ClientDetailPage() {
   const [editAmount, setEditAmount] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editMethod, setEditMethod] = useState<'cash' | 'gpay' | 'bankTransfer' | 'cheque'>('gpay')
-  const [editTransactionId, setEditTransactionId] = useState('')
   const [submittingEditPayment, setSubmittingEditPayment] = useState(false)
   const [editPaymentError, setEditPaymentError] = useState('')
 
@@ -441,7 +440,6 @@ export default function ClientDetailPage() {
     setEditAmount(String(p.amount))
     setEditDate(format(p.date, 'yyyy-MM-dd'))
     setEditMethod((p.method as 'cash' | 'gpay' | 'bankTransfer' | 'cheque') || 'gpay')
-    setEditTransactionId(p.transactionId || '')
     setEditPaymentError('')
   }
 
@@ -452,11 +450,6 @@ export default function ClientDetailPage() {
       setEditPaymentError('Please enter a valid payment amount')
       return
     }
-    if (editMethod !== 'cash' && !editTransactionId.trim()) {
-      setEditPaymentError('Transaction ID is required for non-cash payments')
-      return
-    }
-
     setSubmittingEditPayment(true)
     setEditPaymentError('')
 
@@ -469,7 +462,6 @@ export default function ClientDetailPage() {
           amount: amt,
           date: new Date(editDate),
           method: editMethod,
-          transactionId: editMethod !== 'cash' ? editTransactionId.trim() : '',
         },
         appUser?.uid || 'system',
         appUser?.name || 'Staff'
@@ -1768,21 +1760,6 @@ export default function ClientDetailPage() {
                   <option value="cheque">Cheque</option>
                 </select>
               </div>
-
-              {editMethod !== 'cash' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
-                    Transaction ID <span style={{ color: 'var(--color-danger)' }}>*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. UPI Ref / UTR / Cheque No."
-                    value={editTransactionId}
-                    onChange={e => setEditTransactionId(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-              )}
             </div>
 
             <div style={{

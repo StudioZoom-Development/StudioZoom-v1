@@ -267,16 +267,24 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
 interface EditUserModalProps { user: UserRow; onClose: () => void }
 
 function EditUserModal({ user, onClose }: EditUserModalProps) {
-  const [name,     setName]     = useState(user.name)
-  const [role,     setRole]     = useState<'admin' | 'manager' | 'staff'>(user.role as 'admin' | 'manager' | 'staff')
-  const [saving,   setSaving]   = useState(false)
-  const [error,    setError]    = useState('')
+  const [name,       setName]       = useState(user.name)
+  const [role,       setRole]       = useState<'admin' | 'manager' | 'staff'>(user.role as 'admin' | 'manager' | 'staff')
+  const [jobTitle,   setJobTitle]   = useState(user.jobTitle ?? '')
+  const [baseSalary, setBaseSalary] = useState(user.baseSalary !== undefined && user.baseSalary !== null ? String(user.baseSalary) : '')
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
 
   const handleSave = async () => {
     if (!name) { setError('Name is required'); return }
     setSaving(true); setError('')
     try {
-      await updateUser(user.uid, { name, role })
+      const rawSalary = baseSalary ? Number(baseSalary.replace(/[^0-9]/g, '')) : undefined
+      await updateUser(user.uid, {
+        name,
+        role,
+        jobTitle: jobTitle.trim(),
+        baseSalary: isNaN(rawSalary as number) ? undefined : rawSalary,
+      })
       onClose()
     } catch { setError('Failed to save. Please try again.') }
     finally { setSaving(false) }
@@ -326,6 +334,37 @@ function EditUserModal({ user, onClose }: EditUserModalProps) {
             <option value="manager">Manager</option>
             <option value="staff">Staff</option>
           </select>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Job Title</label>
+          <Input
+            value={jobTitle}
+            onChange={e => setJobTitle(e.target.value)}
+            placeholder="e.g. Photographer, Editor"
+            className="h-9"
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Base salary</label>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <span style={{
+              position: 'absolute',
+              left: '12px',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--color-foreground-muted)',
+              pointerEvents: 'none'
+            }}>
+              ₹
+            </span>
+            <Input
+              value={baseSalary}
+              onChange={e => setBaseSalary(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="28000"
+              className="h-9 pl-7"
+            />
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>

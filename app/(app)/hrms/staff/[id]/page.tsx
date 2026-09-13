@@ -129,13 +129,16 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
     getStaffMember(uid).then(data => {
       if (data) {
         setStaff(data)
+        const resolvedRole = data.jobTitle || (data.role ? (ROLE_LABELS[data.role] || data.role.charAt(0).toUpperCase() + data.role.slice(1)) : '')
         setForm({
           name:       data.name || '',
           contact:    data.contact || '',
           email:      data.email || '',
-          jobTitle:   data.jobTitle || '',
+          jobTitle:   resolvedRole,
           joinDate:   data.joinDate ? format(data.joinDate, 'd MMM yyyy') : '',
-          baseSalary: data.baseSalary !== undefined ? '₹' + data.baseSalary.toLocaleString('en-IN') : ''
+          baseSalary: data.baseSalary !== undefined && data.baseSalary !== null
+            ? String(data.baseSalary)
+            : ''
         })
       }
       setLoading(false)
@@ -179,6 +182,14 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
         jobTitle: form.jobTitle,
         baseSalary: isNaN(rawSalary) ? undefined : rawSalary,
       })
+      setStaff(prev => prev ? {
+        ...prev,
+        name: form.name,
+        contact: form.contact,
+        email: form.email,
+        jobTitle: form.jobTitle,
+        baseSalary: isNaN(rawSalary) ? undefined : rawSalary,
+      } : null)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
@@ -207,8 +218,8 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const initials = getInitials(staff.name)
-  const formattedJoined = staff.joinDate ? format(staff.joinDate, 'd MMM yyyy') : '12 Mar 2022'
-  const roleText = staff.jobTitle || (staff.role === 'manager' ? 'Manager' : 'Photographer')
+  const formattedJoined = staff.joinDate ? format(staff.joinDate, 'd MMM yyyy') : '—'
+  const roleText = staff.jobTitle || (staff.role === 'manager' ? 'Manager' : staff.role === 'admin' ? 'Admin' : 'Staff')
   const statusText = staff.isActive ? 'Active' : 'Inactive'
 
   return (
@@ -256,8 +267,8 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Main Grid 38fr / 62fr */}
-      <div style={{ display: 'grid', gridTemplateColumns: '38fr 62fr', gap: '16px', alignItems: 'start' }}>
+      {/* Main Grid 38fr / 62fr (responsive: stacks on mobile) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[38fr_62fr] gap-4 items-start">
         
         {/* Left Card — Profile */}
         <div style={{
@@ -303,26 +314,28 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
             />
           </div>
 
-          {/* Email */}
+          {/* Email — uneditable */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Email
+              Email (uneditable)
             </label>
             <Input
               value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              className="h-9"
+              readOnly
+              disabled
+              className="h-9 opacity-60 cursor-not-allowed"
             />
           </div>
 
-          {/* Role */}
+          {/* Job Title */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Role
+              Job Title
             </label>
             <Input
               value={form.jobTitle}
               onChange={e => setForm({ ...form, jobTitle: e.target.value })}
+              placeholder="e.g. Photographer, Editor"
               className="h-9"
             />
           </div>
@@ -344,11 +357,26 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
             <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
               Base salary
             </label>
-            <Input
-              value={form.baseSalary}
-              onChange={e => setForm({ ...form, baseSalary: e.target.value })}
-              className="h-9"
-            />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{
+                position: 'absolute',
+                left: '12px',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground-muted)',
+                pointerEvents: 'none'
+              }}>
+                ₹
+              </span>
+              <Input
+                value={form.baseSalary}
+                onChange={e => {
+                  const cleaned = e.target.value.replace(/[^0-9]/g, '')
+                  setForm({ ...form, baseSalary: cleaned })
+                }}
+                placeholder="28000"
+                className="h-9 pl-7"
+              />
+            </div>
           </div>
 
           {/* Save Button */}

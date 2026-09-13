@@ -392,43 +392,13 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
           </span>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {/* BUG 3 & BUG 4 FIX: Disabled lock on saving */}
             <Button
               type="submit"
-              variant="outline"
-              className="h-9"
+              className="h-9 font-medium"
               disabled={saving}
             >
               {saving ? 'Saving...' : 'Save'}
             </Button>
-
-            {/* Convert to booking button */}
-            <span
-              onClick={() => {
-                if (leadId) {
-                  router.push(`/clients/new?leadId=${leadId}`)
-                }
-              }}
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: '#ffffff',
-                cursor: leadId ? 'pointer' : 'default',
-                padding: '0 16px',
-                height: '36px',
-                borderRadius: '8px',
-                background: 'var(--color-primary)',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                userSelect: 'none',
-                opacity: leadId ? 1 : 0.6,
-                transition: 'opacity 0.15s ease',
-              }}
-            >
-              Convert to booking →
-            </span>
           </div>
         </div>
       </form>

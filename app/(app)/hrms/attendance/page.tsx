@@ -1238,22 +1238,12 @@ function MyAttendancePage() {
                 ))}
                 <th style={{ ...TH, textAlign: 'center', color: 'var(--color-success)', padding: '12px 4px' }}>P</th>
                 <th style={{ ...TH, textAlign: 'center', color: 'var(--color-secondary)', padding: '12px 4px' }}>L</th>
-                <th style={{ ...TH, textAlign: 'center', color: 'var(--color-danger)', padding: '12px 4px' }}>AB</th>
-                <th
-                  style={{
-                    ...TH,
-                    textAlign: 'right',
-                    paddingRight: '16px',
-                    color: 'var(--color-foreground-subtle)',
-                  }}
-                >
-                  HOURS
-                </th>
+                <th style={{ ...TH, textAlign: 'center', color: 'var(--color-danger)', padding: '12px 16px 12px 4px' }}>AB</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableRowSkeleton rows={1} cols={dayNumbers.length + 5} />
+                <TableRowSkeleton rows={1} cols={dayNumbers.length + 4} />
               ) : (
                 <tr>
                   <td
@@ -1313,22 +1303,10 @@ function MyAttendancePage() {
                       fontWeight: 700,
                       fontSize: 'var(--text-sm)',
                       color: 'var(--color-danger)',
-                      padding: '0 4px',
+                      padding: '0 16px 0 4px',
                     }}
                   >
                     {summary.AB}
-                  </td>
-                  <td
-                    style={{
-                      ...TD,
-                      textAlign: 'right',
-                      paddingRight: '16px',
-                      fontWeight: 600,
-                      fontSize: 'var(--text-sm)',
-                      color: 'var(--color-foreground)',
-                    }}
-                  >
-                    {summary.totalHours}
                   </td>
                 </tr>
               )}

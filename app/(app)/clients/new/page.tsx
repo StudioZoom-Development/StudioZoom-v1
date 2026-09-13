@@ -217,9 +217,24 @@ function NewBookingPageContent(): React.JSX.Element {
           setError('Please enter the client name')
           return false
         }
-        if (!state.contact.trim()) {
-          setError('Please enter a contact number')
-          return false
+        if (state.clientMode === 'new') {
+          const digits = state.contact.replace(/\D/g, '')
+          if (digits.length !== 10) {
+            setError('Contact number must be exactly 10 digits')
+            return false
+          }
+          if (state.email && state.email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z0-9.-]*[cC][oO][mM]$/
+            if (!emailRegex.test(state.email.trim())) {
+              setError('Email must be a valid address ending with .com')
+              return false
+            }
+          }
+        } else {
+          if (!state.contact.trim()) {
+            setError('Please enter a contact number')
+            return false
+          }
         }
         break
       case 2:

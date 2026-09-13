@@ -15,8 +15,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       role?:         string
       studioId?:     string
       contact?:      string
+      jobTitle?:     string
       joinDate?:     string
       employment?:   string
+      baseSalary?:   number
       monthlySalary?: number
       workLocation?: string
       notes?:        string
@@ -52,9 +54,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       updatedAt:   FieldValue.serverTimestamp(),
       isDeleted:   false,
       contact:     body.contact?.trim()     ?? '',
+      jobTitle:    body.jobTitle?.trim()    ?? '',
       joinDate:    body.joinDate            ?? '',
       employment:  body.employment          ?? 'fullTime',
-      baseSalary:  body.monthlySalary       ?? 0,
+      baseSalary:  body.baseSalary          ?? body.monthlySalary ?? 0,
       workLocation: body.workLocation       ?? 'onsite',
       notes:       body.notes?.trim()       ?? '',
     })

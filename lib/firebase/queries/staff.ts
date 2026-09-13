@@ -44,9 +44,19 @@ export function subscribeToStaff(callback: (staff: StaffMember[]) => void): () =
       .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
       .map(d => {
         const data = d.data()
+        const resolvedSalary = typeof data.baseSalary === 'number'
+          ? data.baseSalary
+          : typeof data.salary === 'number'
+            ? data.salary
+            : typeof data.monthlySalary === 'number'
+              ? data.monthlySalary
+              : undefined
+
         return {
           ...data,
           uid: d.id,
+          jobTitle: data.jobTitle || (data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : ''),
+          baseSalary: resolvedSalary,
           joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
           updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
@@ -71,9 +81,19 @@ export function subscribeToStaffOnly(callback: (staff: StaffMember[]) => void): 
       .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
       .map(d => {
         const data = d.data()
+        const resolvedSalary = typeof data.baseSalary === 'number'
+          ? data.baseSalary
+          : typeof data.salary === 'number'
+            ? data.salary
+            : typeof data.monthlySalary === 'number'
+              ? data.monthlySalary
+              : undefined
+
         return {
           ...data,
           uid: d.id,
+          jobTitle: data.jobTitle || (data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : ''),
+          baseSalary: resolvedSalary,
           joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
           updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
@@ -115,9 +135,20 @@ export async function getStaffMember(uid: string): Promise<StaffMember | null> {
   const snap = await getDoc(doc(db, 'users', uid))
   if (!snap.exists()) return null
   const data = snap.data()
+  const fallbackRole = data.jobTitle || (data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : '')
+  const resolvedSalary = typeof data.baseSalary === 'number'
+    ? data.baseSalary
+    : typeof data.salary === 'number'
+      ? data.salary
+      : typeof data.monthlySalary === 'number'
+        ? data.monthlySalary
+        : undefined
+
   return {
     ...data,
     uid: snap.id,
+    jobTitle: fallbackRole,
+    baseSalary: resolvedSalary,
     joinDate: data.joinDate instanceof Timestamp ? data.joinDate.toDate() : data.joinDate ? new Date(data.joinDate) : undefined,
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : undefined,
     updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,

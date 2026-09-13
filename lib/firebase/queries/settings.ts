@@ -83,11 +83,13 @@ export interface StudioSettings {
 }
 
 export interface UserRow {
-  uid:      string
-  name:     string
-  email:    string
-  role:     string
-  isActive: boolean
+  uid:        string
+  name:       string
+  email:      string
+  role:       string
+  jobTitle?:  string
+  baseSalary?: number
+  isActive:   boolean
 }
 
 // ─────────────────────────────────────────────
@@ -212,13 +214,26 @@ export function subscribeToAllUsers(
     callback(
       snap.docs
         .filter(d => !d.data().isDeleted && isAllowedByTestMode(d.data().createdAt, { isUser: true, email: d.data().email, name: d.data().name }))
-        .map(d => ({
-          uid:      d.id,
-          name:     (d.data().name     as string) ?? '',
-          email:    (d.data().email    as string) ?? '',
-          role:     (d.data().role     as string) ?? 'staff',
-          isActive: (d.data().isActive as boolean) ?? true,
-        }))
+        .map(d => {
+          const data = d.data()
+          const resolvedSalary = typeof data.baseSalary === 'number'
+            ? data.baseSalary
+            : typeof data.salary === 'number'
+              ? data.salary
+              : typeof data.monthlySalary === 'number'
+                ? data.monthlySalary
+                : undefined
+
+          return {
+            uid:        d.id,
+            name:       (data.name       as string) ?? '',
+            email:      (data.email      as string) ?? '',
+            role:       (data.role       as string) ?? 'staff',
+            jobTitle:   (data.jobTitle   as string) || (data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : ''),
+            baseSalary: resolvedSalary,
+            isActive:   (data.isActive   as boolean) ?? true,
+          }
+        })
     )
   })
 }
@@ -243,7 +258,7 @@ export async function changeUserRole(
 /** Update editable user profile fields */
 export async function updateUser(
   uid: string,
-  updates: { name?: string; role?: 'admin' | 'manager' | 'staff'; jobTitle?: string; contact?: string }
+  updates: { name?: string; role?: 'admin' | 'manager' | 'staff'; jobTitle?: string; contact?: string; baseSalary?: number }
 ): Promise<void> {
   const { updateDoc } = await import('firebase/firestore')
   await updateDoc(doc(db, 'users', uid), {
