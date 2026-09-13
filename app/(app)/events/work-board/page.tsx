@@ -1807,6 +1807,17 @@ export default function WorkBoardPage() {
 
     const unsub2 = subscribeToProjects(projs => {
       setProjects(projs || [])
+      if (projs && projs.length > 0) {
+        setLocalItems(prev => prev.filter(local => {
+          if (local.workItemId.startsWith('postprod-')) {
+            const proj = projs.find(p => p.projectId === local.projectId)
+            if (proj?.postProduction) {
+              return false
+            }
+          }
+          return true
+        }))
+      }
     })
 
     let unsub3 = () => {}
@@ -2537,6 +2548,8 @@ export default function WorkBoardPage() {
       }
     } catch (err) {
       console.error('Failed to update status in Firestore:', err)
+    } finally {
+      setLocalItems(prev => prev.filter(p => p.workItemId !== id))
     }
   }
 
@@ -2558,12 +2571,19 @@ export default function WorkBoardPage() {
       setSelectedPanelItem(curr => curr ? { ...curr, progressPercent } : null)
     }
 
-    if (!id.startsWith('assign-') && !id.startsWith('proj-')) {
-      try {
+    try {
+      if (!id.startsWith('assign-') && !id.startsWith('proj-') && !id.startsWith('postprod-')) {
         await updateWorkItemProgress(id, progressPercent)
-      } catch (err) {
-        console.error('Failed to update progress in Firestore:', err)
+      } else {
+        const item = allWorkItems.find(w => w.workItemId === id)
+        if (item) {
+          await saveWorkItemDetails({ ...item, progressPercent })
+        }
       }
+    } catch (err) {
+      console.error('Failed to update progress in Firestore:', err)
+    } finally {
+      setLocalItems(prev => prev.filter(p => p.workItemId !== id))
     }
   }
 
@@ -2603,70 +2623,84 @@ export default function WorkBoardPage() {
       } : null)
     }
 
-    // 2. Persist to workItems collection
-    if (!id.startsWith('assign-') && !id.startsWith('proj-')) {
-      await updateWorkItemAssignee(id, newId, newName, isFreelancer).catch(() => {})
-    }
-
-    // 3. Bidirectional sync: update the Project itself so it reflects on the Event Board
-    if (item.projectId) {
-      // If demo project, update local demo state and broadcast
-      if (item.projectId.startsWith('demo-')) {
-        setProjects(prev => {
-          const next = prev.map(p => {
-            if (p.projectId === item.projectId) {
-              let updatedStaff = [...(p.staffUids || [])]
-              let updatedFl = [...(p.freelancerIds || [])]
-
-              // Remove previous assignee
-              if (prevIsFreelancer) {
-                updatedFl = updatedFl.filter(fl => fl !== prevUid)
-              } else {
-                updatedStaff = updatedStaff.filter(st => st !== prevUid)
-              }
-
-              // Add new assignee
-              if (isFreelancer) {
-                updatedFl = Array.from(new Set([...updatedFl, newId]))
-              } else {
-                updatedStaff = Array.from(new Set([...updatedStaff, newId]))
-              }
-
-              return {
-                ...p,
-                staffUids: updatedStaff,
-                freelancerIds: updatedFl,
-                updatedAt: new Date(),
-              }
-            }
-            return p
-          })
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('studio_zoom_demo_projects', JSON.stringify(next))
-              window.dispatchEvent(new Event('studio_zoom_projects_changed'))
-            } catch {}
-          }
-          return next
-        })
+    try {
+      // 2. Persist to workItems collection
+      if (!id.startsWith('assign-') && !id.startsWith('proj-') && !id.startsWith('postprod-')) {
+        await updateWorkItemAssignee(id, newId, newName, isFreelancer).catch(() => {})
       } else {
-        // Real Firestore project
-        try {
-          if (prevIsFreelancer) {
-            await unassignFreelancerFromProject(item.projectId, prevUid, item.clientId).catch(() => {})
-          } else {
-            await removeStaffFromProject(item.projectId, prevUid, item.clientId).catch(() => {})
-          }
-
-          if (isFreelancer) {
-            await assignFreelancerToProject(item.projectId, newId, { role: item.type, days: 1, dayRate: 6000 }, item.clientId).catch(() => {})
-          } else {
-            await assignStaffToProject(item.projectId, newId, item.clientId).catch(() => {})
-          }
-        } catch (err) {
-          console.error('Failed to sync reassignment with project:', err)
+        const itemToUpdate = allWorkItems.find(w => w.workItemId === id)
+        if (itemToUpdate) {
+          await saveWorkItemDetails({
+            ...itemToUpdate,
+            assignedToUid: newId,
+            assignedToName: newName,
+            isFreelancer,
+          }).catch(() => {})
         }
       }
+
+      // 3. Bidirectional sync: update the Project itself so it reflects on the Event Board
+      if (item.projectId) {
+        // If demo project, update local demo state and broadcast
+        if (item.projectId.startsWith('demo-')) {
+          setProjects(prev => {
+            const next = prev.map(p => {
+              if (p.projectId === item.projectId) {
+                let updatedStaff = [...(p.staffUids || [])]
+                let updatedFl = [...(p.freelancerIds || [])]
+
+                // Remove previous assignee
+                if (prevIsFreelancer) {
+                  updatedFl = updatedFl.filter(fl => fl !== prevUid)
+                } else {
+                  updatedStaff = updatedStaff.filter(st => st !== prevUid)
+                }
+
+                // Add new assignee
+                if (isFreelancer) {
+                  updatedFl = Array.from(new Set([...updatedFl, newId]))
+                } else {
+                  updatedStaff = Array.from(new Set([...updatedStaff, newId]))
+                }
+
+                return {
+                  ...p,
+                  staffUids: updatedStaff,
+                  freelancerIds: updatedFl,
+                  updatedAt: new Date(),
+                }
+              }
+              return p
+            })
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('studio_zoom_demo_projects', JSON.stringify(next))
+                window.dispatchEvent(new Event('studio_zoom_projects_changed'))
+              } catch {}
+            }
+            return next
+          })
+        } else {
+          // Real Firestore project
+          try {
+            if (prevIsFreelancer) {
+              await unassignFreelancerFromProject(item.projectId, prevUid, item.clientId).catch(() => {})
+            } else {
+              await removeStaffFromProject(item.projectId, prevUid, item.clientId).catch(() => {})
+            }
+
+            if (isFreelancer) {
+              await assignFreelancerToProject(item.projectId, newId, { role: item.type, days: 1, dayRate: 6000 }, item.clientId).catch(() => {})
+            } else {
+              await assignStaffToProject(item.projectId, newId, item.clientId).catch(() => {})
+            }
+          } catch (err) {
+            console.error('Failed to sync reassignment with project:', err)
+          }
+        }
+      }
+    } finally {
+      setLocalItems(prev => prev.filter(p => p.workItemId !== id))
     }
   }
 
@@ -2686,11 +2720,12 @@ export default function WorkBoardPage() {
       setSelectedPanelItem(updatedItem)
     }
 
-    // 2. Persist to Firestore
     try {
       await saveWorkItemDetails(updatedItem)
     } catch (err) {
       console.error('Failed to save work item details in Firestore:', err)
+    } finally {
+      setLocalItems(prev => prev.filter(p => p.workItemId !== updatedItem.workItemId))
     }
   }
 
