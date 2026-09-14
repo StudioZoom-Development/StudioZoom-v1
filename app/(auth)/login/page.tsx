@@ -47,6 +47,13 @@ export default function LoginPage() {
     }
   }
 
+  // Only show the "Preview a role" shortcuts in non-production environments (Dev / Preview)
+  const showRolePreview =
+    process.env.NEXT_PUBLIC_ENABLE_ROLE_PREVIEW !== 'false' &&
+    process.env.NEXT_PUBLIC_APP_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_VERCEL_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID !== 'studio-zoom-production'
+
   // Quick sign in for preview/dev role testing
   const handleQuickSignIn = (role: 'admin' | 'manager' | 'staff') => {
     setError(null)
@@ -292,78 +299,80 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Preview Section from design */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-            alignItems: 'center',
-            borderTop: '0.5px solid var(--color-border)',
-            paddingTop: '16px',
-          }}>
+          {/* Quick Preview Section (Dev / Preview only) */}
+          {showRolePreview && (
             <div style={{
-              fontSize: 'var(--text-xs)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              color: 'var(--color-foreground-subtle)',
-            }}>Preview a role</div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => handleQuickSignIn('admin')}
-                style={{
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-inter)',
-                  background: 'var(--color-primary-muted)',
-                  color: 'var(--color-primary)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '8px',
-                  height: '32px',
-                  padding: '0 14px',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 500,
-                }}
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickSignIn('manager')}
-                style={{
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-inter)',
-                  background: 'var(--color-surface-raised)',
-                  color: 'var(--color-foreground)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '8px',
-                  height: '32px',
-                  padding: '0 14px',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 500,
-                }}
-              >
-                Manager
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickSignIn('staff')}
-                style={{
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-inter)',
-                  background: 'var(--color-surface-raised)',
-                  color: 'var(--color-foreground)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '8px',
-                  height: '32px',
-                  padding: '0 14px',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 500,
-                }}
-              >
-                Staff
-              </button>
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              alignItems: 'center',
+              borderTop: '0.5px solid var(--color-border)',
+              paddingTop: '16px',
+            }}>
+              <div style={{
+                fontSize: 'var(--text-xs)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                color: 'var(--color-foreground-subtle)',
+              }}>Preview a role</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleQuickSignIn('admin')}
+                  style={{
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-inter)',
+                    background: 'var(--color-primary-muted)',
+                    color: 'var(--color-primary)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    height: '32px',
+                    padding: '0 14px',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 500,
+                  }}
+                >
+                  Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickSignIn('manager')}
+                  style={{
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-inter)',
+                    background: 'var(--color-surface-raised)',
+                    color: 'var(--color-foreground)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    height: '32px',
+                    padding: '0 14px',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 500,
+                  }}
+                >
+                  Manager
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickSignIn('staff')}
+                  style={{
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-inter)',
+                    background: 'var(--color-surface-raised)',
+                    color: 'var(--color-foreground)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    height: '32px',
+                    padding: '0 14px',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 500,
+                  }}
+                >
+                  Staff
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
