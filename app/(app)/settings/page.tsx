@@ -103,18 +103,20 @@ function getInitials(name: string): string {
 // ─────────────────────────────────────────────
 
 interface PackageModalProps {
-  pkg:      PackageTemplate | null   // null = new
-  onSave:   (p: PackageTemplate) => void
-  onClose:  () => void
+  pkg:       PackageTemplate | null   // null = new
+  onSave:    (p: PackageTemplate) => void
+  onDelete?: (pkgId: string) => void
+  onClose:   () => void
 }
 
-function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
+function PackageModal({ pkg, onSave, onDelete, onClose }: PackageModalProps) {
   const [name,  setName]  = useState(pkg?.name  ?? '')
   const [price, setPrice] = useState(pkg ? String(pkg.price) : '')
   const [items, setItems] = useState(pkg?.items ?? '')
   const [lineItems, setLineItems] = useState<PackageLineItem[]>(
     pkg?.lineItems ?? [{ description: '', qty: 1, rate: 0, amount: 0 }]
   )
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -475,31 +477,81 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
         {/* Footer */}
         <div style={{
           display: 'flex',
-          gap: '10px',
-          justifyContent: 'flex-end',
+          justifyContent: pkg && onDelete ? 'space-between' : 'flex-end',
+          alignItems: 'center',
           borderTop: '0.5px solid var(--color-border)',
           paddingTop: '16px',
           flexShrink: 0,
+          gap: '10px',
+          flexWrap: 'wrap',
         }}>
-          <button
-            onClick={onClose}
-            style={{
-              height: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              background: 'transparent',
-              border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)',
-              fontSize: 'var(--text-sm)',
-              fontFamily: 'var(--font-inter)',
-            }}
-          >
-            Cancel
-          </button>
-          <Button className="h-9 font-medium" onClick={handleSave}>Save package</Button>
+          {pkg && onDelete && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              style={{
+                height: '36px',
+                padding: '0 14px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                background: 'var(--color-danger-muted)',
+                border: '0.5px solid var(--color-danger)',
+                color: 'var(--color-danger)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'opacity 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+              Delete package
+            </button>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                height: '36px',
+                padding: '0 16px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                background: 'transparent',
+                border: '0.5px solid var(--color-border)',
+                color: 'var(--color-foreground)',
+                fontSize: 'var(--text-sm)',
+                fontFamily: 'var(--font-inter)',
+              }}
+            >
+              Cancel
+            </button>
+            <Button className="h-9 font-medium" onClick={handleSave}>Save package</Button>
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {pkg && onDelete && (
+        <ConfirmModal
+          open={showDeleteConfirm}
+          title="Delete package?"
+          description={`Are you sure you want to delete "${name || pkg.name || 'this package'}"? This action cannot be undone.`}
+          confirmLabel="Delete package"
+          variant="danger"
+          zIndex={80}
+          onConfirm={() => {
+            setShowDeleteConfirm(false)
+            onDelete(pkg.id)
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   )
 }
@@ -926,6 +978,21 @@ export default function SettingsPage() {
       await savePackages(updated)
     } catch (err) {
       console.error('Failed to save packages:', err)
+    } finally {
+      setPkgSaving(false)
+    }
+  }
+
+  // ── Package delete
+  const handlePkgDelete = async (pkgId: string) => {
+    const updated = packages.filter(p => p.id !== pkgId)
+    setPackages(updated)
+    setShowPkgModal(false)
+    setPkgSaving(true)
+    try {
+      await savePackages(updated)
+    } catch (err) {
+      console.error('Failed to delete package:', err)
     } finally {
       setPkgSaving(false)
     }
@@ -1491,6 +1558,7 @@ export default function SettingsPage() {
         <PackageModal
           pkg={editPkg === 'new' ? null : editPkg}
           onSave={handlePkgSave}
+          onDelete={handlePkgDelete}
           onClose={() => setShowPkgModal(false)}
         />
       )}
