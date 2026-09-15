@@ -332,7 +332,7 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                   fontFamily: 'var(--font-inter)',
                   color: 'var(--color-foreground)',
                 }}>
-                  Contact <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  Contact
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <span style={{
