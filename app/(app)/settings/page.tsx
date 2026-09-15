@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input }  from '@/components/ui/input'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
-import { PhoneNumberInput } from '@/components/shared/PhoneNumberInput'
+import { PhoneNumberInput, parsePhoneNumber } from '@/components/shared/PhoneNumberInput'
 import { useUIStore } from '@/store/uiStore'
 import { useRole } from '@/hooks/useAuth'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -906,19 +906,33 @@ export default function SettingsPage() {
   // ── Branding save
   const handleSaveBranding = async () => {
     const current = brandData[selectedStudio] ?? EMPTY_BRAND
-    const phoneVal = (current.phone || '').trim()
+    const parsed = parsePhoneNumber(current.phone || '')
+    const phoneNum = parsed.number.trim()
 
-    if (phoneVal.length !== 10 || !/^\d{10}$/.test(phoneVal)) {
+    if (phoneNum.length !== 10 || !/^\d{10}$/.test(phoneNum)) {
       setBrandError('Phone number must be exactly 10 digits')
       return
+    }
+
+    const fullPhone = `${parsed.countryCode} ${phoneNum}`.trim()
+    const brandingToSave: StudioBranding = {
+      ...current,
+      phone: fullPhone,
     }
 
     setBrandError('')
     setBrandSaving(true)
     try {
-      await saveBranding(selectedStudio, current as StudioBranding)
+      await saveBranding(selectedStudio, brandingToSave)
       // Also update activeStudioId in /config
       await saveActiveConfig({ activeStudioId: selectedStudio })
+      setBrandData(prev => ({
+        ...prev,
+        [selectedStudio]: {
+          ...(prev[selectedStudio] ?? EMPTY_BRAND),
+          phone: fullPhone,
+        },
+      }))
       setBrandSaved(true)
       setBrandEditMode(false)
       setTimeout(() => setBrandSaved(false), 2000)

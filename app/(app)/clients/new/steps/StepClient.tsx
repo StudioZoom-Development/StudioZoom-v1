@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { Client } from '@/types'
@@ -12,10 +12,19 @@ interface StepClientProps {
   dispatch: React.Dispatch<BookingAction>
 }
 
+interface GroupedClientEntry {
+  clientId: string
+  name: string
+  contact: string
+  email: string
+  bookingCount: number
+  recentEventName?: string
+}
+
 export default function StepClient({ state, dispatch }: StepClientProps): React.JSX.Element {
   const [searchTerm, setSearchTerm] = useState('')
   const [allClients, setAllClients] = useState<Client[]>([])
-  const [filteredClients, setFilteredClients] = useState<Client[]>([])
+  const [filteredClients, setFilteredClients] = useState<GroupedClientEntry[]>([])
   const [showResults, setShowResults] = useState(false)
 
   // Subscribe to all clients for search
@@ -26,27 +35,72 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
     return () => unsub()
   }, [])
 
-  // Filter clients by search term
+  // Deduplicate and group clients in memory by phone -> email -> normalized name
+  const uniqueClients = useMemo<GroupedClientEntry[]>(() => {
+    const map = new Map<string, GroupedClientEntry>()
+
+    for (const c of allClients) {
+      const normPhone = (c.contact || '').replace(/\D/g, '')
+      const normEmail = (c.email || '').trim().toLowerCase()
+      const normName = (c.name || '').trim().toLowerCase()
+
+      let key = ''
+      if (normPhone.length >= 7) {
+        key = `phone:${normPhone}`
+      } else if (normEmail.length > 3) {
+        key = `email:${normEmail}`
+      } else if (normName.length > 0) {
+        key = `name:${normName}`
+      } else {
+        key = `id:${c.clientId}`
+      }
+
+      const existing = map.get(key)
+      if (existing) {
+        existing.bookingCount += 1
+      } else {
+        map.set(key, {
+          clientId: c.clientId,
+          name: c.name,
+          contact: c.contact,
+          email: c.email,
+          bookingCount: 1,
+          recentEventName: c.eventName || undefined,
+        })
+      }
+    }
+
+    return Array.from(map.values())
+  }, [allClients])
+
+  // Filter deduplicated clients by search term
   const handleSearch = useCallback((term: string) => {
     setSearchTerm(term)
-    if (term.trim().length < 2) {
+    const trimmed = term.trim()
+    if (trimmed.length < 2) {
       setFilteredClients([])
       setShowResults(false)
       return
     }
-    const lower = term.toLowerCase()
-    const matches = allClients
-      .filter(c =>
-        c.name.toLowerCase().includes(lower) ||
-        c.contact.includes(term) ||
-        c.email.toLowerCase().includes(lower)
-      )
+    const lower = trimmed.toLowerCase()
+    const cleanDigits = trimmed.replace(/\D/g, '')
+
+    const matches = uniqueClients
+      .filter(c => {
+        const nameMatch = c.name.toLowerCase().includes(lower)
+        const emailMatch = c.email.toLowerCase().includes(lower)
+        const phoneMatch = cleanDigits.length >= 2
+          ? c.contact.replace(/\D/g, '').includes(cleanDigits)
+          : c.contact.includes(trimmed)
+        return nameMatch || emailMatch || phoneMatch
+      })
       .slice(0, 5)
+
     setFilteredClients(matches)
     setShowResults(true)
-  }, [allClients])
+  }, [uniqueClients])
 
-  const handleSelectClient = (client: Client): void => {
+  const handleSelectClient = (client: GroupedClientEntry): void => {
     dispatch({
       type: 'SET_EXISTING_CLIENT',
       payload: {
@@ -64,6 +118,14 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
     dispatch({ type: 'SET_CLIENT_MODE', payload: 'new' })
     setShowResults(false)
   }
+
+  const activeExistingClient = useMemo(() => {
+    if (state.clientMode !== 'existing') return null
+    return uniqueClients.find(c =>
+      (state.existingClientId && c.clientId === state.existingClientId) ||
+      (c.name.toLowerCase() === state.clientName.toLowerCase() && c.contact === state.contact)
+    )
+  }, [state.clientMode, state.existingClientId, state.clientName, state.contact, uniqueClients])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -182,19 +244,47 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
-                        fontSize: 'var(--text-sm)',
-                        fontWeight: 500,
-                        color: 'var(--color-foreground)',
-                        fontFamily: 'var(--font-inter)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
                       }}>
-                        {c.name}
+                        <span style={{
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                          fontFamily: 'var(--font-inter)',
+                        }}>
+                          {c.name}
+                        </span>
+                        {c.bookingCount > 1 && (
+                          <span style={{
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 500,
+                            padding: '1px 8px',
+                            borderRadius: '10px',
+                            background: 'var(--color-surface-raised)',
+                            border: '0.5px solid var(--color-border)',
+                            color: 'var(--color-foreground-muted)',
+                            fontFamily: 'var(--font-inter)',
+                            flexShrink: 0,
+                          }}>
+                            {c.bookingCount} bookings
+                          </span>
+                        )}
                       </div>
                       <div style={{
                         fontSize: 'var(--text-xs)',
                         color: 'var(--color-foreground-muted)',
                         fontFamily: 'var(--font-inter)',
+                        marginTop: '2px',
                       }}>
                         {c.contact} · {c.email || 'No email'}
+                        {c.recentEventName && (
+                          <span style={{ color: 'var(--color-foreground-subtle)' }}>
+                            {' '}· Last work: {c.recentEventName}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -217,7 +307,7 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
 
       {/* Selected existing client badge */}
       <AnimatePresence>
-        {state.clientMode === 'existing' && state.existingClientId && (
+        {state.clientMode === 'existing' && (state.existingClientId || state.clientName) && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -236,17 +326,38 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
             <i className="ti ti-check" style={{ fontSize: '18px', color: 'var(--color-success)' }} />
             <div style={{ flex: 1 }}>
               <div style={{
-                fontSize: 'var(--text-sm)',
-                fontWeight: 600,
-                color: 'var(--color-foreground)',
-                fontFamily: 'var(--font-inter)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                flexWrap: 'wrap',
               }}>
-                {state.clientName}
+                <span style={{
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                  color: 'var(--color-foreground)',
+                  fontFamily: 'var(--font-inter)',
+                }}>
+                  {state.clientName}
+                </span>
+                {activeExistingClient && activeExistingClient.bookingCount > 1 && (
+                  <span style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'var(--color-primary-muted)',
+                    color: 'var(--color-primary)',
+                    fontFamily: 'var(--font-inter)',
+                  }}>
+                    {activeExistingClient.bookingCount} previous bookings
+                  </span>
+                )}
               </div>
               <div style={{
                 fontSize: 'var(--text-xs)',
                 color: 'var(--color-foreground-muted)',
                 fontFamily: 'var(--font-inter)',
+                marginTop: '2px',
               }}>
                 {state.contact} · {state.email || 'No email'}
               </div>

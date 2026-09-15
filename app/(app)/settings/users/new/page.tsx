@@ -29,6 +29,7 @@ export default function NewUserPage() {
   const [error,  setError]  = useState('')
   const [showCreateConfirm, setShowCreateConfirm] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [showPassword,      setShowPassword]      = useState(false)
 
   const [form, setForm] = useState({
     name:       '',
@@ -227,14 +228,29 @@ export default function NewUserPage() {
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
                 Password <span style={{ color: 'var(--color-danger)' }}>*</span>
               </label>
-              <Input
-                type="password"
-                placeholder="Min 8 characters"
-                value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                className="h-9"
-                required
-              />
+              <div style={{ position: 'relative' }}>
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Min 8 characters"
+                  value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  className="h-9 pr-9"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  style={{
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                    color: 'var(--color-foreground-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <i className={`ti ${showPassword ? 'ti-eye-off' : 'ti-eye'}`} style={{ fontSize: '16px' }} />
+                </button>
+              </div>
             </div>
           </div>
 
