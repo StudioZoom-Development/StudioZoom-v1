@@ -18,8 +18,9 @@ type LoginForm = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const router      = useRouter()
   const { theme }   = useUIStore()
-  const [error, setError]     = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [error, setError]               = useState<string | null>(null)
+  const [loading, setLoading]           = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -241,12 +242,12 @@ export default function LoginPage() {
                 }} />
                 <input
                   {...register('password')}
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   autoComplete="current-password"
                   style={{
                     width: '100%', boxSizing: 'border-box',
-                    height: '40px', padding: '0 14px 0 38px',
+                    height: '40px', padding: '0 38px 0 38px',
                     background: 'var(--color-surface-raised)',
                     border: `0.5px solid ${errors.password ? 'var(--color-danger)' : 'var(--color-border)'}`,
                     borderRadius: '8px',
@@ -255,6 +256,19 @@ export default function LoginPage() {
                     transition: 'border-color 0.15s',
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  style={{
+                    position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                    color: 'var(--color-foreground-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <i className={`ti ${showPassword ? 'ti-eye-off' : 'ti-eye'}`} style={{ fontSize: '16px' }} />
+                </button>
               </div>
               {errors.password && (
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)' }}>

@@ -69,24 +69,39 @@ export function DateField({
     if (align !== 'auto') return
     if (isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
-      const viewportOverflow = rect.left + 290 > window.innerWidth - 16
-      const inRightHalf = rect.left > window.innerWidth * 0.52
+      const popoverWidth = 280
 
-      let parentOverflow = false
+      // Find nearest scrollable or clipping parent container (e.g. aside, drawer, modal)
+      let parentRect: DOMRect | null = null
       let el: HTMLElement | null = containerRef.current.parentElement
       while (el && el !== document.body) {
         const cs = window.getComputedStyle(el)
-        if (cs.maxWidth || cs.overflow === 'hidden' || cs.overflowX === 'hidden') {
-          const pRect = el.getBoundingClientRect()
-          if (rect.left + 280 > pRect.right - 8) {
-            parentOverflow = true
-            break
-          }
+        const isScrollOrClip =
+          cs.overflowX === 'auto' || cs.overflowX === 'hidden' || cs.overflowX === 'scroll' ||
+          cs.overflowY === 'auto' || cs.overflowY === 'hidden' || cs.overflowY === 'scroll'
+        if (isScrollOrClip) {
+          parentRect = el.getBoundingClientRect()
+          break
         }
         el = el.parentElement
       }
 
-      if (viewportOverflow || parentOverflow || inRightHalf) {
+      const boundaryLeft = parentRect ? Math.max(parentRect.left, 0) : 0
+      const boundaryRight = parentRect ? Math.min(parentRect.right, window.innerWidth) : window.innerWidth
+
+      // Check right-align: popover extends leftwards from input right edge
+      const rightAlignLeftEdge = rect.right - popoverWidth
+      const overflowsLeftIfRightAligned = rightAlignLeftEdge < boundaryLeft + 8
+
+      // Check left-align: popover extends rightwards from input left edge
+      const leftAlignRightEdge = rect.left + popoverWidth
+      const overflowsRightIfLeftAligned = leftAlignRightEdge > boundaryRight - 8
+
+      if (overflowsLeftIfRightAligned && !overflowsRightIfLeftAligned) {
+        setAutoAlign('left')
+      } else if (overflowsRightIfLeftAligned && !overflowsLeftIfRightAligned) {
+        setAutoAlign('right')
+      } else if (rect.left > window.innerWidth * 0.52 && !overflowsLeftIfRightAligned) {
         setAutoAlign('right')
       } else {
         setAutoAlign('left')
