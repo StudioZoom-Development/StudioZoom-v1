@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
-import { PACKAGE_OPTIONS } from '@/lib/firebase/queries/leads'
+import React, { useState, useEffect, useMemo } from 'react'
+import { PACKAGE_OPTIONS, PackageOption } from '@/lib/firebase/queries/leads'
+import { subscribeToPackageConfig } from '@/lib/firebase/queries/settings'
 
 export interface PackageSelectorProps {
   packageName: string
@@ -10,18 +11,25 @@ export interface PackageSelectorProps {
   error?: string
 }
 
-// Helper to normalize package names from legacy format (e.g. "Gold · ₹2,80,000" -> "Gold")
-export function parsePackageName(raw: string): string {
+// Helper to normalize package names
+export function parsePackageName(raw: string, availableList?: PackageOption[]): string {
   if (!raw) return ''
   const trimmed = raw.trim()
-  if (trimmed.includes('Gold')) return 'Gold'
-  if (trimmed.includes('Silver')) return 'Silver'
-  if (trimmed.includes('Platinum')) return 'Platinum'
-  if (trimmed.includes('Other')) return 'Other'
-  return trimmed
+  const clean = trimmed.split(/[·–—]/)[0].trim()
+
+  if (availableList && availableList.length > 0) {
+    const match = availableList.find(p => p.name.toLowerCase() === clean.toLowerCase())
+    if (match) return match.name
+  }
+
+  if (clean.includes('Gold')) return 'Gold'
+  if (clean.includes('Silver')) return 'Silver'
+  if (clean.includes('Platinum')) return 'Platinum'
+  if (clean.includes('Other')) return 'Other'
+  return clean
 }
 
-// Helper to lookup default price
+// Helper to lookup default price from static options if config is not available
 export function getDefaultPrice(name: string): number {
   const norm = parsePackageName(name)
   const pkg = PACKAGE_OPTIONS.find(p => p.name === norm)
@@ -34,7 +42,39 @@ export function PackageSelector({
   onChange,
   error,
 }: PackageSelectorProps) {
-  const normPackage = parsePackageName(packageName)
+  const [configPackages, setConfigPackages] = useState<PackageOption[]>([])
+
+  // Subscribe to packages from /studioSettings/packageConfig
+  useEffect(() => {
+    return subscribeToPackageConfig(data => {
+      if (data && Array.isArray(data.packages) && data.packages.length > 0) {
+        const mapped: PackageOption[] = data.packages.map(p => ({
+          id: p.id || p.name.toLowerCase().replace(/\s+/g, '-'),
+          name: p.name,
+          defaultPrice: p.price ?? 0,
+        }))
+        // Ensure "Other" is always available at the end for custom entries
+        if (!mapped.some(p => p.name.toLowerCase() === 'other')) {
+          mapped.push({ id: 'other', name: 'Other', defaultPrice: 0 })
+        }
+        setConfigPackages(mapped)
+      } else {
+        setConfigPackages(PACKAGE_OPTIONS)
+      }
+    })
+  }, [])
+
+  const availablePackages = useMemo(() => {
+    return configPackages.length > 0 ? configPackages : PACKAGE_OPTIONS
+  }, [configPackages])
+
+  const getPrice = (name: string): number => {
+    const norm = parsePackageName(name, availablePackages)
+    const pkg = availablePackages.find(p => p.name.toLowerCase() === norm.toLowerCase())
+    return pkg ? pkg.defaultPrice : 0
+  }
+
+  const normPackage = parsePackageName(packageName, availablePackages)
 
   const [prevPackageName, setPrevPackageName] = useState(packageName)
   const [selectedPkg, setSelectedPkg] = useState<string>(normPackage)
@@ -42,19 +82,19 @@ export function PackageSelector({
   const initialAmount = packageAmount
     ? String(packageAmount)
     : normPackage
-    ? String(getDefaultPrice(normPackage))
+    ? String(getPrice(normPackage))
     : ''
   const [amountStr, setAmountStr] = useState<string>(initialAmount)
 
-  // Sync state ONLY when package name prop changes externally (e.g. loading edit lead data)
+  // Sync state when package name prop changes externally (e.g. loading edit lead data)
   if (packageName !== prevPackageName) {
     setPrevPackageName(packageName)
-    const norm = parsePackageName(packageName)
+    const norm = parsePackageName(packageName, availablePackages)
     setSelectedPkg(norm)
     if (packageAmount !== undefined && packageAmount !== null && packageAmount !== 0) {
       setAmountStr(String(packageAmount))
     } else if (norm) {
-      const def = getDefaultPrice(norm)
+      const def = getPrice(norm)
       setAmountStr(def ? String(def) : '')
     } else {
       setAmountStr('')
@@ -70,7 +110,7 @@ export function PackageSelector({
       setAmountStr('')
       onChange(newPkg, 0)
     } else {
-      const defaultPrice = getDefaultPrice(newPkg)
+      const defaultPrice = getPrice(newPkg)
       setAmountStr(defaultPrice ? String(defaultPrice) : '')
       onChange(newPkg, defaultPrice)
     }
@@ -88,7 +128,7 @@ export function PackageSelector({
   const handleAmountBlur = () => {
     if (selectedPkg && selectedPkg !== 'Other') {
       if (!amountStr || parseInt(amountStr, 10) === 0) {
-        const def = getDefaultPrice(selectedPkg)
+        const def = getPrice(selectedPkg)
         if (def) {
           setAmountStr(String(def))
           onChange(selectedPkg, def)
@@ -121,7 +161,7 @@ export function PackageSelector({
           }}
         >
           <option value="">Select package</option>
-          {PACKAGE_OPTIONS.map(pkg => (
+          {availablePackages.map(pkg => (
             <option key={pkg.id} value={pkg.name}>
               {pkg.name}
             </option>

@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input }  from '@/components/ui/input'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
-import { PhoneNumberInput } from '@/components/shared/PhoneNumberInput'
+import { PhoneNumberInput, parsePhoneNumber } from '@/components/shared/PhoneNumberInput'
 import { useUIStore } from '@/store/uiStore'
 import { useRole } from '@/hooks/useAuth'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -103,18 +103,26 @@ function getInitials(name: string): string {
 // ─────────────────────────────────────────────
 
 interface PackageModalProps {
-  pkg:      PackageTemplate | null   // null = new
-  onSave:   (p: PackageTemplate) => void
-  onClose:  () => void
+  pkg:       PackageTemplate | null   // null = new
+  onSave:    (p: PackageTemplate) => void
+  onDelete?: (pkgId: string) => void
+  onClose:   () => void
 }
 
-function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
+function PackageModal({ pkg, onSave, onDelete, onClose }: PackageModalProps) {
   const [name,  setName]  = useState(pkg?.name  ?? '')
   const [price, setPrice] = useState(pkg ? String(pkg.price) : '')
   const [items, setItems] = useState(pkg?.items ?? '')
   const [lineItems, setLineItems] = useState<PackageLineItem[]>(
     pkg?.lineItems ?? [{ description: '', qty: 1, rate: 0, amount: 0 }]
   )
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const touchStartIndex = useRef<number | null>(null)
+  const isTouching = useRef<boolean>(false)
 
   const calcTotal = (lis: PackageLineItem[]) => lis.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 
@@ -149,6 +157,91 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
     }
   }
 
+  // ── Desktop Drag & Drop Reordering ──
+  const handleItemDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+    setDraggedIndex(index)
+  }
+
+  const handleItemDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index)
+    }
+    if (scrollContainerRef.current) {
+      const rect = scrollContainerRef.current.getBoundingClientRect()
+      if (e.clientY < rect.top + 30) {
+        scrollContainerRef.current.scrollTop -= 6
+      } else if (e.clientY > rect.bottom - 30) {
+        scrollContainerRef.current.scrollTop += 6
+      }
+    }
+  }
+
+  const handleItemDrop = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) {
+      setDraggedIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+    const updated = [...lineItems]
+    const [moved] = updated.splice(draggedIndex, 1)
+    updated.splice(index, 0, moved)
+    setLineItems(updated)
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  const handleItemDragEnd = () => {
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // ── Mobile Touch Drag & Drop Reordering ──
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    e.stopPropagation()
+    touchStartIndex.current = index
+    isTouching.current = true
+    setDraggedIndex(index)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isTouching.current || touchStartIndex.current === null) return
+    const touchY = e.touches[0].clientY
+    const touchX = e.touches[0].clientX
+    const elements = document.elementsFromPoint(touchX, touchY)
+    const rowEl = elements.find(el => el.getAttribute('data-line-index') !== null)
+    if (rowEl) {
+      const overIdx = Number(rowEl.getAttribute('data-line-index'))
+      if (!isNaN(overIdx) && overIdx !== dragOverIndex) {
+        setDragOverIndex(overIdx)
+      }
+    }
+    if (scrollContainerRef.current) {
+      const rect = scrollContainerRef.current.getBoundingClientRect()
+      if (touchY < rect.top + 30) {
+        scrollContainerRef.current.scrollTop -= 6
+      } else if (touchY > rect.bottom - 30) {
+        scrollContainerRef.current.scrollTop += 6
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (touchStartIndex.current !== null && dragOverIndex !== null && touchStartIndex.current !== dragOverIndex) {
+      const updated = [...lineItems]
+      const [moved] = updated.splice(touchStartIndex.current, 1)
+      updated.splice(dragOverIndex, 0, moved)
+      setLineItems(updated)
+    }
+    touchStartIndex.current = null
+    isTouching.current = false
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
   const handleSave = () => {
     const colours = PKG_COLOURS[name] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
     const calculatedPrice = lineItems.length > 0 ? calcTotal(lineItems) : Number(price.replace(/[^0-9]/g, ''))
@@ -170,90 +263,295 @@ function PackageModal({ pkg, onSave, onClose }: PackageModalProps) {
         position: 'fixed', inset: 0, zIndex: 50,
         background: 'rgba(0,0,0,0.7)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
         fontFamily: 'var(--font-inter)',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '480px', background: 'var(--color-surface-overlay)',
+          width: '560px',
+          maxWidth: 'calc(100vw - 32px)',
+          maxHeight: 'min(90vh, 720px)',
+          background: 'var(--color-surface-overlay)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '16px', padding: '24px',
-          display: 'flex', flexDirection: 'column', gap: '16px',
+          borderRadius: '16px',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
+        <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, flexShrink: 0 }}>
           {pkg ? 'Edit package' : 'Add package'}
         </div>
 
-        {/* Name */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Name</label>
-          <Input value={name} onChange={e => setName(e.target.value)} className="h-9" placeholder="e.g. Platinum" />
-        </div>
-
-        {/* Price */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Price (₹)</label>
-          <Input value={price} onChange={e => setPrice(e.target.value)} className="h-9" placeholder="450000" />
+        {/* Name & Price */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Name</label>
+            <Input value={name} onChange={e => setName(e.target.value)} className="h-9" placeholder="e.g. Platinum" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Price (₹)</label>
+            <Input value={price} onChange={e => setPrice(e.target.value)} className="h-9" placeholder="450000" />
+          </div>
         </div>
 
         {/* Description */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
           <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Description</label>
           <Input value={items} onChange={e => setItems(e.target.value)} className="h-9" placeholder="Short summary line" />
         </div>
 
-        {/* Line items */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Line items</label>
-          {/* Header */}
+        {/* Line items section */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+        }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, flexShrink: 0 }}>
+            Line items
+          </label>
+
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 60px 80px 80px 28px',
-            gap: '6px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)',
-            paddingBottom: '4px', borderBottom: '0.5px solid var(--color-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+            overflowX: 'auto',
           }}>
-            <span>Description</span><span>Qty</span><span>Rate</span><span>Amount</span><span />
-          </div>
-          {lineItems.map((li, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 80px 28px', gap: '6px', alignItems: 'center' }}>
-              <Input value={li.description} onChange={e => updateLine(i, 'description', e.target.value)} className="h-8 text-xs" />
-              <Input value={String(li.qty)} onChange={e => updateLine(i, 'qty', Number(e.target.value))} className="h-8 text-xs" type="number" />
-              <Input value={String(li.rate)} onChange={e => updateLine(i, 'rate', Number(e.target.value))} className="h-8 text-xs" type="number" />
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', paddingLeft: '4px' }}>
-                ₹{li.amount.toLocaleString('en-IN')}
+            <div style={{ minWidth: '420px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              {/* Header */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '24px 1fr 50px 75px 75px 24px',
+                gap: '6px',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-foreground-subtle)',
+                paddingBottom: '4px',
+                borderBottom: '0.5px solid var(--color-border)',
+                flexShrink: 0,
+                alignItems: 'center',
+              }}>
+                <span />
+                <span>Description</span>
+                <span>Qty</span>
+                <span>Rate</span>
+                <span>Amount</span>
+                <span />
               </div>
-              <span
-                onClick={() => removeLine(i)}
-                style={{ cursor: 'pointer', color: 'var(--color-danger)', fontSize: '16px', display: 'flex', alignItems: 'center' }}
+
+              {/* Scrollable list */}
+              <div
+                ref={scrollContainerRef}
+                style={{
+                  overflowY: 'auto',
+                  flex: 1,
+                  minHeight: '168px',
+                  maxHeight: '220px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  paddingTop: '6px',
+                  paddingRight: '4px',
+                }}
               >
-                <i className="ti ti-x" />
-              </span>
+                {lineItems.map((li, i) => (
+                  <div
+                    key={i}
+                    data-line-index={i}
+                    draggable
+                    onDragStart={e => handleItemDragStart(e, i)}
+                    onDragOver={e => handleItemDragOver(e, i)}
+                    onDrop={() => handleItemDrop(i)}
+                    onDragEnd={handleItemDragEnd}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '24px 1fr 50px 75px 75px 24px',
+                      gap: '6px',
+                      alignItems: 'center',
+                      borderRadius: '6px',
+                      border: dragOverIndex === i
+                        ? '1px dashed var(--color-primary)'
+                        : '1px solid transparent',
+                      opacity: draggedIndex === i ? 0.4 : 1,
+                      transition: 'border 0.15s ease, opacity 0.15s ease',
+                      padding: '2px 0',
+                    }}
+                  >
+                    {/* Drag handle */}
+                    <div
+                      onTouchStart={e => handleTouchStart(e, i)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      style={{
+                        cursor: 'grab',
+                        touchAction: 'none',
+                        color: 'var(--color-foreground-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '32px',
+                        userSelect: 'none',
+                      }}
+                      title="Drag to reorder"
+                    >
+                      <i className="ti ti-grip-vertical" style={{ fontSize: '15px' }} />
+                    </div>
+
+                    <Input
+                      value={li.description}
+                      onChange={e => updateLine(i, 'description', e.target.value)}
+                      className="h-8 text-xs"
+                      placeholder="Item description"
+                    />
+                    <Input
+                      value={String(li.qty)}
+                      onChange={e => updateLine(i, 'qty', Number(e.target.value))}
+                      className="h-8 text-xs"
+                      type="number"
+                      min="1"
+                    />
+                    <Input
+                      value={String(li.rate)}
+                      onChange={e => updateLine(i, 'rate', Number(e.target.value))}
+                      className="h-8 text-xs"
+                      type="number"
+                      min="0"
+                    />
+                    <div style={{
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-foreground-muted)',
+                      paddingLeft: '4px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      ₹{li.amount.toLocaleString('en-IN')}
+                    </div>
+                    <span
+                      onClick={() => removeLine(i)}
+                      style={{
+                        cursor: 'pointer',
+                        color: 'var(--color-danger)',
+                        fontSize: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      title="Remove item"
+                    >
+                      <i className="ti ti-x" />
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          </div>
+
           <span
             onClick={addLine}
-            style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500, width: 'fit-content' }}
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-accent)',
+              cursor: 'pointer',
+              fontWeight: 500,
+              width: 'fit-content',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              paddingTop: '2px',
+            }}
           >
-            + Add line
+            <i className="ti ti-plus" style={{ fontSize: '13px' }} /> Add line
           </span>
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-          <button
-            onClick={onClose}
-            style={{
-              height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
-              background: 'transparent', border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-            }}
-          >
-            Cancel
-          </button>
-          <Button className="h-9 font-medium" onClick={handleSave}>Save package</Button>
+        <div style={{
+          display: 'flex',
+          justifyContent: pkg && onDelete ? 'space-between' : 'flex-end',
+          alignItems: 'center',
+          borderTop: '0.5px solid var(--color-border)',
+          paddingTop: '16px',
+          flexShrink: 0,
+          gap: '10px',
+          flexWrap: 'wrap',
+        }}>
+          {pkg && onDelete && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              style={{
+                height: '36px',
+                padding: '0 14px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                background: 'var(--color-danger-muted)',
+                border: '0.5px solid var(--color-danger)',
+                color: 'var(--color-danger)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                fontFamily: 'var(--font-inter)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'opacity 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+              Delete package
+            </button>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                height: '36px',
+                padding: '0 16px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                background: 'transparent',
+                border: '0.5px solid var(--color-border)',
+                color: 'var(--color-foreground)',
+                fontSize: 'var(--text-sm)',
+                fontFamily: 'var(--font-inter)',
+              }}
+            >
+              Cancel
+            </button>
+            <Button className="h-9 font-medium" onClick={handleSave}>Save package</Button>
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {pkg && onDelete && (
+        <ConfirmModal
+          open={showDeleteConfirm}
+          title="Delete package?"
+          description={`Are you sure you want to delete "${name || pkg.name || 'this package'}"? This action cannot be undone.`}
+          confirmLabel="Delete package"
+          variant="danger"
+          zIndex={80}
+          onConfirm={() => {
+            setShowDeleteConfirm(false)
+            onDelete(pkg.id)
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   )
 }
@@ -608,19 +906,33 @@ export default function SettingsPage() {
   // ── Branding save
   const handleSaveBranding = async () => {
     const current = brandData[selectedStudio] ?? EMPTY_BRAND
-    const phoneVal = (current.phone || '').trim()
+    const parsed = parsePhoneNumber(current.phone || '')
+    const phoneNum = parsed.number.trim()
 
-    if (phoneVal.length !== 10 || !/^\d{10}$/.test(phoneVal)) {
+    if (phoneNum.length !== 10 || !/^\d{10}$/.test(phoneNum)) {
       setBrandError('Phone number must be exactly 10 digits')
       return
+    }
+
+    const fullPhone = `${parsed.countryCode} ${phoneNum}`.trim()
+    const brandingToSave: StudioBranding = {
+      ...current,
+      phone: fullPhone,
     }
 
     setBrandError('')
     setBrandSaving(true)
     try {
-      await saveBranding(selectedStudio, current as StudioBranding)
+      await saveBranding(selectedStudio, brandingToSave)
       // Also update activeStudioId in /config
       await saveActiveConfig({ activeStudioId: selectedStudio })
+      setBrandData(prev => ({
+        ...prev,
+        [selectedStudio]: {
+          ...(prev[selectedStudio] ?? EMPTY_BRAND),
+          phone: fullPhone,
+        },
+      }))
       setBrandSaved(true)
       setBrandEditMode(false)
       setTimeout(() => setBrandSaved(false), 2000)
@@ -680,6 +992,21 @@ export default function SettingsPage() {
       await savePackages(updated)
     } catch (err) {
       console.error('Failed to save packages:', err)
+    } finally {
+      setPkgSaving(false)
+    }
+  }
+
+  // ── Package delete
+  const handlePkgDelete = async (pkgId: string) => {
+    const updated = packages.filter(p => p.id !== pkgId)
+    setPackages(updated)
+    setShowPkgModal(false)
+    setPkgSaving(true)
+    try {
+      await savePackages(updated)
+    } catch (err) {
+      console.error('Failed to delete package:', err)
     } finally {
       setPkgSaving(false)
     }
@@ -1245,6 +1572,7 @@ export default function SettingsPage() {
         <PackageModal
           pkg={editPkg === 'new' ? null : editPkg}
           onSave={handlePkgSave}
+          onDelete={handlePkgDelete}
           onClose={() => setShowPkgModal(false)}
         />
       )}

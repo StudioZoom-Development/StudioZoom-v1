@@ -218,11 +218,7 @@ function NewBookingPageContent(): React.JSX.Element {
           return false
         }
         const contactDigits = state.contact.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '')
-        if (!contactDigits) {
-          setError('Contact number is mandatory')
-          return false
-        }
-        if (contactDigits.length !== 10) {
+        if (contactDigits && contactDigits.length !== 10) {
           setError('Contact number must be exactly 10 digits')
           return false
         }

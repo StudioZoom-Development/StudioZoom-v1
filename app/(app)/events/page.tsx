@@ -450,6 +450,13 @@ function EventsBoardContent() {
     }
   }, [nodeOffsets])
 
+  // Synchronize ports whenever node offsets change so wires track dragged nodes accurately
+  useEffect(() => {
+    measurePorts()
+    const timer = setTimeout(measurePorts, 30)
+    return () => clearTimeout(timer)
+  }, [nodeOffsets, measurePorts])
+
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     if (e.button !== 0) return
     const target = e.target as HTMLElement
@@ -676,11 +683,11 @@ function EventsBoardContent() {
       const projs = filterActiveBoardProjects(raw)
       setProjects(projs)
       setSelectedProjectId(curr => {
+        if (curr && projs.some(p => p.projectId === curr)) return curr
         if (paramProject) {
           const match = projs.find(p => p.projectId === paramProject || p.clientId === paramProject)
           if (match) return match.projectId
         }
-        if (curr && projs.some(p => p.projectId === curr)) return curr
         const firstActive = projs.find(p => p.stage !== 'delivered') || projs[0]
         return firstActive?.projectId || null
       })
@@ -709,6 +716,11 @@ function EventsBoardContent() {
     setSelectedProjectId(projectId)
     setSelectedDayTab(0)
     setOverrideReason('')
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('project', projectId)
+      window.history.replaceState(null, '', url.toString())
+    }
   }
 
   const selectedProject = useMemo((): Project | null => {
@@ -905,46 +917,6 @@ function EventsBoardContent() {
     return 'pending'
   }, [currentStageIndex, selectedProject, effectiveBalanceDue, isPaymentPending, gateOverrides])
 
-  const getDaySessionStatus = useCallback((day: EventDateEntry, _idx: number): 'completed' | 'active' | 'pending' => {
-    if (!selectedProject) return 'pending'
-
-    const eventDayIdx = STAGE_ORDER.indexOf('eventDay')
-    // If the project has not reached eventDay yet:
-    if (currentStageIndex < eventDayIdx) {
-      return 'pending'
-    }
-
-    // If the entire project is completed & delivered:
-    if (selectedProject.stage === 'delivered' && selectedProject.status === 'completed') {
-      return 'completed'
-    }
-
-    const dayDate = day.date instanceof Date ? day.date : new Date(day.date)
-    const startOfToday = new Date(now)
-    startOfToday.setHours(0, 0, 0, 0)
-    const endOfToday = new Date(now)
-    endOfToday.setHours(23, 59, 59, 999)
-
-    // Future date (e.g. 16 Sept, 23 Sept, 30 Sept when today is 9 Sept):
-    if (dayDate.getTime() > endOfToday.getTime()) {
-      return 'pending'
-    }
-
-    // Past date (before today):
-    if (dayDate.getTime() < startOfToday.getTime()) {
-      return 'completed'
-    }
-
-    // Today (same day as now):
-    // If the project has already moved to post-production or delivered, today's shoot has completed
-    if (currentStageIndex > eventDayIdx) {
-      return 'completed'
-    }
-
-    // Currently in eventDay on today's date:
-    return 'active'
-  }, [selectedProject, currentStageIndex, now])
-
   // Multi-day / Multi-event tracks detection
   const multiEventDays: EventDateEntry[] = useMemo(() => {
     if (!selectedProject) return []
@@ -1017,6 +989,93 @@ function EventsBoardContent() {
 
   const isMultiEvent = multiEventDays.length > 1
   const isRecurring = Boolean(selectedProject?.bookingType === 'recurring' && !selectedProject?.sessionIndex)
+
+  // Per-day raw footage backup verification check
+  const isDayRawBackupDone = useCallback((dayIdx: number): boolean => {
+    if (!selectedProject) return false
+    const isMulti = multiEventDays.length > 1
+    if (isMulti) {
+      const dayKey = `${selectedProject.projectId}_eventDay_day_${dayIdx}_All raw footage backed up (2 copies)`
+      if (gateOverrides[dayKey] !== undefined) {
+        return gateOverrides[dayKey]
+      }
+      const firestoreGate = selectedProject.stageGates?.eventDay?.[`day_${dayIdx}_All raw footage backed up (2 copies)`]
+      if (firestoreGate !== undefined) {
+        return Boolean(firestoreGate)
+      }
+      if (currentStageIndex > STAGE_ORDER.indexOf('eventDay')) {
+        return true
+      }
+      return false
+    } else {
+      const singleKey = `${selectedProject.projectId}_eventDay_All raw footage backed up (2 copies)`
+      if (gateOverrides[singleKey] !== undefined) {
+        return gateOverrides[singleKey]
+      }
+      const firestoreGate = selectedProject.stageGates?.eventDay?.['All raw footage backed up (2 copies)']
+      if (firestoreGate !== undefined) {
+        return Boolean(firestoreGate)
+      }
+      if (currentStageIndex > STAGE_ORDER.indexOf('eventDay')) {
+        return true
+      }
+      return false
+    }
+  }, [selectedProject, multiEventDays.length, gateOverrides, currentStageIndex])
+
+  // Whether all event days have raw footage backed up
+  const allEventDaysChecked = useMemo(() => {
+    if (!selectedProject) return false
+    if (multiEventDays.length <= 1) {
+      return isDayRawBackupDone(0)
+    }
+    return multiEventDays.every((_, i) => isDayRawBackupDone(i))
+  }, [selectedProject, multiEventDays, isDayRawBackupDone])
+
+  const pendingEventDayLabels = useMemo(() => {
+    if (!selectedProject) return []
+    if (multiEventDays.length <= 1) {
+      return isDayRawBackupDone(0) ? [] : ['Main Shoot Day']
+    }
+    return multiEventDays
+      .map((d, i) => !isDayRawBackupDone(i) ? (d.label || `Day ${i + 1}`) : null)
+      .filter((label): label is string => Boolean(label))
+  }, [selectedProject, multiEventDays, isDayRawBackupDone])
+
+  const getDaySessionStatus = useCallback((day: EventDateEntry, idx: number): 'completed' | 'active' | 'pending' => {
+    if (!selectedProject) return 'pending'
+
+    const eventDayIdx = STAGE_ORDER.indexOf('eventDay')
+    // If the project has not reached eventDay yet:
+    if (currentStageIndex < eventDayIdx) {
+      return 'pending'
+    }
+
+    // If the entire project is completed & delivered:
+    if (selectedProject.stage === 'delivered' && selectedProject.status === 'completed') {
+      return 'completed'
+    }
+
+    const dayDate = day.date instanceof Date ? day.date : new Date(day.date)
+    const startOfToday = new Date(now)
+    startOfToday.setHours(0, 0, 0, 0)
+    const endOfToday = new Date(now)
+    endOfToday.setHours(23, 59, 59, 999)
+
+    // Future date (e.g. 16 Sept, 23 Sept, 30 Sept when today is 9 Sept):
+    if (dayDate.getTime() > endOfToday.getTime()) {
+      return 'pending'
+    }
+
+    // Past date or today: ONLY completed if raw footage has been backed up & verified!
+    const rawDone = isDayRawBackupDone(idx)
+    if (rawDone) {
+      return 'completed'
+    }
+
+    // Shoot date has arrived or passed, but raw footage is not yet checked:
+    return 'active'
+  }, [selectedProject, currentStageIndex, now, isDayRawBackupDone])
 
   // ─── TRACK MILESTONE HELPERS ────────────────────────────────────────────
   const isTrackMilestoneDone = useCallback((track: 'photo' | 'video', milestone: string, sessionIdx?: number): boolean => {
@@ -1233,10 +1292,8 @@ function EventsBoardContent() {
     return { isCompleted, shootEndTime, formattedTime }
   }, [selectedProject, panelStageKey, multiEventDays, selectedDayTab, now])
 
-  const isTeamAssignmentMandatory = useMemo(() => {
-    if (!panelStageKey) return false
-    return ['planning', 'preProduction', 'eventDay', 'postProduction'].includes(panelStageKey)
-  }, [panelStageKey])
+  // Team member assignment is optional across all stages (users can choose core team alone, freelancers alone, or both)
+  const isTeamAssignmentMandatory = false
 
   const hasAssignedTeamMembers = useMemo(() => {
     return (selectedProject?.staffUids || []).length > 0
@@ -1259,9 +1316,37 @@ function EventsBoardContent() {
       }
     }
 
-    const key = `${selectedProject.projectId}_${stageKey}_${gateText}`
+    const isMultiDayEventDay = multiEventDays.length > 1 && stageKey === 'eventDay'
+    const key = isMultiDayEventDay
+      ? `${selectedProject.projectId}_eventDay_day_${selectedDayTab}_${gateText}`
+      : `${selectedProject.projectId}_${stageKey}_${gateText}`
     const newVal = !currentVal
-    setGateOverrides(prev => ({ ...prev, [key]: newVal }))
+
+    setGateOverrides(prev => {
+      const next = { ...prev, [key]: newVal }
+      if (isMultiDayEventDay) {
+        delete next[`${selectedProject.projectId}_eventDay_${gateText}`]
+      }
+      return next
+    })
+
+    const gateKeyName = isMultiDayEventDay ? `day_${selectedDayTab}_${gateText}` : gateText
+
+    // Update local projects state
+    setProjects(prev => prev.map(p => {
+      if (p.projectId !== selectedProject.projectId) return p
+      const stageObj = p.stageGates?.[stageKey] || {}
+      return {
+        ...p,
+        stageGates: {
+          ...(p.stageGates || {}),
+          [stageKey]: {
+            ...stageObj,
+            [gateKeyName]: newVal,
+          },
+        },
+      }
+    }))
 
     if (stageKey === 'postProduction') {
       if (gateText === 'Photo track completed') {
@@ -1284,7 +1369,7 @@ function EventsBoardContent() {
     }
 
     if (!selectedProject.projectId.startsWith('demo-')) {
-      updateProjectStageGates(selectedProject.projectId, stageKey, { [gateText]: newVal }).catch(err => {
+      updateProjectStageGates(selectedProject.projectId, stageKey, { [gateKeyName]: newVal }).catch(err => {
         console.error('Failed to update stage gate in firestore:', err)
       })
     }
@@ -1504,10 +1589,30 @@ function EventsBoardContent() {
         }
       }
 
+      if (selectedProject.stage === 'eventDay') {
+        if (!selectedProject.projectId.startsWith('demo-')) {
+          await updateProjectStage(
+            selectedProject.projectId,
+            'postProduction',
+            selectedProject.clientId,
+            undefined,
+            'eventDay'
+          )
+        }
+      }
+
       setProjects(prev =>
         prev.map(p =>
           p.projectId === selectedProject.projectId
-            ? { ...p, postProduction: newPostProdData }
+            ? {
+                ...p,
+                stage: 'postProduction',
+                stageCompletedAt: {
+                  ...(p.stageCompletedAt || {}),
+                  eventDay: p.stageCompletedAt?.eventDay || new Date(),
+                },
+                postProduction: newPostProdData,
+              }
             : p
         )
       )
@@ -1714,9 +1819,14 @@ function EventsBoardContent() {
     }
 
     return currentPanelConfig.defaultGates.map((gateText: string, i: number) => {
-      const key = `${selectedProject.projectId}_${currentPanelConfig.stageKey}_${gateText}`
-      // Requirement 4: Freelancer checklist is not mandatory in preprod
-      const isOptional = currentPanelConfig.stageKey === 'preProduction' && gateText.toLowerCase().includes('freelancer')
+      const isMultiDayEventDay = multiEventDays.length > 1 && currentPanelConfig.stageKey === 'eventDay'
+      const key = isMultiDayEventDay
+        ? `${selectedProject.projectId}_eventDay_day_${selectedDayTab}_${gateText}`
+        : `${selectedProject.projectId}_${currentPanelConfig.stageKey}_${gateText}`
+      const legacyKey = `${selectedProject.projectId}_${currentPanelConfig.stageKey}_${gateText}`
+      // Requirement 4: Freelancer checklist is not mandatory in preprod; core team assignment is not mandatory in planning
+      const isOptional = (currentPanelConfig.stageKey === 'preProduction' && gateText.toLowerCase().includes('freelancer')) ||
+                         (currentPanelConfig.stageKey === 'planning' && gateText.toLowerCase().includes('core team'))
       const isBalanceGate = gateText.toLowerCase().includes('balance') || gateText.toLowerCase().includes('outstanding')
       const isRawFootageGate = gateText.toLowerCase().includes('raw footage')
 
@@ -1725,14 +1835,8 @@ function EventsBoardContent() {
         // Balance gate: strictly depends on remaining balance due
         isDone = !isPaymentPending && effectiveBalanceDue <= 0
       } else if (isRawFootageGate) {
-        // Raw footage gate: NEVER auto-ticks! Only done if explicitly ticked or project already completed eventDay
-        if (gateOverrides[key] !== undefined) {
-          isDone = gateOverrides[key]
-        } else if (stageIdx < currentStageIndex) {
-          isDone = true
-        } else {
-          isDone = false
-        }
+        // Raw footage gate: strictly uses isDayRawBackupDone for the currently selected day tab
+        isDone = isDayRawBackupDone(selectedDayTab)
       } else if (gateOverrides[key] !== undefined) {
         isDone = gateOverrides[key]
       } else if (currentPanelConfig.stageKey === 'postProduction') {
@@ -1749,7 +1853,7 @@ function EventsBoardContent() {
 
       return { label: gateText, done: isDone, isOptional }
     })
-  }, [currentPanelConfig, selectedProject, currentStageIndex, gateOverrides, isPhotoTrackAllDone, isVideoTrackAllDone, isPaymentPending, effectiveBalanceDue])
+  }, [currentPanelConfig, selectedProject, currentStageIndex, gateOverrides, isPhotoTrackAllDone, isVideoTrackAllDone, isPaymentPending, effectiveBalanceDue, isDayRawBackupDone, selectedDayTab, multiEventDays.length])
 
   const allPanelGatesDone = useMemo(() => {
     if (panelGates.length === 0) return false
@@ -1763,14 +1867,17 @@ function EventsBoardContent() {
     const mandatoryGatesDone = panelGates.every(g => g.isOptional || g.done)
     if (!mandatoryGatesDone) return false
 
-    // Requirement 3: Mandatory team member assigning in planning, preprod, Event day, post prod
+    // Requirement 3: Mandatory team member assigning in preprod, Event day, post prod (removed from planning)
     if (isTeamAssignmentMandatory && !hasAssignedTeamMembers) return false
 
     // Requirement 6: Event day cannot advance until shoot timing is completed
     if (panelStageKey === 'eventDay' && !shootTimingInfo.isCompleted) return false
 
+    // Multi-day Event Day: ALL days must have raw footage backed up before eventDay can advance!
+    if (panelStageKey === 'eventDay' && !allEventDaysChecked) return false
+
     return true
-  }, [panelGates, isTeamAssignmentMandatory, hasAssignedTeamMembers, panelStageKey, shootTimingInfo.isCompleted, effectiveBalanceDue, isPaymentPending])
+  }, [panelGates, isTeamAssignmentMandatory, hasAssignedTeamMembers, panelStageKey, shootTimingInfo.isCompleted, effectiveBalanceDue, isPaymentPending, allEventDaysChecked])
 
   const nextStageKey = useMemo((): ProjectStage | null => {
     if (!panelStageKey) return null
@@ -1794,11 +1901,16 @@ function EventsBoardContent() {
         return getSessionDeliveryStatus(selectedDayTab)
       }
     }
-    if (panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]) {
-      return getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
+    if (panelStageKey === 'eventDay') {
+      if (selectedProject?.stage === 'eventDay') {
+        return allEventDaysChecked && (!isTeamAssignmentMandatory || hasAssignedTeamMembers) && shootTimingInfo.isCompleted
+          ? 'completed'
+          : 'active'
+      }
+      return getStageStatus(panelStageKey)
     }
     return getStageStatus(panelStageKey)
-  }, [panelStageKey, selectedProject, getDaySessionStatus, getSessionPostProdStatus, getSessionDeliveryStatus, multiEventDays, selectedDayTab, getStageStatus])
+  }, [panelStageKey, selectedProject, getDaySessionStatus, getSessionPostProdStatus, getSessionDeliveryStatus, multiEventDays, selectedDayTab, getStageStatus, allEventDaysChecked, isTeamAssignmentMandatory, hasAssignedTeamMembers, shootTimingInfo.isCompleted])
 
   // ─── ADVANCE STAGE HANDLER ──────────────────────────────────────────────
   const handleAdvanceStage = async () => {
@@ -2125,6 +2237,256 @@ function EventsBoardContent() {
 
 
 
+  // ─── DYNAMIC CANVAS TRACKS (PHOTO, ALBUM, VIDEO HIGHLIGHTS, FULL VIDEO) ──
+  interface CanvasTrackItem {
+    id: string
+    name: string
+    icon: string
+    color: string
+    isComplete: boolean
+    doneCount: number
+    totalCount: number
+    steps: Array<{ label: string; isDone: boolean }>
+    inPortId: string
+    outPortId: string
+  }
+
+  const canvasTracks = useMemo<CanvasTrackItem[]>(() => {
+    if (!selectedProject) return []
+
+    const pp = selectedProject.postProduction
+    const reqs = selectedProject.postProdRequirements
+
+    // Case 1: Post-Production is configured with active tracks in Firestore
+    if (pp?.isConfigured) {
+      const list: CanvasTrackItem[] = []
+
+      if (pp.photoTrack) {
+        const pt = pp.photoTrack
+        const isComp = isPhotoTrackComplete(pt)
+        const steps = [
+          { label: 'Selected Photos', isDone: Boolean(pt.selectedPhotos) },
+          { label: 'Raw Delivered', isDone: Boolean(pt.rawDelivered) },
+          { label: 'Designing', isDone: pt.designing?.status === 'completed' },
+          { label: 'Client Review', isDone: pt.clientReview?.status === 'approved' || pt.clientReview?.status === 'notRequired' },
+        ]
+        list.push({
+          id: 'photoTrack',
+          name: 'Photo Track',
+          icon: 'ti-camera',
+          color: 'var(--color-accent)',
+          isComplete: isComp,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'photo-in',
+          outPortId: 'photo-out',
+        })
+      }
+
+      if (pp.albumTrack) {
+        const at = pp.albumTrack
+        const isComp = isAlbumTrackComplete(at)
+        const steps = [
+          { label: 'Album Designing', isDone: at.albumDesigning?.status === 'completed' },
+          { label: 'Client Review', isDone: at.clientReview?.status === 'approved' || at.clientReview?.status === 'notRequired' },
+          { label: 'Creating Album', isDone: at.creatingAlbum?.status === 'completed' },
+          { label: 'Physical Delivered', isDone: Boolean(at.delivered) },
+        ]
+        list.push({
+          id: 'albumTrack',
+          name: 'Album Track',
+          icon: 'ti-book',
+          color: 'var(--color-purple)',
+          isComplete: isComp,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'album-in',
+          outPortId: 'album-out',
+        })
+      }
+
+      if (pp.videoTrack) {
+        const vt = pp.videoTrack
+        const isComp = isVideoTrackComplete(vt)
+        const steps = [
+          { label: 'Selected Video', isDone: Boolean(vt.selectedVideo) },
+          { label: 'Raw Delivered', isDone: Boolean(vt.rawVideoDelivered) },
+          { label: 'Highlights Editing', isDone: vt.highlights?.status === 'completed' },
+          { label: 'Highlights Review', isDone: vt.clientReview?.status === 'approved' || vt.clientReview?.status === 'notRequired' },
+        ]
+        list.push({
+          id: 'videoTrack',
+          name: 'Video Highlights Track',
+          icon: 'ti-sparkles',
+          color: 'var(--color-secondary)',
+          isComplete: isComp,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'video-in',
+          outPortId: 'video-out',
+        })
+      }
+
+      if (pp.fullVideoTrack) {
+        const fvt = pp.fullVideoTrack
+        const isComp = isFullVideoTrackComplete(fvt)
+        const steps = [
+          { label: 'Full Video Editing', isDone: fvt.fullVideoEditing?.status === 'completed' },
+          { label: 'Full Video Review', isDone: fvt.clientReview?.status === 'approved' || fvt.clientReview?.status === 'notRequired' },
+          { label: 'Full Video Delivered', isDone: Boolean(fvt.delivered) },
+        ]
+        list.push({
+          id: 'fullVideoTrack',
+          name: 'Full Video Track',
+          icon: 'ti-movie',
+          color: 'var(--color-danger)',
+          isComplete: isComp,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'fullvideo-in',
+          outPortId: 'fullvideo-out',
+        })
+      }
+
+      if (list.length > 0) return list
+    }
+
+    // Case 2: Post-Production not yet configured, check postProdRequirements from Booked stage
+    if (reqs) {
+      const list: CanvasTrackItem[] = []
+
+      if (reqs.photography?.required) {
+        const steps = [
+          { label: 'Selected Photos', isDone: isTrackMilestoneDone('photo', 'Selected Photos') },
+          { label: 'Raw Delivered', isDone: isTrackMilestoneDone('photo', 'Raw Delivered') },
+          { label: 'Designing', isDone: isTrackMilestoneDone('photo', 'Designing') },
+          { label: 'Client Review', isDone: isTrackMilestoneDone('photo', 'Client Review') },
+        ]
+        list.push({
+          id: 'photoTrack',
+          name: 'Photo Track',
+          icon: 'ti-camera',
+          color: 'var(--color-accent)',
+          isComplete: isPhotoTrackAllDone,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'photo-in',
+          outPortId: 'photo-out',
+        })
+      }
+
+      if (reqs.album?.required) {
+        const steps = [
+          { label: 'Album Designing', isDone: false },
+          { label: 'Client Review', isDone: false },
+          { label: 'Creating Album', isDone: false },
+          { label: 'Physical Delivered', isDone: false },
+        ]
+        list.push({
+          id: 'albumTrack',
+          name: 'Album Track',
+          icon: 'ti-book',
+          color: 'var(--color-purple)',
+          isComplete: false,
+          doneCount: 0,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'album-in',
+          outPortId: 'album-out',
+        })
+      }
+
+      if (reqs.videoHighlights?.required) {
+        const steps = [
+          { label: 'Selected Video', isDone: isTrackMilestoneDone('video', 'Selected Video') },
+          { label: 'Raw Delivered', isDone: isTrackMilestoneDone('video', 'Raw Delivered') },
+          { label: 'Highlights Editing', isDone: isTrackMilestoneDone('video', 'Highlights Review') },
+          { label: 'Highlights Review', isDone: isTrackMilestoneDone('video', 'Highlights Review') },
+        ]
+        list.push({
+          id: 'videoTrack',
+          name: 'Video Highlights Track',
+          icon: 'ti-sparkles',
+          color: 'var(--color-secondary)',
+          isComplete: isVideoTrackAllDone,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'video-in',
+          outPortId: 'video-out',
+        })
+      }
+
+      if (reqs.fullVideo?.required) {
+        const steps = [
+          { label: 'Full Video Editing', isDone: isTrackMilestoneDone('video', 'Full Editing') },
+          { label: 'Full Video Review', isDone: isTrackMilestoneDone('video', 'Final Video Review') },
+          { label: 'Full Video Delivered', isDone: isTrackMilestoneDone('video', 'Delivered') },
+        ]
+        list.push({
+          id: 'fullVideoTrack',
+          name: 'Full Video Track',
+          icon: 'ti-movie',
+          color: 'var(--color-danger)',
+          isComplete: false,
+          doneCount: steps.filter(s => s.isDone).length,
+          totalCount: steps.length,
+          steps,
+          inPortId: 'fullvideo-in',
+          outPortId: 'fullvideo-out',
+        })
+      }
+
+      if (list.length > 0) return list
+    }
+
+    // Case 3: Fallback if nothing configured
+    return [
+      {
+        id: 'photoTrack',
+        name: 'Photo Track',
+        icon: 'ti-camera',
+        color: 'var(--color-accent)',
+        isComplete: isPhotoTrackAllDone,
+        doneCount: photoTrackDoneCount,
+        totalCount: PHOTO_TRACK_MILESTONES.length,
+        steps: PHOTO_TRACK_MILESTONES.map(s => ({ label: s, isDone: isTrackMilestoneDone('photo', s) })),
+        inPortId: 'photo-in',
+        outPortId: 'photo-out',
+      },
+      {
+        id: 'videoTrack',
+        name: 'Video Track',
+        icon: 'ti-video',
+        color: 'var(--color-secondary)',
+        isComplete: isVideoTrackAllDone,
+        doneCount: videoTrackDoneCount,
+        totalCount: VIDEO_TRACK_MILESTONES.length,
+        steps: VIDEO_TRACK_MILESTONES.map(s => ({ label: s, isDone: isTrackMilestoneDone('video', s) })),
+        inPortId: 'video-in',
+        outPortId: 'video-out',
+      },
+    ]
+  }, [
+    selectedProject,
+    isPhotoTrackAllDone,
+    isVideoTrackAllDone,
+    photoTrackDoneCount,
+    videoTrackDoneCount,
+    isTrackMilestoneDone,
+  ])
+
+  useEffect(() => {
+    measurePorts()
+    const timer = setTimeout(measurePorts, 60)
+    return () => clearTimeout(timer)
+  }, [measurePorts, canvasTracks])
+
   // ─── POST-PROD PARALLEL TRACKS PROGRESS ─────────────────────────────────
   const isPostProdActive = currentStageIndex >= 4
   const isPostProdComplete = currentStageIndex > 4
@@ -2148,8 +2510,28 @@ function EventsBoardContent() {
       return null
     }
 
-    const dx = Math.max(40, Math.abs(p2.x - p1.x) * 0.5)
-    const pathData = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`
+    const deltaX = p2.x - p1.x
+    const deltaY = p2.y - p1.y
+    let cp1x: number
+    let cp1y: number
+    let cp2x: number
+    let cp2y: number
+
+    if (deltaX >= 40) {
+      const dx = Math.max(40, deltaX * 0.5)
+      cp1x = p1.x + dx
+      cp1y = p1.y
+      cp2x = p2.x - dx
+      cp2y = p2.y
+    } else {
+      const curvature = Math.max(50, Math.abs(deltaY) * 0.4)
+      cp1x = p1.x + curvature
+      cp1y = p1.y
+      cp2x = p2.x - curvature
+      cp2y = p2.y
+    }
+
+    const pathData = `M ${p1.x} ${p1.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`
     const midX = (p1.x + p2.x) / 2
     const midY = (p1.y + p2.y) / 2
 
@@ -2157,7 +2539,7 @@ function EventsBoardContent() {
       ? 'var(--color-success)'
       : isActive
       ? 'var(--color-primary)'
-      : 'var(--color-border-strong)'
+      : 'var(--color-foreground-subtle)'
 
     return (
       <g key={`${fromId}-${toId}`}>
@@ -2178,6 +2560,7 @@ function EventsBoardContent() {
           stroke={strokeColor}
           strokeWidth="2.5"
           strokeDasharray={!isActive && !isCompleted ? '5 4' : undefined}
+          strokeOpacity={!isActive && !isCompleted ? 0.6 : 1}
         />
         {/* Optional branch badge pill in middle of curve (like [1], [2] in user screenshot) */}
         {label && (
@@ -2417,10 +2800,13 @@ function EventsBoardContent() {
                     borderRadius: '10px',
                     padding: '12px 14px',
                     background: isSelected ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
-                    borderTop: '0.5px solid var(--color-border)',
-                    borderRight: '0.5px solid var(--color-border)',
-                    borderBottom: '0.5px solid var(--color-border)',
-                    borderLeft: `3px solid ${isSelected ? 'var(--color-primary)' : 'transparent'}`,
+                    borderTop: isSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                    borderRight: isSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                    borderBottom: isSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                    borderLeft: `4px solid ${isSelected ? 'var(--color-primary)' : 'transparent'}`,
+                    boxShadow: isSelected
+                      ? '0 2px 10px rgba(198, 83, 159, 0.2), inset 0 0 0 0.5px var(--color-primary)'
+                      : 'none',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '6px',
@@ -2428,9 +2814,27 @@ function EventsBoardContent() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                      {p.eventName || p.clientName}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      {isSelected && (
+                        <span style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary)',
+                          flexShrink: 0,
+                        }} />
+                      )}
+                      <span style={{
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: 700,
+                        color: isSelected ? 'var(--color-primary)' : 'var(--color-foreground)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {p.eventName || p.clientName}
+                      </span>
+                    </div>
                     {isMultiDay && (
                       <span style={{
                         fontSize: '9px',
@@ -2515,13 +2919,15 @@ function EventsBoardContent() {
                 flexDirection: 'column',
                 minWidth: 0,
                 flexShrink: 1,
-                maxWidth: '240px',
+                maxWidth: '380px',
               }}>
                 <span
                   title={selectedProject.eventName || selectedProject.clientName || ''}
                   style={{
-                    fontSize: 'var(--text-base)',
+                    fontSize: 'var(--text-xl)',
                     fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.2,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -2538,6 +2944,7 @@ function EventsBoardContent() {
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
+                    marginTop: '2px',
                   }}
                 >
                   <span style={{ textTransform: 'capitalize' }}>
@@ -2836,12 +3243,13 @@ function EventsBoardContent() {
             style={{
               transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
               transformOrigin: '0 0',
-              minWidth: '2200px',
-              minHeight: '1200px',
-              padding: '60px 80px 180px',
+              minWidth: '2400px',
+              minHeight: '1400px',
+              padding: '100px 100px 220px',
               position: 'relative',
               cursor: isDragging ? 'grabbing' : 'grab',
               willChange: isDragging ? 'transform' : 'auto',
+              overflow: 'visible',
             }}
           >
             
@@ -2855,6 +3263,7 @@ function EventsBoardContent() {
                 height: '100%',
                 pointerEvents: 'none',
                 zIndex: 1,
+                overflow: 'visible',
               }}
             >
               {/* Wire 1: Start Pill -> Booked */}
@@ -2938,13 +3347,26 @@ function EventsBoardContent() {
                     )
                   })}
 
-                  {/* Wire 6: Post-Prod -> Photo Track & Video Track */}
-                  {renderWire('postprod-out-photo', 'photo-in', isPostProdActive, isPostProdComplete || isPhotoTrackAllDone)}
-                  {renderWire('postprod-out-video', 'video-in', isPostProdActive, isPostProdComplete || isVideoTrackAllDone)}
+                  {/* Wire 6: Post-Prod -> Active Track Nodes */}
+                  {canvasTracks.map(track => {
+                    return renderWire(
+                      `postprod-out-${track.id}`,
+                      track.inPortId,
+                      isPostProdActive,
+                      isPostProdComplete || track.isComplete
+                    )
+                  })}
 
-                  {/* Wire 7: Photo Track & Video Track -> Delivered */}
-                  {renderWire('photo-out', 'delivered-in', isPhotoTrackAllDone || currentStageIndex >= 5, (isPhotoTrackAllDone && isVideoTrackAllDone) || currentStageIndex >= 5)}
-                  {renderWire('video-out', 'delivered-in', isVideoTrackAllDone || currentStageIndex >= 5, (isPhotoTrackAllDone && isVideoTrackAllDone) || currentStageIndex >= 5)}
+                  {/* Wire 7: Active Track Nodes -> Delivered */}
+                  {canvasTracks.map(track => {
+                    const allTracksDone = canvasTracks.length > 0 && canvasTracks.every(t => t.isComplete)
+                    return renderWire(
+                      track.outPortId,
+                      'delivered-in',
+                      track.isComplete || currentStageIndex >= 5,
+                      allTracksDone || currentStageIndex >= 5
+                    )
+                  })}
 
                   {/* Wire 8: Delivered -> End Completed Pill */}
                   {renderWire('delivered-out', 'end-in', currentStageIndex === 5, currentStageIndex === 5 && selectedProject?.status === 'completed')}
@@ -3187,8 +3609,7 @@ function EventsBoardContent() {
 
                       {/* Exit gate summary */}
                       {(() => {
-                        const rawKey = `${selectedProject?.projectId}_eventDay_All raw footage backed up (2 copies)`
-                        const isRawBackupDone = currentStageIndex > STAGE_ORDER.indexOf('eventDay') || !!gateOverrides[rawKey]
+                        const isRawBackupDone = isDayRawBackupDone(idx)
                         return (
                           <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <i
@@ -3547,312 +3968,196 @@ function EventsBoardContent() {
                 </>
               ) : (
                 <>
-                  {/* STAGE 5: POST-PROD (Main node + parallel photo & video tracks) */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '20px',
-                      width: '310px',
-                      transform: `translate3d(${nodeOffsets['postProduction']?.x || 0}px, ${nodeOffsets['postProduction']?.y || 0}px, 0)`,
-                      zIndex: draggingNodeId === 'postProduction' || draggingNodeId === 'photoTrack' || draggingNodeId === 'videoTrack' ? 10 : 2,
-                      position: 'relative',
-                    }}
-                  >
-                    <div style={{ position: 'relative' }}>
-                      <StageNodeCard
-                        config={STAGE_CONFIGS[4]}
-                        status={getStageStatus('postProduction')}
-                        schedule="Post-event processing"
-                        isSelected={panelStageKey === 'postProduction'}
-                        onClick={() => handleStageCardClick('postProduction')}
-                        onMouseDown={(e) => handleNodeMouseDown(e, 'postProduction')}
-                        isNodeDragging={draggingNodeId === 'postProduction'}
-                        inPortId="postprod-in"
-                        gates={(() => {
-                          if (selectedProject?.postProdRequirements && selectedProject.postProduction?.isConfigured) {
-                            const g: string[] = []
-                            if (selectedProject.postProdRequirements.photography?.required) g.push('Photo track completed')
-                            if (selectedProject.postProdRequirements.album?.required) g.push('Album track completed')
-                            if (selectedProject.postProdRequirements.videoHighlights?.required) g.push('Video Highlights completed')
-                            if (selectedProject.postProdRequirements.fullVideo?.required) g.push('Full Video completed')
-                            return g.length > 0 ? g : ['Tracks completed']
-                          }
-                          return ['Photo track completed', 'Video track completed']
-                        })()}
-                        assignedNames={assignedTeamMembers.map(s => s.name)}
-                        isDragging={isDragging}
-                      />
-                      {/* Branching ports at bottom to Photo and Video tracks */}
-                      <span
-                        data-port-id="postprod-out-photo"
-                        style={{
-                          position: 'absolute',
-                          left: '80px',
-                          bottom: '-6px',
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '50%',
-                          background: 'var(--color-surface)',
-                          border: '2px solid var(--color-accent)',
-                          zIndex: 3,
-                        }}
-                      />
-                      <span
-                        data-port-id="postprod-out-video"
-                        style={{
-                          position: 'absolute',
-                          right: '80px',
-                          bottom: '-6px',
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '50%',
-                          background: 'var(--color-surface)',
-                          border: '2px solid var(--color-secondary)',
-                          zIndex: 3,
-                        }}
-                      />
-                    </div>
-
-                    {/* Parallel Tracks visual cards */}
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      
-                      {/* Photo Track Card */}
+                  {/* STAGE 5: POST-PROD (Main node + dynamic active tracks) */}
+                  {(() => {
+                    const postProdWidth = Math.max(310, canvasTracks.length * 165 + Math.max(0, canvasTracks.length - 1) * 12)
+                    return (
                       <div
-                        onClick={() => {
-                          if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
-                        }}
-                        onMouseDown={(e) => handleNodeMouseDown(e, 'photoTrack')}
                         style={{
-                          flex: 1,
-                          background: 'var(--color-surface)',
-                          border: '0.5px solid var(--color-border)',
-                          borderTop: '2.5px solid var(--color-accent)',
-                          borderRadius: '10px',
-                          padding: '12px',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '8px',
+                          gap: '20px',
+                          width: `${postProdWidth}px`,
+                          transform: `translate3d(${nodeOffsets['postProduction']?.x || 0}px, ${nodeOffsets['postProduction']?.y || 0}px, 0)`,
+                          zIndex: draggingNodeId === 'postProduction' || canvasTracks.some(t => draggingNodeId === t.id) ? 10 : 2,
                           position: 'relative',
-                          cursor: draggingNodeId === 'photoTrack' ? 'grabbing' : 'pointer',
-                          transform: `translate3d(${nodeOffsets['photoTrack']?.x || 0}px, ${nodeOffsets['photoTrack']?.y || 0}px, 0)`,
-                          zIndex: draggingNodeId === 'photoTrack' ? 10 : 2,
-                          boxShadow: draggingNodeId === 'photoTrack'
-                            ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-accent)'
-                            : panelStageKey === 'postProduction'
-                            ? '0 0 0 1px var(--color-accent)'
-                            : 'none',
-                          transition: draggingNodeId === 'photoTrack' ? 'none' : 'all 0.15s ease',
-                          userSelect: 'none',
                         }}
                       >
-                        {/* Ports */}
-                        <span
-                          data-port-id="photo-in"
-                          style={{
-                            position: 'absolute',
-                            top: '-6px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            width: '12px',
-                            height: '12px',
-                            borderRadius: '50%',
-                            background: 'var(--color-surface)',
-                            border: '2px solid var(--color-accent)',
-                          }}
-                        />
-                        <span
-                          data-port-id="photo-out"
-                          style={{
-                            position: 'absolute',
-                            right: '-6px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            width: '12px',
-                            height: '12px',
-                            borderRadius: '50%',
-                            background: 'var(--color-surface)',
-                            border: `2px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-accent)'}`,
-                          }}
-                        />
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
-                            <i className="ti ti-camera" style={{ fontSize: '14px', color: 'var(--color-accent)' }} />
-                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                              Photo Track
-                            </span>
-                          </div>
-                          <span style={{
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            padding: '1px 6px',
-                            borderRadius: '10px',
-                            background: isPhotoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
-                            color: isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
-                            border: `0.5px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
-                          }}>
-                            {photoTrackDoneCount}/{PHOTO_TRACK_MILESTONES.length}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
-                          {PHOTO_TRACK_MILESTONES.map((step) => {
-                            const isDone = isTrackMilestoneDone('photo', step)
-                            return (
-                              <div
-                                key={step}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '2px 4px',
-                                  borderRadius: '4px',
-                                }}
-                              >
-                                <i
-                                  className={isDone ? 'ti ti-checkbox' : 'ti ti-square'}
+                        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', position: 'relative' }}>
+                          <div style={{ width: '310px', position: 'relative' }}>
+                            <StageNodeCard
+                              config={STAGE_CONFIGS[4]}
+                              status={getStageStatus('postProduction')}
+                              schedule="Post-event processing"
+                              isSelected={panelStageKey === 'postProduction'}
+                              onClick={() => handleStageCardClick('postProduction')}
+                              onMouseDown={(e) => handleNodeMouseDown(e, 'postProduction')}
+                              isNodeDragging={draggingNodeId === 'postProduction'}
+                              inPortId="postprod-in"
+                              gates={(() => {
+                                if (canvasTracks.length > 0) {
+                                  return canvasTracks.map(t => `${t.name} completed`)
+                                }
+                                return ['Tracks completed']
+                              })()}
+                              assignedNames={assignedTeamMembers.map(s => s.name)}
+                              isDragging={isDragging}
+                            />
+                            {/* Branching ports at bottom to the active tracks */}
+                            {canvasTracks.map((track, idx) => {
+                              const pct = ((idx + 1) / (canvasTracks.length + 1)) * 100
+                              return (
+                                <span
+                                  key={track.id}
+                                  data-port-id={`postprod-out-${track.id}`}
                                   style={{
-                                    fontSize: '13px',
-                                    color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                                    flexShrink: 0,
+                                    position: 'absolute',
+                                    left: `${pct}%`,
+                                    transform: 'translateX(-50%)',
+                                    bottom: '-6px',
+                                    width: '12px',
+                                    height: '12px',
+                                    borderRadius: '50%',
+                                    background: 'var(--color-surface)',
+                                    border: `2px solid ${track.color}`,
+                                    zIndex: 3,
                                   }}
                                 />
-                                <span style={{
-                                  fontSize: '11px',
-                                  color: isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
-                                  textDecoration: isDone ? 'line-through' : 'none',
-                                  fontWeight: isDone ? 400 : 500,
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Active Tracks visual cards */}
+                        <div style={{ display: 'flex', gap: '12px', width: '100%', justifyContent: 'center' }}>
+                          {canvasTracks.map(track => {
+                            return (
+                              <div
+                                key={track.id}
+                                onClick={() => {
+                                  if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
+                                }}
+                                onMouseDown={(e) => handleNodeMouseDown(e, track.id)}
+                                style={{
+                                  flex: 1,
+                                  minWidth: '150px',
+                                  maxWidth: '200px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  borderTop: `2.5px solid ${track.color}`,
+                                  borderRadius: '10px',
+                                  padding: '12px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '8px',
+                                  position: 'relative',
+                                  cursor: draggingNodeId === track.id ? 'grabbing' : 'pointer',
+                                  transform: `translate3d(${nodeOffsets[track.id]?.x || 0}px, ${nodeOffsets[track.id]?.y || 0}px, 0)`,
+                                  zIndex: draggingNodeId === track.id ? 10 : 2,
+                                  boxShadow: draggingNodeId === track.id
+                                    ? `0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px ${track.color}`
+                                    : panelStageKey === 'postProduction'
+                                    ? `0 0 0 1px ${track.color}`
+                                    : 'none',
+                                  transition: draggingNodeId === track.id ? 'none' : 'all 0.15s ease',
                                   userSelect: 'none',
-                                }}>
-                                  {step}
-                                </span>
+                                }}
+                              >
+                                {/* Top In Port */}
+                                <span
+                                  data-port-id={track.inPortId}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-6px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    width: '12px',
+                                    height: '12px',
+                                    borderRadius: '50%',
+                                    background: 'var(--color-surface)',
+                                    border: `2px solid ${track.color}`,
+                                  }}
+                                />
+                                {/* Right Out Port */}
+                                <span
+                                  data-port-id={track.outPortId}
+                                  style={{
+                                    position: 'absolute',
+                                    right: '-6px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    width: '12px',
+                                    height: '12px',
+                                    borderRadius: '50%',
+                                    background: 'var(--color-surface)',
+                                    border: `2px solid ${track.isComplete ? 'var(--color-success)' : track.color}`,
+                                  }}
+                                />
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                    <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
+                                    <i className={`ti ${track.icon}`} style={{ fontSize: '14px', color: track.color, flexShrink: 0 }} />
+                                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {track.name}
+                                    </span>
+                                  </div>
+                                  <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    padding: '1px 6px',
+                                    borderRadius: '10px',
+                                    background: track.isComplete ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                                    color: track.isComplete ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+                                    border: `0.5px solid ${track.isComplete ? 'var(--color-success)' : 'var(--color-border)'}`,
+                                    flexShrink: 0,
+                                  }}>
+                                    {track.doneCount}/{track.totalCount}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
+                                  {track.steps.map((step) => (
+                                    <div
+                                      key={step.label}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '2px 4px',
+                                        borderRadius: '4px',
+                                      }}
+                                    >
+                                      <i
+                                        className={step.isDone ? 'ti ti-checkbox' : 'ti ti-square'}
+                                        style={{
+                                          fontSize: '13px',
+                                          color: step.isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                                          flexShrink: 0,
+                                        }}
+                                      />
+                                      <span style={{
+                                        fontSize: '11px',
+                                        color: step.isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
+                                        textDecoration: step.isDone ? 'line-through' : 'none',
+                                        fontWeight: step.isDone ? 400 : 500,
+                                        userSelect: 'none',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                      }}>
+                                        {step.label}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             )
                           })}
                         </div>
                       </div>
-
-                      {/* Video Track Card */}
-                      <div
-                        onClick={() => {
-                          if (!dragStartRef.current.hasMoved && !draggingNodeRef.current?.hasMoved) handleStageCardClick('postProduction')
-                        }}
-                        onMouseDown={(e) => handleNodeMouseDown(e, 'videoTrack')}
-                        style={{
-                          flex: 1,
-                          background: 'var(--color-surface)',
-                          border: '0.5px solid var(--color-border)',
-                          borderTop: '2.5px solid var(--color-secondary)',
-                          borderRadius: '10px',
-                          padding: '12px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px',
-                          position: 'relative',
-                          cursor: draggingNodeId === 'videoTrack' ? 'grabbing' : 'pointer',
-                          transform: `translate3d(${nodeOffsets['videoTrack']?.x || 0}px, ${nodeOffsets['videoTrack']?.y || 0}px, 0)`,
-                          zIndex: draggingNodeId === 'videoTrack' ? 10 : 2,
-                          boxShadow: draggingNodeId === 'videoTrack'
-                            ? '0 12px 28px rgba(0,0,0,0.35), 0 0 0 1px var(--color-secondary)'
-                            : panelStageKey === 'postProduction'
-                            ? '0 0 0 1px var(--color-secondary)'
-                            : 'none',
-                          transition: draggingNodeId === 'videoTrack' ? 'none' : 'all 0.15s ease',
-                          userSelect: 'none',
-                        }}
-                      >
-                        {/* Ports */}
-                        <span
-                          data-port-id="video-in"
-                          style={{
-                            position: 'absolute',
-                            top: '-6px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            width: '12px',
-                            height: '12px',
-                            borderRadius: '50%',
-                            background: 'var(--color-surface)',
-                            border: '2px solid var(--color-secondary)',
-                          }}
-                        />
-                        <span
-                          data-port-id="video-out"
-                          style={{
-                            position: 'absolute',
-                            right: '-6px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            width: '12px',
-                            height: '12px',
-                            borderRadius: '50%',
-                            background: 'var(--color-surface)',
-                            border: `2px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-secondary)'}`,
-                          }}
-                        />
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <i className="ti ti-grip-vertical" style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} title="Drag node" />
-                            <i className="ti ti-video" style={{ fontSize: '14px', color: 'var(--color-secondary)' }} />
-                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                              Video Track
-                            </span>
-                          </div>
-                          <span style={{
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            padding: '1px 6px',
-                            borderRadius: '10px',
-                            background: isVideoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
-                            color: isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
-                            border: `0.5px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
-                          }}>
-                            {videoTrackDoneCount}/{VIDEO_TRACK_MILESTONES.length}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', pointerEvents: 'none' }}>
-                          {VIDEO_TRACK_MILESTONES.map((step) => {
-                            const isDone = isTrackMilestoneDone('video', step)
-                            return (
-                              <div
-                                key={step}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '2px 4px',
-                                  borderRadius: '4px',
-                                }}
-                              >
-                                <i
-                                  className={isDone ? 'ti ti-checkbox' : 'ti ti-square'}
-                                  style={{
-                                    fontSize: '13px',
-                                    color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
-                                    flexShrink: 0,
-                                  }}
-                                />
-                                <span style={{
-                                  fontSize: '11px',
-                                  color: isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
-                                  textDecoration: isDone ? 'line-through' : 'none',
-                                  fontWeight: isDone ? 400 : 500,
-                                  userSelect: 'none',
-                                }}>
-                                  {step}
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
+                    )
+                  })()}
 
                   {/* STAGE 6: DELIVERED */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
@@ -3989,7 +4294,11 @@ function EventsBoardContent() {
                 ? `${currentPanelConfig.name} · ${multiEventDays[selectedDayTab].label || `Day ${selectedDayTab + 1}`}`
                 : currentPanelConfig.name}
             </span>
-            <StatusPill status={panelStageStatus} />
+            <StatusPill status={
+              panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]
+                ? getDaySessionStatus(multiEventDays[selectedDayTab], selectedDayTab)
+                : panelStageStatus
+            } />
             <span
               onClick={() => setPanelStageKey(null)}
               style={{ cursor: 'pointer', color: 'var(--color-foreground-muted)', display: 'flex', padding: '4px' }}
@@ -3997,6 +4306,49 @@ function EventsBoardContent() {
               <i className="ti ti-x" style={{ fontSize: '18px' }} />
             </span>
           </div>
+
+          {/* Multi-Day Tabs in Panel */}
+          {panelStageKey === 'eventDay' && multiEventDays.length > 1 && (
+            <div style={{
+              display: 'flex',
+              gap: '6px',
+              padding: '8px 16px',
+              borderBottom: '0.5px solid var(--color-border)',
+              background: 'var(--color-surface-raised)',
+              overflowX: 'auto',
+            }}>
+              {multiEventDays.map((d: EventDateEntry, idx: number) => {
+                const isCurTab = selectedDayTab === idx
+                const isDayDone = isDayRawBackupDone(idx)
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedDayTab(idx)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      border: isCurTab ? '1px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                      background: isCurTab ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+                      color: isCurTab ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <span>{d.label || `Day ${idx + 1}`}</span>
+                    {isDayDone && (
+                      <i className="ti ti-circle-check" style={{ fontSize: '13px', color: 'var(--color-success)' }} />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* Panel Content (Scrollable) */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -4772,6 +5124,7 @@ function EventsBoardContent() {
                                 value={postProdSetupDueDates['album_designing'] || defaultDateStr(14)}
                                 onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, album_designing: val }))}
                                 className="h-8"
+                                align="left"
                               />
                             </div>
 
@@ -4783,6 +5136,7 @@ function EventsBoardContent() {
                                 value={postProdSetupDueDates['album_creating'] || defaultDateStr(21)}
                                 onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, album_creating: val }))}
                                 className="h-8"
+                                align="right"
                               />
                             </div>
                           </div>
@@ -6332,6 +6686,8 @@ function EventsBoardContent() {
               {/* CASE 1: Stage is already completed */}
               {panelStageStatus === 'completed' && (() => {
                 const compDate = getStageCompletedDate(selectedProject, panelStageKey)
+                const isCurrentActiveStage = selectedProject?.stage === panelStageKey
+
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{
@@ -6346,11 +6702,13 @@ function EventsBoardContent() {
                       <i className="ti ti-circle-check" style={{ fontSize: '20px', color: 'var(--color-success)', flexShrink: 0 }} />
                       <div>
                         <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-success)' }}>
-                          Stage Completed
+                          {isCurrentActiveStage ? 'Ready to Advance' : 'Stage Completed'}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
                           {compDate ? (
                             <>Completed on {formatDateTime(compDate)} · Current stage: {STAGE_CONFIGS[currentStageIndex]?.name}.</>
+                          ) : isCurrentActiveStage ? (
+                            <>All shoot &amp; gate requirements satisfied · Ready to advance to {nextStageKey ? STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name : 'next stage'}.</>
                           ) : (
                             <>All exit gates satisfied · Current stage: {STAGE_CONFIGS[currentStageIndex]?.name}.</>
                           )}
@@ -6358,7 +6716,95 @@ function EventsBoardContent() {
                       </div>
                     </div>
 
-                    {nextStageKey && (
+                    {isCurrentActiveStage && nextStageKey ? (
+                      <button
+                        onClick={handleAdvanceStage}
+                        disabled={isAdvancing}
+                        style={{
+                          fontFamily: 'var(--font-inter)',
+                          height: '38px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: 'var(--color-primary)',
+                          color: '#ffffff',
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 600,
+                          cursor: isAdvancing ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>{isAdvancing ? 'Advancing…' : `Advance to ${STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}`}</span>
+                        <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
+                      </button>
+                    ) : selectedProject?.stage === 'postProduction' && panelStageKey === 'eventDay' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {nextStageKey && (
+                          <button
+                            onClick={() => setPanelStageKey(nextStageKey)}
+                            style={{
+                              fontFamily: 'var(--font-inter)',
+                              height: '36px',
+                              borderRadius: '8px',
+                              border: '0.5px solid var(--color-border)',
+                              background: 'var(--color-surface-raised)',
+                              color: 'var(--color-foreground)',
+                              fontSize: 'var(--text-xs)',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <span>Next: View {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span>
+                            <i className="ti ti-arrow-right" style={{ fontSize: '14px' }} />
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!selectedProject) return
+                            setIsAdvancing(true)
+                            try {
+                              if (!selectedProject.projectId.startsWith('demo-')) {
+                                await updateProjectStage(selectedProject.projectId, 'eventDay', selectedProject.clientId, undefined, 'postProduction')
+                              }
+                              setProjects(prev => prev.map(p => p.projectId === selectedProject.projectId ? {
+                                ...p,
+                                stage: 'eventDay',
+                              } : p))
+                            } catch (e) {
+                              console.error('Failed to revert stage:', e)
+                            } finally {
+                              setIsAdvancing(false)
+                            }
+                          }}
+                          disabled={isAdvancing}
+                          style={{
+                            fontFamily: 'var(--font-inter)',
+                            height: '32px',
+                            borderRadius: '6px',
+                            border: '0.5px solid var(--color-border)',
+                            background: 'var(--color-surface)',
+                            color: 'var(--color-foreground-muted)',
+                            fontSize: '11px',
+                            cursor: isAdvancing ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <i className="ti ti-arrow-back-up" style={{ fontSize: '13px' }} />
+                          <span>Revert stage to Event Day</span>
+                        </button>
+                      </div>
+                    ) : nextStageKey ? (
                       <button
                         onClick={() => setPanelStageKey(nextStageKey)}
                         style={{
@@ -6381,39 +6827,105 @@ function EventsBoardContent() {
                         <span>Next: View {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span>
                         <i className="ti ti-arrow-right" style={{ fontSize: '14px' }} />
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 )
               })()}
 
               {/* CASE 2: Stage is upcoming / locked */}
               {panelStageStatus === 'pending' && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '12px 14px',
-                  borderRadius: '8px',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                }}>
-                  <i className={panelStageKey === 'eventDay' ? 'ti ti-calendar-time' : 'ti ti-lock'} style={{ fontSize: '20px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                      {isRecurring && multiEventDays[selectedDayTab]
-                        ? `${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`} ${STAGE_CONFIGS.find(s => s.stageKey === panelStageKey)?.name || 'Stage'}`
-                        : panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
-                        ? `${multiEventDays[selectedDayTab].label || 'Session'} Scheduled`
-                        : 'Upcoming Stage'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                      {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
-                        ? `Scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
-                        : isRecurring && multiEventDays[selectedDayTab]
-                        ? `Session shoot is scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
-                        : `Unlocks after ${STAGE_CONFIGS[currentStageIndex]?.name} is completed.`}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                  }}>
+                    <i className={panelStageKey === 'eventDay' ? 'ti ti-calendar-time' : 'ti ti-lock'} style={{ fontSize: '20px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                        {isRecurring && multiEventDays[selectedDayTab]
+                          ? `${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`} ${STAGE_CONFIGS.find(s => s.stageKey === panelStageKey)?.name || 'Stage'}`
+                          : panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                          ? `${multiEventDays[selectedDayTab].label || 'Session'} Scheduled`
+                          : 'Upcoming Stage'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                        {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                          ? `Scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
+                          : isRecurring && multiEventDays[selectedDayTab]
+                          ? `Session shoot is scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
+                          : `Unlocks after ${STAGE_CONFIGS[currentStageIndex]?.name} is completed.`}
+                      </div>
                     </div>
                   </div>
+
+                  {/* If viewing Post-Prod while current stage is eventDay and ready, offer direct advance button */}
+                  {selectedProject && selectedProject.stage === 'eventDay' && panelStageKey === 'postProduction' && (
+                    allEventDaysChecked ? (
+                      <button
+                        onClick={async () => {
+                          if (!selectedProject) return
+                          setIsAdvancing(true)
+                          try {
+                            const nowComp = new Date()
+                            const currKey = selectedProject.stage
+                            if (!selectedProject.projectId.startsWith('demo-')) {
+                              await updateProjectStage(selectedProject.projectId, panelStageKey, selectedProject.clientId, undefined, currKey)
+                            }
+                            setProjects(prev => prev.map(p => p.projectId === selectedProject.projectId ? {
+                              ...p,
+                              stage: panelStageKey,
+                              stageCompletedAt: { ...(p.stageCompletedAt || {}), [currKey]: nowComp },
+                              updatedAt: nowComp,
+                            } : p))
+                          } catch (e) {
+                            console.error('Failed to advance stage:', e)
+                          } finally {
+                            setIsAdvancing(false)
+                          }
+                        }}
+                        disabled={isAdvancing}
+                        style={{
+                          fontFamily: 'var(--font-inter)',
+                          height: '38px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: 'var(--color-primary)',
+                          color: '#ffffff',
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 600,
+                          cursor: isAdvancing ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>{isAdvancing ? 'Advancing…' : `Advance to ${STAGE_CONFIGS.find(s => s.stageKey === panelStageKey)?.name}`}</span>
+                        <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
+                      </button>
+                    ) : (
+                      <div style={{
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-secondary)',
+                        background: 'var(--color-secondary-muted)',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '0.5px solid var(--color-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}>
+                        <i className="ti ti-alert-circle" style={{ fontSize: '16px', flexShrink: 0 }} />
+                        <span>All event days must have raw footage backed up before advancing to Post-Production.</span>
+                      </div>
+                    )
+                  )}
                 </div>
               )}
 
@@ -6425,6 +6937,12 @@ function EventsBoardContent() {
                   }
                   if (panelStageKey === 'eventDay' && !shootTimingInfo.isCompleted) {
                     return `Shoot in progress (ends ${shootTimingInfo.formattedTime || 'later'})`
+                  }
+                  if (panelStageKey === 'eventDay' && !allEventDaysChecked) {
+                    if (multiEventDays.length > 1) {
+                      return `Pending raw backup: ${pendingEventDayLabels.join(', ')}`
+                    }
+                    return 'Raw footage backup pending'
                   }
                   return 'Gates pending'
                 })()
