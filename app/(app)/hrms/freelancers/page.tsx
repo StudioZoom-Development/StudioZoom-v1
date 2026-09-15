@@ -36,6 +36,7 @@ const SKILL_FILTERS = [
   { key: 'videographer', label: 'Videographer' },
   { key: 'editor', label: 'Editor' },
   { key: 'designer', label: 'Designer' },
+  { key: 'other', label: 'Others' },
 ]
 
 export default function FreelancersListPage() {
@@ -95,7 +96,12 @@ export default function FreelancersListPage() {
   // Filter logic
   const filteredFreelancers = useMemo(() => {
     return freelancers.filter(f => {
-      const matchesSkill = skillFilter === 'all' || f.skill.toLowerCase() === skillFilter.toLowerCase()
+      const skillLower = (f.skill || '').toLowerCase()
+      const matchesSkill =
+        skillFilter === 'all' ||
+        (skillFilter === 'other'
+          ? skillLower === 'other' || !['photographer', 'videographer', 'editor', 'designer'].includes(skillLower)
+          : skillLower === skillFilter.toLowerCase())
       const q = searchQuery.toLowerCase().trim()
       const matchesSearch = !q ||
         f.name?.toLowerCase().includes(q) ||
