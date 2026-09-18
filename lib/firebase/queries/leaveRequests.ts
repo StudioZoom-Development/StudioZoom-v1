@@ -4,6 +4,10 @@ import {
   where,
   onSnapshot,
   addDoc,
+  updateDoc,
+  setDoc,
+  doc,
+  getDoc,
   getDocs,
   Timestamp,
   serverTimestamp,
@@ -20,6 +24,7 @@ function docToLeaveRequest(id: string, data: Record<string, unknown>): LeaveRequ
     date:        data.date as string,
     type:        data.type as LeaveRequestType,
     status:      data.status as LeaveRequest['status'],
+    reason:      data.reason as string | undefined,
     createdAt:   data.createdAt instanceof Timestamp
                    ? data.createdAt.toDate()
                    : new Date(data.createdAt as string),
@@ -90,17 +95,40 @@ export function subscribeToAllLeaveRequests(
   })
 }
 
+/**
+ * Real-time subscription to all pending leave requests across all staff.
+ * Used by Admin/Manager on Time Logs page.
+ */
+export function subscribeToPendingLeaveRequests(
+  callback: (requests: LeaveRequest[]) => void
+): () => void {
+  const q = query(
+    collection(db, 'leaveRequests'),
+    where('status', '==', 'pending')
+  )
+
+  return onSnapshot(q, snap => {
+    const requests = snap.docs.map(d => docToLeaveRequest(d.id, d.data() as Record<string, unknown>))
+    requests.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    callback(requests)
+  }, err => {
+    console.error('[leaveRequests] subscribeToPendingLeaveRequests error:', err)
+    callback([])
+  })
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /**
- * Submit a new leave/permission request.
+ * Submit a new leave/permission request with optional reason.
  * Guards against duplicate requests for the same date.
  * Returns the new requestId.
  */
 export async function submitLeaveRequest(
   staffUid: string,
   date: string,
-  type: LeaveRequestType
+  type: LeaveRequestType,
+  reason?: string
 ): Promise<string> {
   // Guard: check for existing request on same date
   const q = query(
@@ -124,8 +152,117 @@ export async function submitLeaveRequest(
     date,
     type,
     status:    'pending',
+    reason:    reason || '',
     createdAt: serverTimestamp(),
   })
 
   return ref.id
+}
+
+/**
+ * Accept / Approve a pending leave request:
+ * Sets leaveRequest status to 'approved' and updates the Attendance
+ * document status for this staff member and date to 'LV' (Leave).
+ */
+export async function approveLeaveRequest(
+  requestId: string,
+  staffUid: string,
+  date: string,
+  adminUid: string
+): Promise<void> {
+  // 1. Update leave request document
+  await updateDoc(doc(db, 'leaveRequests', requestId), {
+    status:     'approved',
+    reviewedBy: adminUid,
+    reviewedAt: serverTimestamp(),
+  })
+
+  // 2. Reflect on Attendance matrix (format: staffUid_year_month)
+  const [yearStr, monthStr, dayStr] = date.split('-')
+  const year = parseInt(yearStr, 10)
+  const month = parseInt(monthStr, 10)
+  const dayNum = parseInt(dayStr, 10)
+  const attendanceDocId = `${staffUid}_${year}_${month}`
+  const attRef = doc(db, 'attendance', attendanceDocId)
+
+  const snap = await getDoc(attRef)
+  if (snap.exists()) {
+    await updateDoc(attRef, {
+      [`dailyStatus.${dayNum}`]: 'LV',
+      updatedAt: serverTimestamp(),
+    })
+  } else {
+    await setDoc(attRef, {
+      attendanceId: attendanceDocId,
+      staffUid,
+      year,
+      month,
+      dailyStatus: { [dayNum]: 'LV' },
+      dailyHours: {},
+      summary: {
+        present: 0,
+        late: 0,
+        halfDay: 0,
+        absent: 0,
+        weekOff: 0,
+        totalMinutes: 0,
+      },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  }
+}
+
+/**
+ * Reject a pending leave request:
+ * Sets leaveRequest status to 'rejected' and updates the Attendance
+ * document status for this staff member and date to 'AB' (Absent).
+ */
+export async function rejectLeaveRequest(
+  requestId: string,
+  staffUid: string,
+  date: string,
+  adminUid: string
+): Promise<void> {
+  // 1. Update leave request document
+  await updateDoc(doc(db, 'leaveRequests', requestId), {
+    status:     'rejected',
+    reviewedBy: adminUid,
+    reviewedAt: serverTimestamp(),
+  })
+
+  // 2. Reflect on Attendance matrix (format: staffUid_year_month)
+  const [yearStr, monthStr, dayStr] = date.split('-')
+  const year = parseInt(yearStr, 10)
+  const month = parseInt(monthStr, 10)
+  const dayNum = parseInt(dayStr, 10)
+  const attendanceDocId = `${staffUid}_${year}_${month}`
+  const attRef = doc(db, 'attendance', attendanceDocId)
+
+  const snap = await getDoc(attRef)
+  if (snap.exists()) {
+    await updateDoc(attRef, {
+      [`dailyStatus.${dayNum}`]: 'AB',
+      updatedAt: serverTimestamp(),
+    })
+  } else {
+    await setDoc(attRef, {
+      attendanceId: attendanceDocId,
+      staffUid,
+      year,
+      month,
+      dailyStatus: { [dayNum]: 'AB' },
+      dailyHours: {},
+      summary: {
+        present: 0,
+        late: 0,
+        halfDay: 0,
+        absent: 1,
+        weekOff: 0,
+        totalMinutes: 0,
+      },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  }
 }

@@ -5,13 +5,14 @@ import {
   onSnapshot,
   addDoc,
   updateDoc,
+  setDoc,
   doc,
   getDocs,
   Timestamp,
   serverTimestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import type { TimeLog } from '@/types'
+import type { TimeLog, TimeLogCorrection } from '@/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 export const STANDARD_MINUTES = 540 // 9 hours
@@ -21,24 +22,34 @@ export const STANDARD_MINUTES = 540 // 9 hours
 /** Convert a Firestore doc to a typed TimeLog */
 function docToTimeLog(id: string, data: Record<string, unknown>): TimeLog {
   return {
-    logId:             id,
-    staffUid:          data.staffUid as string,
-    date:              data.date as string,
-    checkInAt:         data.checkInAt instanceof Timestamp
-                         ? data.checkInAt.toDate()
-                         : new Date(data.checkInAt as string),
-    checkOutAt:        data.checkOutAt instanceof Timestamp
-                         ? data.checkOutAt.toDate()
-                         : data.checkOutAt
-                           ? new Date(data.checkOutAt as string)
-                           : undefined,
-    workedMinutes:     data.workedMinutes as number | undefined,
-    standardMinutes:   STANDARD_MINUTES as 540,
-    variance:          data.variance as number | undefined,
-    status:            data.status as TimeLog['status'],
-    overrideStatus:    data.overrideStatus as TimeLog['overrideStatus'],
-    correctedBy:       data.correctedBy as string | undefined,
-    correctionReason:  data.correctionReason as string | undefined,
+    logId:              id,
+    staffUid:           data.staffUid as string,
+    date:               data.date as string,
+    checkInAt:          data.checkInAt instanceof Timestamp
+                          ? data.checkInAt.toDate()
+                          : new Date(data.checkInAt as string),
+    checkOutAt:         data.checkOutAt instanceof Timestamp
+                          ? data.checkOutAt.toDate()
+                          : data.checkOutAt
+                            ? new Date(data.checkOutAt as string)
+                            : undefined,
+    workedMinutes:      data.workedMinutes as number | undefined,
+    standardMinutes:    STANDARD_MINUTES as 540,
+    variance:           data.variance as number | undefined,
+    status:             data.status as TimeLog['status'],
+    overrideStatus:     data.overrideStatus as TimeLog['overrideStatus'],
+    isCorrected:        data.isCorrected as boolean | undefined,
+    originalCheckInAt:  data.originalCheckInAt instanceof Timestamp
+                          ? data.originalCheckInAt.toDate()
+                          : data.originalCheckInAt ? new Date(data.originalCheckInAt as string) : undefined,
+    originalCheckOutAt: data.originalCheckOutAt instanceof Timestamp
+                          ? data.originalCheckOutAt.toDate()
+                          : data.originalCheckOutAt ? new Date(data.originalCheckOutAt as string) : undefined,
+    correctedBy:        data.correctedBy as string | undefined,
+    correctionReason:   data.correctionReason as string | undefined,
+    correctedAt:        data.correctedAt instanceof Timestamp
+                          ? data.correctedAt.toDate()
+                          : data.correctedAt ? new Date(data.correctedAt as string) : undefined,
   }
 }
 
@@ -465,6 +476,209 @@ export async function getAllStaffMonthTimeLogs(
   } catch (err) {
     console.error('[timeLogs] getAllStaffMonthTimeLogs error:', err)
     return {}
+  }
+}
+
+// ─── Time Logs Page Specific Queries ──────────────────────────────────────────
+
+/**
+ * Real-time subscription to time logs for a given date.
+ * Optionally filtered by staffUid.
+ */
+export function subscribeTimeLogsForDate(
+  date: string,
+  staffUid: string | undefined,
+  callback: (logs: TimeLog[]) => void
+): () => void {
+  const constraints = [where('date', '==', date)]
+  if (staffUid && staffUid !== 'all') {
+    constraints.push(where('staffUid', '==', staffUid))
+  }
+
+  const q = query(collection(db, 'timeLogs'), ...constraints)
+
+  return onSnapshot(q, snap => {
+    const logs = snap.docs.map(d => docToTimeLog(d.id, d.data() as Record<string, unknown>))
+    logs.sort((a, b) => (a.checkInAt?.getTime() ?? 0) - (b.checkInAt?.getTime() ?? 0))
+    callback(logs)
+  }, err => {
+    console.error('[timeLogs] subscribeTimeLogsForDate error:', err)
+    callback([])
+  })
+}
+
+/**
+ * Real-time subscription to all time logs for a given staff member (for Staff login view).
+ */
+export function subscribeTimeLogsForStaff(
+  staffUid: string,
+  callback: (logs: TimeLog[]) => void
+): () => void {
+  const q = query(
+    collection(db, 'timeLogs'),
+    where('staffUid', '==', staffUid)
+  )
+
+  return onSnapshot(q, snap => {
+    const logs = snap.docs.map(d => docToTimeLog(d.id, d.data() as Record<string, unknown>))
+    logs.sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date)
+      return (a.checkInAt?.getTime() ?? 0) - (b.checkInAt?.getTime() ?? 0)
+    })
+    callback(logs)
+  }, err => {
+    console.error('[timeLogs] subscribeTimeLogsForStaff error:', err)
+    callback([])
+  })
+}
+
+/**
+ * Real-time subscription to ALL time logs (Admin/Manager view).
+ */
+export function subscribeAllTimeLogs(
+  callback: (logs: TimeLog[]) => void
+): () => void {
+  const q = query(collection(db, 'timeLogs'))
+
+  return onSnapshot(q, snap => {
+    const logs = snap.docs.map(d => docToTimeLog(d.id, d.data() as Record<string, unknown>))
+    logs.sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date)
+      return (a.checkInAt?.getTime() ?? 0) - (b.checkInAt?.getTime() ?? 0)
+    })
+    callback(logs)
+  }, err => {
+    console.error('[timeLogs] subscribeAllTimeLogs error:', err)
+    callback([])
+  })
+}
+
+/**
+ * Save a time log correction (Fix flow and View edit flow).
+ * Creates/updates record in timeLogCorrections collection
+ * and updates the corresponding timeLogs document.
+ */
+export async function saveTimeLogCorrection(params: {
+  logId?:           string
+  staffUid:         string
+  date:             string       // "YYYY-MM-DD"
+  oldCheckIn:       Date | null
+  oldCheckOut:      Date | null
+  newCheckIn:       Date
+  newCheckOut:      Date
+  reason:           string
+  correctedByUid:   string
+  correctedByName?: string
+}): Promise<string> {
+  const {
+    logId,
+    staffUid,
+    date,
+    oldCheckIn,
+    oldCheckOut,
+    newCheckIn,
+    newCheckOut,
+    reason,
+    correctedByUid,
+    correctedByName,
+  } = params
+
+  const diffMs = newCheckOut.getTime() - newCheckIn.getTime()
+  const workedMinutes = Math.max(0, Math.floor(diffMs / 60000))
+  const variance = workedMinutes - STANDARD_MINUTES
+
+  let targetLogId = logId
+
+  if (targetLogId) {
+    await updateDoc(doc(db, 'timeLogs', targetLogId), {
+      checkInAt:          Timestamp.fromDate(newCheckIn),
+      checkOutAt:         Timestamp.fromDate(newCheckOut),
+      workedMinutes,
+      variance,
+      status:             'corrected',
+      isCorrected:        true,
+      originalCheckInAt:  oldCheckIn ? Timestamp.fromDate(oldCheckIn) : null,
+      originalCheckOutAt: oldCheckOut ? Timestamp.fromDate(oldCheckOut) : null,
+      correctionReason:   reason,
+      correctedBy:        correctedByUid,
+      correctedAt:        serverTimestamp(),
+      updatedAt:          serverTimestamp(),
+    })
+  } else {
+    const newDoc = await addDoc(collection(db, 'timeLogs'), {
+      staffUid,
+      date,
+      checkInAt:          Timestamp.fromDate(newCheckIn),
+      checkOutAt:         Timestamp.fromDate(newCheckOut),
+      workedMinutes,
+      standardMinutes:    STANDARD_MINUTES,
+      variance,
+      status:             'corrected',
+      isCorrected:        true,
+      originalCheckInAt:  oldCheckIn ? Timestamp.fromDate(oldCheckIn) : null,
+      originalCheckOutAt: oldCheckOut ? Timestamp.fromDate(oldCheckOut) : null,
+      correctionReason:   reason,
+      correctedBy:        correctedByUid,
+      correctedAt:        serverTimestamp(),
+      createdAt:          serverTimestamp(),
+      updatedAt:          serverTimestamp(),
+    })
+    targetLogId = newDoc.id
+  }
+
+  // Record audit entry in timeLogCorrections collection
+  const corrRef = doc(collection(db, 'timeLogCorrections'))
+  await setDoc(corrRef, {
+    correctionId:     corrRef.id,
+    logId:            targetLogId,
+    staffUid,
+    date,
+    oldCheckIn:       oldCheckIn ? Timestamp.fromDate(oldCheckIn) : null,
+    oldCheckOut:      oldCheckOut ? Timestamp.fromDate(oldCheckOut) : null,
+    newCheckIn:       Timestamp.fromDate(newCheckIn),
+    newCheckOut:      Timestamp.fromDate(newCheckOut),
+    reason,
+    correctedBy:      correctedByUid,
+    correctedByName:  correctedByName || '',
+    correctedAt:      serverTimestamp(),
+  })
+
+  return targetLogId
+}
+
+/**
+ * Fetch latest correction for a given time log or staff date.
+ */
+export async function getTimeLogCorrection(logId: string): Promise<TimeLogCorrection | null> {
+  try {
+    const q = query(
+      collection(db, 'timeLogCorrections'),
+      where('logId', '==', logId)
+    )
+    const snap = await getDocs(q)
+    if (snap.empty) return null
+    const docs = snap.docs.map(d => {
+      const data = d.data()
+      return {
+        correctionId:    d.id,
+        logId:           data.logId as string | undefined,
+        staffUid:        data.staffUid as string,
+        date:            data.date as string,
+        oldCheckIn:      data.oldCheckIn instanceof Timestamp ? data.oldCheckIn.toDate() : data.oldCheckIn ? new Date(data.oldCheckIn as string) : null,
+        oldCheckOut:     data.oldCheckOut instanceof Timestamp ? data.oldCheckOut.toDate() : data.oldCheckOut ? new Date(data.oldCheckOut as string) : null,
+        newCheckIn:      data.newCheckIn instanceof Timestamp ? data.newCheckIn.toDate() : new Date(data.newCheckIn as string),
+        newCheckOut:     data.newCheckOut instanceof Timestamp ? data.newCheckOut.toDate() : new Date(data.newCheckOut as string),
+        reason:          data.reason as string,
+        correctedBy:     data.correctedBy as string,
+        correctedByName: data.correctedByName as string | undefined,
+        correctedAt:     data.correctedAt instanceof Timestamp ? data.correctedAt.toDate() : new Date(data.correctedAt as string),
+      } as TimeLogCorrection
+    })
+    docs.sort((a, b) => b.correctedAt.getTime() - a.correctedAt.getTime())
+    return docs[0]
+  } catch (err) {
+    console.error('[timeLogs] getTimeLogCorrection error:', err)
+    return null
   }
 }
 

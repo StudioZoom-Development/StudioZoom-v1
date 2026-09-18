@@ -1,1 +1,14 @@
-export default function Page() { return <div style={{color:'var(--color-foreground-muted)',padding:'40px',textAlign:'center',fontFamily:'var(--font-inter)'}}><i className="ti ti-tools" style={{fontSize:'32px',display:'block',marginBottom:'12px'}}/>Salary Detail — coming in next build</div> }
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function SalaryDetailPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace('/hrms/salary')
+  }, [router])
+
+  return null
+}
