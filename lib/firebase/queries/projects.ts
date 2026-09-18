@@ -19,6 +19,7 @@ import {
 } from '@/types'
 import { isAllowedByTestMode } from '@/lib/utils/testMode'
 import { completeAllWorkItemsForProject } from './workItems'
+import { softDeleteClient } from './clients'
 
 const STAGE_ORDER: ProjectStage[] = [
   'booked',
@@ -241,7 +242,9 @@ export async function getProjectByClientId(clientId: string): Promise<Project | 
   )
   const snap = await getDocs(q)
   if (snap.empty) return null
-  return mapDocToProject(snap.docs[0].id, snap.docs[0].data())
+  const nonDeleted = snap.docs.find(d => !d.data().isDeleted && d.data().status !== 'cancelled')
+  if (!nonDeleted) return null
+  return mapDocToProject(nonDeleted.id, nonDeleted.data())
 }
 
 /** Real-time subscription to project by ID */
@@ -505,30 +508,170 @@ export async function removeStaffFromProject(
   await batch.commit()
 }
 
-/** Real-time subscription to all active projects */
+/** Proactively heals orphaned projects in Firestore by marking them soft-deleted and cancelled */
+export async function healOrphanedProjects(projectIds: string[]): Promise<void> {
+  if (!projectIds || projectIds.length === 0) return
+
+  const uniqueIds = Array.from(new Set(projectIds))
+  let batch = writeBatch(db)
+  let count = 0
+
+  const commitBatchIfNeeded = async () => {
+    count++
+    if (count >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      count = 0
+    }
+  }
+
+  for (const pid of uniqueIds) {
+    batch.update(doc(db, 'projects', pid), {
+      isDeleted: true,
+      status: 'cancelled',
+      updatedAt: serverTimestamp(),
+    })
+    await commitBatchIfNeeded()
+
+    try {
+      const wSnap = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', pid)))
+      for (const d of wSnap.docs) {
+        batch.update(d.ref, {
+          isDeleted: true,
+          updatedAt: serverTimestamp(),
+        })
+        await commitBatchIfNeeded()
+      }
+    } catch {}
+
+    try {
+      const aSnap = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', pid)))
+      for (const d of aSnap.docs) {
+        batch.update(d.ref, {
+          isDeleted: true,
+          updatedAt: serverTimestamp(),
+        })
+        await commitBatchIfNeeded()
+      }
+    } catch {}
+  }
+
+  if (count > 0) {
+    await batch.commit()
+  }
+}
+
+/** Real-time subscription to all active projects — excludes projects belonging to soft-deleted clients */
 export function subscribeToProjects(
   callback: (projects: Project[]) => void
 ): () => void {
-  const q = query(collection(db, 'projects'))
-  return onSnapshot(q, snap => {
-    const list = snap.docs
-      .map(d => mapDocToProject(d.id, d.data()))
-      .filter(p => !p.isDeleted && p.status !== 'cancelled' && isAllowedByTestMode(p.createdAt))
+  let latestProjectDocs: { id: string; data: Record<string, unknown> }[] = []
+  let deletedClientIds = new Set<string>()
+  let deletedBookingGroupIds = new Set<string>()
+  let hasProjectsLoaded = false
+  let hasClientsLoaded = false
+
+  const emit = () => {
+    if (!hasProjectsLoaded || !hasClientsLoaded) return
+
+    const orphanedProjectIdsToHeal: string[] = []
+
+    const list = latestProjectDocs
+      .map(d => mapDocToProject(d.id, d.data))
+      .filter(p => {
+        if (p.isDeleted || p.status === 'cancelled' || !isAllowedByTestMode(p.createdAt)) {
+          return false
+        }
+        const isClientDeleted =
+          (Boolean(p.clientId) && deletedClientIds.has(p.clientId)) ||
+          (Boolean(p.bookingGroupId) && deletedBookingGroupIds.has(p.bookingGroupId!))
+
+        if (isClientDeleted) {
+          orphanedProjectIdsToHeal.push(p.projectId)
+          return false
+        }
+        return true
+      })
 
     list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
     callback(list)
+
+    if (orphanedProjectIdsToHeal.length > 0) {
+      healOrphanedProjects(orphanedProjectIdsToHeal).catch(err => {
+        console.warn('healOrphanedProjects warning:', err)
+      })
+    }
+  }
+
+  const unsubClients = onSnapshot(collection(db, 'clients'), clientSnap => {
+    const newDeletedClientIds = new Set<string>()
+    const newDeletedBookingGroupIds = new Set<string>()
+
+    clientSnap.docs.forEach(docSnap => {
+      const data = docSnap.data()
+      if (data.isDeleted) {
+        newDeletedClientIds.add(docSnap.id)
+        if (data.bookingGroupId && typeof data.bookingGroupId === 'string') {
+          newDeletedBookingGroupIds.add(data.bookingGroupId)
+        }
+        newDeletedBookingGroupIds.add(`contract_${docSnap.id}`)
+      }
+    })
+
+    deletedClientIds = newDeletedClientIds
+    deletedBookingGroupIds = newDeletedBookingGroupIds
+    hasClientsLoaded = true
+    emit()
+  }, err => {
+    console.error('subscribeToProjects client listener error:', err)
+    hasClientsLoaded = true
+    emit()
+  })
+
+  const unsubProjects = onSnapshot(collection(db, 'projects'), snap => {
+    latestProjectDocs = snap.docs.map(d => ({ id: d.id, data: d.data() }))
+    hasProjectsLoaded = true
+    emit()
   }, err => {
     console.error('subscribeToProjects error:', err)
   })
+
+  return () => {
+    unsubClients()
+    unsubProjects()
+  }
 }
 
-/** Get active projects (non-deleted, not delivered/cancelled) */
+/** Get active projects (non-deleted, not delivered/cancelled, excluding deleted clients) */
 export async function getActiveProjects(): Promise<Project[]> {
   try {
-    const snap = await getDocs(collection(db, 'projects'))
-    const list = snap.docs
+    const [projSnap, clientSnap] = await Promise.all([
+      getDocs(collection(db, 'projects')),
+      getDocs(collection(db, 'clients')),
+    ])
+
+    const deletedClientIds = new Set<string>()
+    const deletedBookingGroupIds = new Set<string>()
+
+    clientSnap.docs.forEach(docSnap => {
+      const data = docSnap.data()
+      if (data.isDeleted) {
+        deletedClientIds.add(docSnap.id)
+        if (data.bookingGroupId && typeof data.bookingGroupId === 'string') {
+          deletedBookingGroupIds.add(data.bookingGroupId)
+        }
+        deletedBookingGroupIds.add(`contract_${docSnap.id}`)
+      }
+    })
+
+    const list = projSnap.docs
       .map(d => mapDocToProject(d.id, d.data()))
-      .filter(p => !p.isDeleted && p.status !== 'cancelled' && isAllowedByTestMode(p.createdAt))
+      .filter(p => {
+        if (p.isDeleted || p.status === 'cancelled' || !isAllowedByTestMode(p.createdAt)) return false
+        if (p.clientId && deletedClientIds.has(p.clientId)) return false
+        if (p.bookingGroupId && deletedBookingGroupIds.has(p.bookingGroupId)) return false
+        return true
+      })
 
     list.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime())
     return list
@@ -540,50 +683,52 @@ export async function getActiveProjects(): Promise<Project[]> {
 
 /** Soft-delete a project and all its associated work items and assignments */
 export async function softDeleteProject(projectId: string, deletedBy: string): Promise<void> {
-  const batch = writeBatch(db)
   const projRef = doc(db, 'projects', projectId)
   const projSnap = await getDoc(projRef)
 
+  if (!projSnap.exists()) return
+
+  const data = projSnap.data()
+  if (data.clientId && typeof data.clientId === 'string') {
+    await softDeleteClient(data.clientId, deletedBy)
+    return
+  }
+
+  const batch = writeBatch(db)
   batch.update(projRef, {
     isDeleted: true,
+    status: 'cancelled',
     deletedBy,
     deletedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
 
-  if (projSnap.exists()) {
-    const data = projSnap.data()
-    if (data.clientId) {
-      batch.update(doc(db, 'clients', data.clientId), {
+  // Soft-delete related work items
+  try {
+    const wSnap = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', projectId)))
+    wSnap.forEach(d => {
+      batch.update(d.ref, {
         isDeleted: true,
         deletedBy,
         deletedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-    }
-  }
-
-  // Soft-delete related work items
-  const wSnap = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', projectId)))
-  wSnap.forEach(d => {
-    batch.update(d.ref, {
-      isDeleted: true,
-      deletedBy,
-      deletedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     })
-  })
+  } catch {}
 
   // Soft-delete related staff assignments
-  const aSnap = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', projectId)))
-  aSnap.forEach(d => {
-    batch.update(d.ref, {
-      isDeleted: true,
-      deletedBy,
-      deletedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+  try {
+    const aSnap = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', projectId)))
+    aSnap.forEach(d => {
+      batch.update(d.ref, {
+        isDeleted: true,
+        deletedBy,
+        deletedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
     })
-  })
+  } catch {}
 
   await batch.commit()
 }
+

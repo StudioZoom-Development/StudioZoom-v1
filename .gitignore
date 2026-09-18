@@ -48,3 +48,10 @@ firebase-debug.log
 
 # OS
 .DS_Store
+
+# Graphify & local agent tool caches
+/graphify-out/
+.graphifyignore
+.agents/rules/
+.agents/skills/
+.agents/workflows/
