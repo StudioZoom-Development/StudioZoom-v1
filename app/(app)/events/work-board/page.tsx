@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
+import { Badge } from '@/components/shared/Badge'
 import {
   subscribeToWorkItems,
   createWorkItem,
@@ -1752,7 +1753,14 @@ function AvailablePersonCard({
 
 // ─── Main Unified Work Board Page ──────────────────────────────────────────────
 
-type TabKey = 'board' | 'staff' | 'available'
+type TabKey = 'board' | 'events' | 'staff' | 'available'
+
+const TAB_CONFIG: { key: TabKey; label: string; icon: string }[] = [
+  { key: 'board',     label: 'Work Board',          icon: 'ti-layout-kanban' },
+  { key: 'events',    label: 'By Shoot',            icon: 'ti-folder' },
+  { key: 'staff',     label: 'Staff & Freelancers', icon: 'ti-users' },
+  { key: 'available', label: 'Available Today',     icon: 'ti-calendar-check' },
+]
 
 export default function WorkBoardPage() {
   const appUser = useAuthStore(s => s.appUser)
@@ -1762,7 +1770,7 @@ export default function WorkBoardPage() {
   const isStaff = appUser?.role === 'staff'
 
   const [tab, setTab]                               = useState<TabKey>('board')
-  const activeTab: TabKey                           = isStaff ? 'board' : tab
+  const activeTab: TabKey                           = isStaff && (tab === 'staff' || tab === 'available') ? 'board' : tab
   const [workItems, setWorkItems]                   = useState<WorkItem[]>([])
   const [localItems, setLocalItems]                 = useState<WorkItem[]>([])
   const [projects, setProjects]                     = useState<Project[]>([])
@@ -1786,11 +1794,16 @@ export default function WorkBoardPage() {
     return staff
   }, [isStaff, appUser, staff])
 
-  // Filters
-  const [filterStaff,    setFilterStaff]    = useState('')
-  const [filterStatus,   setFilterStatus]   = useState<WorkItemStatus | ''>('')
-  const [filterPriority, setFilterPriority] = useState<WorkItemPriority | ''>('')
-  const [filterType,     setFilterType]     = useState<WorkItemType | ''>('')
+  // Filters & UX controls
+  const [filterStaff,        setFilterStaff]        = useState('')
+  const [filterStatus,       setFilterStatus]       = useState<WorkItemStatus | 'overdue' | ''>('')
+  const [filterPriority,     setFilterPriority]     = useState<WorkItemPriority | ''>('')
+  const [filterType,         setFilterType]         = useState<WorkItemType | ''>('')
+  const [searchQuery,        setSearchQuery]        = useState('')
+  const [quickFilter,        setQuickFilter]        = useState<'all' | 'my' | 'overdue' | 'high'>('all')
+  const [hideCompleted,      setHideCompleted]      = useState(false)
+  const [showAllCompleted,   setShowAllCompleted]   = useState(false)
+  const [collapsedShootIds,  setCollapsedShootIds]  = useState<Set<string>>(new Set())
 
   // Real-time subscriptions
   useEffect(() => {
@@ -2370,12 +2383,41 @@ export default function WorkBoardPage() {
 
   // Filtered items (skills and team member filters are ignored for staff)
   const filtered = useMemo(() => userWorkItems.filter(w => {
-    if (!isStaff && filterStaff    && w.assignedToUid !== filterStaff)         return false
-    if (!isStaff && filterType     && w.type          !== filterType)           return false
-    if (filterStatus   && w.status        !== filterStatus)         return false
-    if (filterPriority && w.priority      !== filterPriority)       return false
+    if (!isStaff && filterStaff    && w.assignedToUid !== filterStaff)   return false
+    if (!isStaff && filterType     && w.type          !== filterType)     return false
+    if (filterStatus === 'overdue') {
+      if (!isOverdue(w)) return false
+    } else if (filterStatus && w.status !== filterStatus) {
+      return false
+    }
+    if (filterPriority && w.priority      !== filterPriority) return false
+
+    // Hide Completed toggle
+    if (hideCompleted && w.status === 'done') return false
+
+    // Quick filter chips
+    if (quickFilter === 'my' && appUser) {
+      const isAssigned = (w.assignedToUid && w.assignedToUid === appUser.uid) ||
+        (w.assignedToName && appUser.name && w.assignedToName.trim().toLowerCase() === appUser.name.trim().toLowerCase())
+      if (!isAssigned) return false
+    }
+    if (quickFilter === 'overdue' && !isOverdue(w)) return false
+    if (quickFilter === 'high' && w.priority !== 'high') return false
+
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim()
+      const eventMatch = (w.eventName || '').toLowerCase().includes(q)
+      const assigneeMatch = (w.assignedToName || '').toLowerCase().includes(q)
+      const notesMatch = (w.notes || '').toLowerCase().includes(q)
+      const typeMatch = (WORK_TYPE_META[w.type]?.label || '').toLowerCase().includes(q)
+      if (!eventMatch && !assigneeMatch && !notesMatch && !typeMatch) {
+        return false
+      }
+    }
+
     return true
-  }), [userWorkItems, isStaff, filterStaff, filterStatus, filterPriority, filterType])
+  }), [userWorkItems, isStaff, filterStaff, filterStatus, filterPriority, filterType, hideCompleted, quickFilter, appUser, searchQuery])
 
   // KPI counts
   const ongoing    = userWorkItems.filter(w => getBucket(w) === 'ongoing').length
@@ -2392,6 +2434,57 @@ export default function WorkBoardPage() {
     filtered.forEach(w => map[getBucket(w)].push(w))
     return map
   }, [filtered])
+
+  // Group by Shoot for 'events' Tab
+  const shootGroups = useMemo(() => {
+    const map = new Map<string, {
+      projectId: string
+      eventName: string
+      project?: Project
+      items: WorkItem[]
+    }>()
+
+    filtered.forEach(w => {
+      const key = w.projectId || w.eventName || 'unassigned'
+      if (!map.has(key)) {
+        const proj = projects.find(p => p.projectId === w.projectId)
+        map.set(key, {
+          projectId: w.projectId || key,
+          eventName: w.eventName || proj?.eventType || 'Unnamed Shoot',
+          project: proj,
+          items: [],
+        })
+      }
+      map.get(key)!.items.push(w)
+    })
+
+    return Array.from(map.values()).sort((a, b) => {
+      const dateA = a.project?.eventDate?.getTime() || 0
+      const dateB = b.project?.eventDate?.getTime() || 0
+      if (dateA && dateB) return dateB - dateA
+      return a.eventName.localeCompare(b.eventName)
+    })
+  }, [filtered, projects])
+
+  const toggleShoot = (shootId: string) => {
+    setCollapsedShootIds(prev => {
+      const next = new Set(prev)
+      if (next.has(shootId)) {
+        next.delete(shootId)
+      } else {
+        next.add(shootId)
+      }
+      return next
+    })
+  }
+
+  const expandAllShoots = () => {
+    setCollapsedShootIds(new Set())
+  }
+
+  const collapseAllShoots = () => {
+    setCollapsedShootIds(new Set(shootGroups.map(g => g.projectId)))
+  }
 
   // Staff available (no active work)
   const availableStaff = useMemo(() =>
@@ -2807,12 +2900,35 @@ export default function WorkBoardPage() {
     border: '0.5px solid var(--color-border)',
     color: 'var(--color-foreground)',
     borderRadius: '8px',
-    padding: '6px 12px',
-    fontSize: 'var(--text-sm)',
+    padding: '6px 24px 6px 10px',
+    fontSize: 'var(--text-xs)',
     fontFamily: 'var(--font-inter)',
     cursor: 'pointer',
     outline: 'none',
     appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a9a8a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 8px center',
+  }
+
+  const hasActiveFilters = Boolean(
+    searchQuery ||
+    quickFilter !== 'all' ||
+    hideCompleted ||
+    filterStaff ||
+    filterStatus ||
+    filterPriority ||
+    filterType
+  )
+
+  const resetAllFilters = () => {
+    setSearchQuery('')
+    setQuickFilter('all')
+    setHideCompleted(false)
+    setFilterStaff('')
+    setFilterStatus('')
+    setFilterPriority('')
+    setFilterType('')
   }
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
@@ -2836,12 +2952,20 @@ export default function WorkBoardPage() {
         marginBottom: '24px', flexWrap: 'wrap', gap: '12px',
       }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          {(isStaff ? (['board'] as TabKey[]) : (['board', 'staff', 'available'] as TabKey[])).map(t => (
-            <button key={t} style={tabStyle(activeTab === t)} onClick={() => setTab(t)}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {TAB_CONFIG.filter(tc => !isStaff || tc.key === 'board' || tc.key === 'events').map(tc => {
+            const active = activeTab === tc.key
+            return (
+              <button
+                key={tc.key}
+                style={tabStyle(active)}
+                onClick={() => setTab(tc.key)}
+              >
+                <i className={`ti ${tc.icon}`} style={{ marginRight: '6px', fontSize: '14px', color: active ? 'var(--color-primary)' : 'inherit' }} />
+                {tc.label}
+              </button>
+            )
+          })}
         </div>
         {!isStaff && (
           <Button
@@ -2898,73 +3022,285 @@ export default function WorkBoardPage() {
         ))}
       </div>
 
-      {/* Filter Bar */}
+      {/* ── Filter Toolbar (Clean 2-Tier Layout) ── */}
       <div style={{
-        display: 'flex', gap: '10px', alignItems: 'center',
-        marginBottom: '20px', flexWrap: 'wrap',
+        background: 'var(--color-surface)',
+        border: '0.5px solid var(--color-border)',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        marginBottom: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
       }}>
-        {!isStaff && (
-          <select style={selectStyle} value={filterType} onChange={e => setFilterType(e.target.value as WorkItemType | '')}>
-            <option value="">All Skills</option>
-            {(Object.keys(WORK_TYPE_META) as WorkItemType[]).map(t => (
-              <option key={t} value={t}>{WORK_TYPE_META[t].label}</option>
-            ))}
-          </select>
-        )}
+        {/* Tier 1: Search, Quick Chips, Active Only, and Counter */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px',
+        }}>
+          {/* Left: Search input & Quick Filter Chips */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: '1 1 auto' }}>
+            {/* Live Search */}
+            <div style={{ position: 'relative', minWidth: '220px', maxWidth: '320px', flex: '1 1 220px' }}>
+              <i className="ti ti-search" style={{
+                position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+                fontSize: '14px', color: 'var(--color-foreground-subtle)', pointerEvents: 'none',
+              }} />
+              <Input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search shoot, client, task..."
+                style={{
+                  paddingLeft: '32px',
+                  paddingRight: searchQuery ? '28px' : '10px',
+                  height: '34px',
+                  fontSize: 'var(--text-xs)',
+                  background: 'var(--color-surface-raised)',
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-foreground)',
+                  borderRadius: '8px',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-foreground-subtle)',
+                    padding: '2px', display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  <i className="ti ti-x" style={{ fontSize: '13px' }} />
+                </button>
+              )}
+            </div>
 
-        {!isStaff && (
-          <select style={selectStyle} value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
-            <option value="">All Team Members</option>
-            <optgroup label="Staff Members">
-              {effectiveStaff.map(s => <option key={s.uid} value={s.uid}>{s.name} (Staff)</option>)}
-            </optgroup>
-            <optgroup label="Freelancers">
-              {freelancers.map(f => <option key={f.freelancerId} value={f.freelancerId}>{f.name} (FL - {f.skill})</option>)}
-            </optgroup>
-          </select>
-        )}
+            {/* Quick Filter Chips (Pill group) */}
+            <div style={{
+              display: 'inline-flex',
+              background: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '20px',
+              padding: '2px',
+              gap: '2px',
+            }}>
+              {[
+                { id: 'all', label: 'All' },
+                ...(appUser ? [{ id: 'my', label: 'My Tasks', icon: 'ti-user' }] : []),
+                { id: 'overdue', label: 'Overdue', icon: 'ti-alert-circle', color: 'var(--color-danger)' },
+                { id: 'high', label: 'High Priority', icon: 'ti-flag', color: 'var(--color-secondary)' },
+              ].map(chip => {
+                const active = quickFilter === chip.id
+                return (
+                  <button
+                    key={chip.id}
+                    onClick={() => setQuickFilter(active && chip.id !== 'all' ? 'all' : chip.id as typeof quickFilter)}
+                    style={{
+                      background: active ? 'var(--color-primary)' : 'transparent',
+                      border: 'none',
+                      color: active ? '#ffffff' : 'var(--color-foreground-muted)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      borderRadius: '16px',
+                      padding: '4px 10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {chip.icon && <i className={`ti ${chip.icon}`} style={{ fontSize: '11px', color: active ? '#ffffff' : chip.color || 'inherit' }} />}
+                    {chip.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
-        <select style={selectStyle} value={filterStatus} onChange={e => setFilterStatus(e.target.value as WorkItemStatus | '')}>
-          <option value="">All Status</option>
-          <option value="pending">Pending (Paused)</option>
-          <option value="todo">Todo</option>
-          <option value="inProgress">In Progress / Ongoing</option>
-          <option value="review">Review</option>
-          <option value="done">Done / Completed</option>
-        </select>
+          {/* Right: Active Only switch & Count */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <button
+              onClick={() => setHideCompleted(prev => !prev)}
+              style={{
+                background: hideCompleted ? 'var(--color-accent-muted)' : 'var(--color-surface-raised)',
+                border: hideCompleted ? '1px solid var(--color-accent)' : '0.5px solid var(--color-border)',
+                color: hideCompleted ? 'var(--color-accent)' : 'var(--color-foreground-muted)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                borderRadius: '8px',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
+              }}
+              title={hideCompleted ? 'Showing active only (done hidden)' : 'Click to hide completed tasks'}
+            >
+              <i className={`ti ${hideCompleted ? 'ti-eye-off' : 'ti-eye'}`} style={{ fontSize: '13px' }} />
+              {hideCompleted ? 'Active Only (Done Hidden)' : 'Show Completed'}
+            </button>
 
-        <select style={selectStyle} value={filterPriority} onChange={e => setFilterPriority(e.target.value as WorkItemPriority | '')}>
-          <option value="">All Priorities</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
+            <span style={{
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+              color: 'var(--color-foreground-muted)',
+              background: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              whiteSpace: 'nowrap',
+            }}>
+              {activeTab === 'board'
+                ? `${filtered.length} works`
+                : activeTab === 'events'
+                  ? `${shootGroups.length} shoots (${filtered.length} works)`
+                  : activeTab === 'staff'
+                    ? `${filteredStaffList.length + filteredFreelancersList.length} members`
+                    : `${filteredAvailableStaff.length + filteredAvailableFreelancers.length} available`
+              }
+            </span>
+          </div>
+        </div>
 
-        <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-          {activeTab === 'board'
-            ? `${filtered.length} works`
-            : activeTab === 'staff'
-              ? `${filteredStaffList.length + filteredFreelancersList.length} members`
-              : `${filteredAvailableStaff.length + filteredAvailableFreelancers.length} available`
-          }
-        </span>
+        {/* Tier 2: Category Dropdowns & Reset button */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingTop: '8px',
+          borderTop: '0.5px solid var(--color-border)',
+          flexWrap: 'wrap',
+          gap: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+              color: 'var(--color-foreground-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: '4px',
+            }}>
+              <i className="ti ti-filter" style={{ fontSize: '12px' }} />
+              Filter by:
+            </span>
+
+            {!isStaff && (
+              <select style={selectStyle} value={filterType} onChange={e => setFilterType(e.target.value as WorkItemType | '')}>
+                <option value="">All Skills</option>
+                {(Object.keys(WORK_TYPE_META) as WorkItemType[]).map(t => (
+                  <option key={t} value={t}>{WORK_TYPE_META[t].label}</option>
+                ))}
+              </select>
+            )}
+
+            {!isStaff && (
+              <select style={selectStyle} value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
+                <option value="">All Team Members</option>
+                <optgroup label="Staff Members">
+                  {effectiveStaff.map(s => <option key={s.uid} value={s.uid}>{s.name} (Staff)</option>)}
+                </optgroup>
+                <optgroup label="Freelancers">
+                  {freelancers.map(f => <option key={f.freelancerId} value={f.freelancerId}>{f.name} (FL - {f.skill})</option>)}
+                </optgroup>
+              </select>
+            )}
+
+            <select style={selectStyle} value={filterStatus} onChange={e => setFilterStatus(e.target.value as WorkItemStatus | '')}>
+              <option value="">All Status</option>
+              <option value="pending">Pending (Paused)</option>
+              <option value="todo">Todo</option>
+              <option value="inProgress">In Progress / Ongoing</option>
+              <option value="review">Review</option>
+              <option value="done">Done / Completed</option>
+            </select>
+
+            <select style={selectStyle} value={filterPriority} onChange={e => setFilterPriority(e.target.value as WorkItemPriority | '')}>
+              <option value="">All Priorities</option>
+              <option value="high">High Priority</option>
+              <option value="medium">Medium Priority</option>
+              <option value="low">Low Priority</option>
+            </select>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={resetAllFilters}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-danger)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                transition: 'opacity 0.15s ease',
+              }}
+            >
+              <i className="ti ti-rotate-ccw" style={{ fontSize: '12px' }} />
+              Reset filters
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ── BOARD TAB (Kanban) ── */}
-      {tab === 'board' && (
+      {/* ── BOARD TAB (Kanban with Independent Column Scrolling & Completed Limiter) ── */}
+      {activeTab === 'board' && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
           gap: '16px',
-          alignItems: 'flex-start',
+          alignItems: 'stretch',
         }}>
           {BUCKET_ORDER.map(bucket => {
             const meta  = BUCKET_META[bucket]
             const items = buckets[bucket]
+
+            // Limiter for completed column
+            const isCompletedBucket = bucket === 'completed'
+            const visibleItems = isCompletedBucket && !showAllCompleted
+              ? items.slice(0, 10)
+              : items
+            const hiddenCompletedCount = isCompletedBucket && !showAllCompleted && items.length > 10
+              ? items.length - 10
+              : 0
+
             return (
-              <div key={bucket}>
-                {/* Column header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <div
+                key={bucket}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: 'calc(100vh - 290px)',
+                  minHeight: '480px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Fixed Column Header */}
+                <div style={{
+                  padding: '12px 14px',
+                  background: 'var(--color-surface)',
+                  borderBottom: '0.5px solid var(--color-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexShrink: 0,
+                }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: meta.dot, display: 'inline-block' }} />
                   <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
                     {meta.label}
@@ -2981,31 +3317,447 @@ export default function WorkBoardPage() {
                     {items.length}
                   </span>
                 </div>
-                {/* Cards */}
-                {items.length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '24px 12px',
-                    color: 'var(--color-foreground-subtle)',
-                    fontSize: 'var(--text-xs)',
-                    border: '0.5px dashed var(--color-border)',
-                    borderRadius: '12px',
-                  }}>
-                    No items
-                  </div>
-                ) : (
-                  items.map(item => (
-                    <WorkCard
-                      key={item.workItemId}
-                      item={item}
-                      onClick={() => setSelectedPanelItem(item)}
-                      onStatusChange={handleStatusChange}
-                    />
-                  ))
-                )}
+
+                {/* Independent Scrollable Column Content */}
+                <div style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}>
+                  {items.length === 0 ? (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '28px 12px',
+                      color: 'var(--color-foreground-subtle)',
+                      fontSize: 'var(--text-xs)',
+                      border: '0.5px dashed var(--color-border)',
+                      borderRadius: '10px',
+                      background: 'var(--color-surface)',
+                    }}>
+                      {isCompletedBucket && hideCompleted ? 'Completed tasks hidden' : 'No items'}
+                    </div>
+                  ) : (
+                    <>
+                      {visibleItems.map(item => (
+                        <WorkCard
+                          key={item.workItemId}
+                          item={item}
+                          onClick={() => setSelectedPanelItem(item)}
+                          onStatusChange={handleStatusChange}
+                        />
+                      ))}
+
+                      {/* Expand / Collapse Completed button */}
+                      {isCompletedBucket && hiddenCompletedCount > 0 && (
+                        <button
+                          onClick={() => setShowAllCompleted(true)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            background: 'var(--color-surface)',
+                            border: '0.5px dashed var(--color-border)',
+                            borderRadius: '8px',
+                            color: 'var(--color-foreground-muted)',
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <i className="ti ti-chevron-down" style={{ fontSize: '13px' }} />
+                          + Show {hiddenCompletedCount} more completed
+                        </button>
+                      )}
+
+                      {isCompletedBucket && showAllCompleted && items.length > 10 && (
+                        <button
+                          onClick={() => setShowAllCompleted(false)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            background: 'var(--color-surface)',
+                            border: '0.5px dashed var(--color-border)',
+                            borderRadius: '8px',
+                            color: 'var(--color-foreground-muted)',
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <i className="ti ti-chevron-up" style={{ fontSize: '13px' }} />
+                          Show latest 10 completed
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ── BY SHOOT / EVENT TAB ── */}
+      {activeTab === 'events' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Shoot View Controls */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 16px', background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)', borderRadius: '10px',
+            flexWrap: 'wrap', gap: '10px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                {shootGroups.length} Shoots
+              </span>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                · {filtered.length} total tasks organized by shoot
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={expandAllShoots}
+                style={{
+                  fontSize: 'var(--text-xs)', height: '28px',
+                  background: 'var(--color-surface-raised)', borderColor: 'var(--color-border)',
+                  color: 'var(--color-foreground-muted)',
+                }}
+              >
+                Expand All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={collapseAllShoots}
+                style={{
+                  fontSize: 'var(--text-xs)', height: '28px',
+                  background: 'var(--color-surface-raised)', borderColor: 'var(--color-border)',
+                  color: 'var(--color-foreground-muted)',
+                }}
+              >
+                Collapse All
+              </Button>
+            </div>
+          </div>
+
+          {/* Shoot Cards Accordion */}
+          {shootGroups.length === 0 ? (
+            <div style={{
+              background: 'var(--color-surface)', border: '0.5px dashed var(--color-border)',
+              borderRadius: '12px', padding: '40px', textAlign: 'center',
+              color: 'var(--color-foreground-subtle)', fontSize: 'var(--text-sm)',
+            }}>
+              No shoots match the current filters or search query.
+            </div>
+          ) : (
+            shootGroups.map(group => {
+              const isOpen = !collapsedShootIds.has(group.projectId)
+              const totalTasks = group.items.length
+              const doneTasks = group.items.filter(w => w.status === 'done').length
+              const overdueTasks = group.items.filter(isOverdue).length
+              const percent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+
+              return (
+                <div
+                  key={group.projectId}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    transition: 'border-color 0.15s ease',
+                  }}
+                >
+                  {/* Shoot Accordion Header */}
+                  <div
+                    onClick={() => toggleShoot(group.projectId)}
+                    style={{
+                      padding: '14px 18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      cursor: 'pointer',
+                      background: isOpen ? 'var(--color-surface-raised)' : 'var(--color-surface)',
+                      transition: 'background 0.15s ease',
+                    }}
+                  >
+                    <i
+                      className={`ti ${isOpen ? 'ti-chevron-down' : 'ti-chevron-right'}`}
+                      style={{ fontSize: '15px', color: 'var(--color-foreground-muted)', flexShrink: 0 }}
+                    />
+
+                    {/* Shoot Details */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: '1 1 auto', minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontSize: 'var(--text-base)',
+                          fontWeight: 700,
+                          color: 'var(--color-foreground)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {group.eventName}
+                        </span>
+
+                        {group.project?.stage && (
+                          <Badge variant={group.project.stage} />
+                        )}
+
+                        {overdueTasks > 0 && (
+                          <span style={{
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            background: 'var(--color-danger-muted)',
+                            color: 'var(--color-danger)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}>
+                            <i className="ti ti-alert-circle" style={{ fontSize: '11px' }} />
+                            {overdueTasks} Overdue
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                        {group.project?.clientName && (
+                          <span>
+                            <i className="ti ti-user" style={{ marginRight: '4px' }} />
+                            {group.project.clientName}
+                          </span>
+                        )}
+                        {group.project?.eventDate && (
+                          <span>
+                            <i className="ti ti-calendar" style={{ marginRight: '4px' }} />
+                            {formatDate(group.project.eventDate)}
+                          </span>
+                        )}
+                        {group.project?.location && (
+                          <span>
+                            <i className="ti ti-map-pin" style={{ marginRight: '4px' }} />
+                            {group.project.location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress Bar & Counters */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                          {doneTasks} / {totalTasks} Done
+                          <span style={{ marginLeft: '6px', color: percent === 100 ? 'var(--color-success)' : 'var(--color-primary)' }}>
+                            ({percent}%)
+                          </span>
+                        </span>
+                        <div style={{
+                          width: '100px', height: '6px',
+                          background: 'var(--color-border)',
+                          borderRadius: '3px',
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            width: `${percent}%`,
+                            height: '100%',
+                            background: percent === 100 ? 'var(--color-success)' : 'var(--color-primary)',
+                            borderRadius: '3px',
+                            transition: 'width 0.3s ease',
+                          }} />
+                        </div>
+                      </div>
+
+                      <span style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground-muted)',
+                        padding: '4px 8px',
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '6px',
+                      }}>
+                        {totalTasks} {totalTasks === 1 ? 'task' : 'tasks'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Shoot Tasks List (when expanded) */}
+                  {isOpen && (
+                    <div style={{
+                      borderTop: '0.5px solid var(--color-border)',
+                      padding: '12px 18px',
+                      background: 'var(--color-surface)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}>
+                      {group.items.map(item => {
+                        const meta = WORK_TYPE_META[item.type] ?? WORK_TYPE_META.photoEditing
+                        const priority = PRIORITY_COLORS[item.priority ?? 'medium']
+                        const overdue = isOverdue(item)
+                        const bucket = getBucket(item)
+                        const bucketMeta = BUCKET_META[bucket]
+
+                        return (
+                          <div
+                            key={item.workItemId}
+                            onClick={() => setSelectedPanelItem(item)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '10px 14px',
+                              background: 'var(--color-surface-raised)',
+                              border: '0.5px solid var(--color-border)',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              transition: 'border-color 0.15s ease, transform 0.1s ease',
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.borderColor = 'var(--color-border-strong)'
+                              e.currentTarget.style.transform = 'translateY(-1px)'
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.borderColor = 'var(--color-border)'
+                              e.currentTarget.style.transform = 'translateY(0)'
+                            }}
+                          >
+                            {/* Skill Icon & Task Title */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '180px', flex: '1 1 200px' }}>
+                              <i className={`ti ${meta.icon}`} style={{ fontSize: '15px', color: 'var(--color-primary)' }} />
+                              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                                {meta.label}
+                              </span>
+                              {item.postProdTrackKey && TRACK_BADGE_META[item.postProdTrackKey] && (
+                                <span style={{
+                                  fontSize: '0.65rem',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  background: 'var(--color-accent-muted)',
+                                  color: 'var(--color-accent)',
+                                  fontWeight: 600,
+                                }}>
+                                  {TRACK_BADGE_META[item.postProdTrackKey].label}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Assignee */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: '140px', flex: '0 0 160px' }}>
+                              <div style={{
+                                width: '22px', height: '22px', borderRadius: '50%',
+                                background: item.isFreelancer ? 'var(--color-purple-muted)' : 'var(--color-primary-muted)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 'var(--text-xs)', fontWeight: 700,
+                                color: item.isFreelancer ? 'var(--color-purple)' : 'var(--color-primary)',
+                                flexShrink: 0,
+                              }}>
+                                {getInitials(item.assignedToName)}
+                              </div>
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {item.assignedToName || 'Unassigned'}
+                              </span>
+                              {item.isFreelancer && (
+                                <span style={{
+                                  fontSize: '0.6rem', padding: '1px 4px',
+                                  borderRadius: '4px', background: 'var(--color-purple-muted)',
+                                  color: 'var(--color-purple)', fontWeight: 600,
+                                }}>
+                                  FL
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Priority */}
+                            <span style={{
+                              fontSize: 'var(--text-xs)',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              background: priority.bg,
+                              color: priority.text,
+                              flexShrink: 0,
+                            }}>
+                              {priority.label}
+                            </span>
+
+                            {/* Status Pill */}
+                            <span style={{
+                              fontSize: 'var(--text-xs)',
+                              fontWeight: 600,
+                              padding: '2px 9px',
+                              borderRadius: '12px',
+                              background: bucketMeta.bg,
+                              color: bucketMeta.color,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              flexShrink: 0,
+                            }}>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: bucketMeta.dot }} />
+                              {bucketMeta.label}
+                            </span>
+
+                            {/* Due date */}
+                            <span style={{
+                              fontSize: 'var(--text-xs)',
+                              color: overdue ? 'var(--color-danger)' : 'var(--color-foreground-muted)',
+                              fontWeight: overdue ? 600 : 400,
+                              minWidth: '90px',
+                              textAlign: 'right',
+                              flexShrink: 0,
+                            }}>
+                              {item.dueDate ? formatDate(item.dueDate) : 'No due date'}
+                            </span>
+
+                            {/* Progress bar */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '90px', flexShrink: 0 }}>
+                              <div style={{
+                                width: '50px', height: '5px',
+                                background: 'var(--color-border)',
+                                borderRadius: '3px',
+                                overflow: 'hidden',
+                              }}>
+                                <div style={{
+                                  width: `${item.progressPercent ?? 0}%`,
+                                  height: '100%',
+                                  background: item.status === 'done' ? 'var(--color-success)' : 'var(--color-primary)',
+                                  borderRadius: '3px',
+                                }} />
+                              </div>
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', minWidth: '28px' }}>
+                                {item.progressPercent ?? 0}%
+                              </span>
+                            </div>
+
+                            {/* Action arrow */}
+                            <i className="ti ti-chevron-right" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
         </div>
       )}
 

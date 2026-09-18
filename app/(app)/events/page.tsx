@@ -729,8 +729,13 @@ function EventsBoardContent() {
           const match = projs.find(p => p.projectId === paramProject || p.clientId === paramProject)
           if (match) return match.projectId
         }
-        const firstActive = projs.find(p => p.stage !== 'delivered') || projs[0]
-        return firstActive?.projectId || null
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('studio_zoom_selected_event_id')
+          if (stored && projs.some(p => p.projectId === stored)) {
+            return stored
+          }
+        }
+        return null
       })
     })
 
@@ -765,6 +770,11 @@ function EventsBoardContent() {
     setSelectedDayTab(0)
     setOverrideReason('')
     if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('studio_zoom_selected_event_id', projectId)
+      } catch {
+        // ignore localStorage errors
+      }
       const url = new URL(window.location.href)
       url.searchParams.set('project', projectId)
       window.history.replaceState(null, '', url.toString())
@@ -772,7 +782,7 @@ function EventsBoardContent() {
   }
 
   const selectedProject = useMemo((): Project | null => {
-    return projects.find(p => p.projectId === selectedProjectId) || projects[0] || null
+    return projects.find(p => p.projectId === selectedProjectId) || null
   }, [projects, selectedProjectId])
 
   // Real-time client & payment listener for the currently selected project
@@ -849,18 +859,27 @@ function EventsBoardContent() {
 
     const timer = setTimeout(() => {
       let applied = false
+      let match: Project | undefined
+
       if (paramProject) {
-        const match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
-        if (match) {
-          setSelectedProjectId(match.projectId)
-          const isDone = match.stage === 'delivered' || match.status === 'completed'
-          const isOverdue = !isDone && isProjectOverdue(match, now)
-          if (isDone) setRailFilter('done')
-          else if (isOverdue) setRailFilter('overdue')
-          else setRailFilter('active')
-          applied = true
+        match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
+      } else if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('studio_zoom_selected_event_id')
+        if (stored) {
+          match = projects.find(p => p.projectId === stored)
         }
       }
+
+      if (match) {
+        setSelectedProjectId(match.projectId)
+        const isDone = match.stage === 'delivered' || match.status === 'completed'
+        const isOverdue = !isDone && isProjectOverdue(match, now)
+        if (isDone) setRailFilter('done')
+        else if (isOverdue) setRailFilter('overdue')
+        else setRailFilter('active')
+        applied = true
+      }
+
       if (paramStage && STAGE_CONFIGS.some(s => s.stageKey === paramStage)) {
         setPanelStageKey(paramStage)
         applied = true
@@ -1036,11 +1055,9 @@ function EventsBoardContent() {
   // ─── FILTERED CONTRACT GROUPS & TIME BUCKETS ─────────────────────────────
   const filteredGroups = useMemo(() => {
     return contractGroups.filter(g => {
-      const isCurrentlySelected = Boolean(selectedProjectId && g.sessions.some(s => s.projectId === selectedProjectId))
-
-      if (railFilter === 'active' && !g.isOngoing && !isCurrentlySelected) return false
-      if (railFilter === 'done' && !g.isDone && !isCurrentlySelected) return false
-      if (railFilter === 'overdue' && !g.isOverdue && !isCurrentlySelected) return false
+      if (railFilter === 'active' && !g.isOngoing) return false
+      if (railFilter === 'done' && !g.isDone) return false
+      if (railFilter === 'overdue' && !g.isOverdue) return false
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
@@ -1059,7 +1076,7 @@ function EventsBoardContent() {
 
       return true
     })
-  }, [contractGroups, railFilter, searchQuery, selectedProjectId])
+  }, [contractGroups, railFilter, searchQuery])
 
   // Automatically expand Delivered / Completed Archive when navigating to a finished project (e.g. from client page)
   useEffect(() => {
@@ -3795,7 +3812,7 @@ function EventsBoardContent() {
               }}
             >
               <i className="ti ti-plus" style={{ fontSize: '16px' }} />
-              Create New Booking
+              Create Booking
             </Button>
           </div>
         ) : (
