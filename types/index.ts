@@ -399,10 +399,29 @@ export interface TimeLog {
   workedMinutes?:    number
   standardMinutes:   540            // 9 hours — constant
   variance?:         number         // positive = overtime, negative = shortfall
-  status:            'open' | 'closed' | 'flagged'
+  status:            'open' | 'closed' | 'flagged' | 'corrected'
   overrideStatus?:   'In' | 'Late' | 'Not in'
+  isCorrected?:      boolean
+  originalCheckInAt?: Date
+  originalCheckOutAt?: Date
   correctedBy?:      string
   correctionReason?: string
+  correctedAt?:      Date
+}
+
+export interface TimeLogCorrection {
+  correctionId:     string
+  logId?:           string
+  staffUid:         string
+  date:             string          // "YYYY-MM-DD"
+  oldCheckIn:       Date | null
+  oldCheckOut:      Date | null
+  newCheckIn:       Date
+  newCheckOut:      Date
+  reason:           string
+  correctedBy:      string          // Admin/Manager UID
+  correctedByName?: string
+  correctedAt:      Date
 }
 
 // ─── LEAVE REQUESTS ───────────────────────────────────────────────────────────
@@ -415,23 +434,31 @@ export interface LeaveRequest {
   date:        string               // "YYYY-MM-DD"
   type:        LeaveRequestType
   status:      LeaveRequestStatus
+  reason?:     string
   createdAt:   Date
   reviewedBy?: string
   reviewedAt?: Date
 }
 
 // ─── SALARY ───────────────────────────────────────────────────────────────
+export interface SalaryAdvanceEntry {
+  amount: number
+  date?: string
+}
+
 export interface Salary {
   salaryId:       string
   staffUid:       string
   year:           number
   month:          number
-  baseSalary:     number
-  advance1?:      { amount: number; date: Date }
-  advance2?:      { amount: number; date: Date }
-  advance3?:      { amount: number; date: Date }
-  totalAdvances:  number
-  salaryPending:  number
+  baseSalary?:    number
+  advance1?:      SalaryAdvanceEntry
+  advance2?:      SalaryAdvanceEntry
+  advance3?:      SalaryAdvanceEntry
+  totalAdvances?: number
+  salaryPending?: number
+  createdAt?:     Date
+  updatedAt?:     Date
 }
 
 export interface Payslip {
@@ -629,4 +656,14 @@ export interface StudioSettings {
   invoiceStartNumber:    number
   quotationStartNumber:  number
   packages:              PackageTemplate[]
+}
+
+// ─── SAVED ADDRESSES ───────────────────────────────────────────────────────
+export interface SavedAddress {
+  id:         string
+  name:       string
+  address:    string
+  createdAt?: Date
+  updatedAt?: Date
+  isDeleted?: boolean
 }

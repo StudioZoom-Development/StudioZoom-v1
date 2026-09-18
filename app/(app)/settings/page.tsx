@@ -25,17 +25,24 @@ import {
   updateUser,
   deleteUserDoc,
 } from '@/lib/firebase/queries/settings'
+import {
+  subscribeToSavedAddresses,
+  saveSavedAddress,
+  deleteSavedAddress,
+} from '@/lib/firebase/queries/savedAddresses'
+import type { SavedAddress } from '@/types'
 
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
 
-type Page = 'Studio branding' | 'Packages' | 'Numbering' | 'User management'
+type Page = 'Studio branding' | 'Packages' | 'Numbering' | 'Saved Address' | 'User management'
 
 const NAV_ITEMS: Array<{ label: Page; icon: string }> = [
   { label: 'Studio branding', icon: 'ti-aperture'   },
   { label: 'Packages',        icon: 'ti-package'    },
   { label: 'Numbering',       icon: 'ti-percentage' },
+  { label: 'Saved Address',   icon: 'ti-map-pin'    },
   { label: 'User management', icon: 'ti-users'      },
 ]
 
@@ -556,7 +563,199 @@ function PackageModal({ pkg, onSave, onDelete, onClose }: PackageModalProps) {
   )
 }
 
+// ─────────────────────────────────────────────
+// Address Modal — Add / Edit Saved Address
+// ─────────────────────────────────────────────
 
+interface AddressModalProps {
+  address: SavedAddress | null
+  onSave:  (data: { id?: string; name: string; address: string }) => Promise<void>
+  onClose: () => void
+}
+
+function AddressModal({ address, onSave, onClose }: AddressModalProps) {
+  const [name,        setName]        = useState(address?.name ?? '')
+  const [addressText, setAddressText] = useState(address?.address ?? '')
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
+
+  const handleSave = async () => {
+    const trimmedName = name.trim()
+    const trimmedAddress = addressText.trim()
+
+    if (!trimmedName) {
+      setError('Name is required')
+      return
+    }
+    if (!trimmedAddress) {
+      setError('Address is required')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await onSave({
+        id: address?.id,
+        name: trimmedName,
+        address: trimmedAddress,
+      })
+      onClose()
+    } catch (err) {
+      console.error('Failed to save address:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save address. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'var(--font-inter)',
+        padding: '16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: '460px',
+          background: 'var(--color-surface-overlay)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '16px',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
+            {address ? 'Edit address' : 'Add address'}
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-foreground-muted)',
+              cursor: 'pointer',
+              fontSize: '18px',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <i className="ti ti-x" />
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-danger)',
+            background: 'var(--color-danger-muted)',
+            border: '0.5px solid var(--color-danger)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
+              Name <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
+            <Input
+              value={name}
+              onChange={e => {
+                setName(e.target.value)
+                if (error) setError('')
+              }}
+              placeholder="e.g. Taj Connemara"
+              className="h-9"
+              autoFocus
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
+              Address <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
+            <textarea
+              value={addressText}
+              onChange={e => {
+                setAddressText(e.target.value)
+                if (error) setError('')
+              }}
+              placeholder="Full venue address, landmarks, city, pincode"
+              rows={3}
+              style={{
+                width: '100%',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground)',
+                fontFamily: 'var(--font-inter)',
+                outline: 'none',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          justifyContent: 'flex-end',
+          borderTop: '0.5px solid var(--color-border)',
+          paddingTop: '16px',
+        }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              height: '36px',
+              padding: '0 16px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              background: 'transparent',
+              border: '0.5px solid var(--color-border)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-sm)',
+              fontFamily: 'var(--font-inter)',
+            }}
+          >
+            Cancel
+          </button>
+          <Button
+            className="h-9 font-medium"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save address'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─────────────────────────────────────────────
 // Edit User Modal — updates /users/{uid} in Firestore
@@ -778,7 +977,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const { isAdmin } = useRole()
+  const { isAdmin, isManager } = useRole()
   const testDatasetMode = useUIStore(s => s.testDatasetMode)
   const testModeCutoff = useUIStore(s => s.testModeCutoff)
 
@@ -787,6 +986,7 @@ export default function SettingsPage() {
     if (tabParam === 'users' || tabParam === 'user-management') return 'User management'
     if (tabParam === 'packages') return 'Packages'
     if (tabParam === 'numbering') return 'Numbering'
+    if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') return 'Saved Address'
     if (tabParam === 'branding') return 'Studio branding'
     return 'Studio branding'
   })
@@ -797,6 +997,7 @@ export default function SettingsPage() {
     if (tabParam === 'users' || tabParam === 'user-management') setPage('User management')
     else if (tabParam === 'packages') setPage('Packages')
     else if (tabParam === 'numbering') setPage('Numbering')
+    else if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') setPage('Saved Address')
     else if (tabParam === 'branding') setPage('Studio branding')
   }
   const [users, setUsers] = useState<UserRow[]>([])
@@ -831,18 +1032,49 @@ export default function SettingsPage() {
   const [gstSaving,        setGstSaving]        = useState(false)
   const [gstSaved,         setGstSaved]         = useState(false)
 
+  // Saved addresses
+  const [savedAddresses,   setSavedAddresses]   = useState<SavedAddress[]>([])
+  const [editAddress,      setEditAddress]      = useState<SavedAddress | null | 'new'>('new')
+  const [showAddressModal, setShowAddressModal] = useState(false)
+  const [addressSaving,    setAddressSaving]    = useState(false)
+  const [deleteAddress,    setDeleteAddress]    = useState<SavedAddress | null>(null)
+
   // User management
   const [editUser,       setEditUser]       = useState<UserRow | null>(null)
   const [resetUser,         setResetUser]         = useState<UserRow | null>(null)
   const [deleteUid,        setDeleteUid]        = useState<string | null>(null)
   const [deleteLoading,    setDeleteLoading]    = useState(false)
 
-  // Guard: admin only
+  // Guard: admin or manager
   useEffect(() => {
-    if (isAdmin === false) router.replace('/dashboard')
-  }, [isAdmin, router])
+    if (isAdmin === false && isManager === false) router.replace('/dashboard')
+  }, [isAdmin, isManager, router])
 
   // Real-time subscriptions — one per Firestore document
+
+  // saved_addresses
+  useEffect(() => {
+    return subscribeToSavedAddresses(setSavedAddresses)
+  }, [])
+
+  const handleSaveAddress = async (data: { id?: string; name: string; address: string }) => {
+    setAddressSaving(true)
+    try {
+      await saveSavedAddress(data)
+    } finally {
+      setAddressSaving(false)
+    }
+  }
+
+  const handleDeleteAddress = async (id: string) => {
+    setAddressSaving(true)
+    try {
+      await deleteSavedAddress(id)
+      setDeleteAddress(null)
+    } finally {
+      setAddressSaving(false)
+    }
+  }
 
   // brandConfig
   useEffect(() => {
@@ -1071,7 +1303,7 @@ export default function SettingsPage() {
 
       {/* ── Left nav */}
       <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {NAV_ITEMS.map(item => (
+        {NAV_ITEMS.filter(item => item.label !== 'User management' || isAdmin).map(item => (
           <div
             key={item.label}
             onClick={() => setPage(item.label)}
@@ -1417,7 +1649,125 @@ export default function SettingsPage() {
         )}
 
         {/* ═══════════════════════════════════════
-            D — USER MANAGEMENT
+            D — SAVED ADDRESS
+        ═══════════════════════════════════════ */}
+        {page === 'Saved Address' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                className="h-9 font-medium"
+                onClick={() => { setEditAddress('new'); setShowAddressModal(true) }}
+                disabled={addressSaving}
+              >
+                + Add address
+              </Button>
+            </div>
+
+            {savedAddresses.map(addr => (
+              <div
+                key={addr.id}
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  transition: 'border-color 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-border-strong)')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+              >
+                {/* Map pin icon */}
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  flexShrink: 0,
+                  background: 'var(--color-primary-muted)',
+                  color: 'var(--color-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <i className="ti ti-map-pin" style={{ fontSize: '20px' }} />
+                </div>
+
+                {/* Name & Address */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                  <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    {addr.name}
+                  </div>
+                  <div style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-foreground-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {addr.address}
+                  </div>
+                </div>
+
+                {/* Actions: Edit & Delete */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+                  <span
+                    onClick={() => {
+                      setEditAddress(addr)
+                      setShowAddressModal(true)
+                    }}
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-accent)',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <i className="ti ti-pencil" style={{ fontSize: '14px' }} />
+                    Edit
+                  </span>
+
+                  <span
+                    onClick={() => setDeleteAddress(addr)}
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-danger)',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <i className="ti ti-trash" style={{ fontSize: '14px' }} />
+                    Delete
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {savedAddresses.length === 0 && (
+              <div style={{
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '12px',
+                padding: '40px',
+                textAlign: 'center',
+                color: 'var(--color-foreground-muted)',
+                fontSize: 'var(--text-sm)',
+              }}>
+                No saved addresses yet. Click &quot;+ Add address&quot; to create your first one.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════
+            E — USER MANAGEMENT
         ═══════════════════════════════════════ */}
         {page === 'User management' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1576,6 +1926,32 @@ export default function SettingsPage() {
           onClose={() => setShowPkgModal(false)}
         />
       )}
+
+      {showAddressModal && (
+        <AddressModal
+          address={editAddress === 'new' ? null : editAddress}
+          onSave={handleSaveAddress}
+          onClose={() => {
+            setShowAddressModal(false)
+            setEditAddress('new')
+          }}
+        />
+      )}
+
+      <ConfirmModal
+        open={Boolean(deleteAddress)}
+        title="Delete saved address?"
+        description={`Are you sure you want to delete "${deleteAddress?.name ?? 'this address'}"? This action cannot be undone.`}
+        confirmLabel="Delete address"
+        variant="danger"
+        loading={addressSaving}
+        onConfirm={() => {
+          if (deleteAddress) {
+            handleDeleteAddress(deleteAddress.id)
+          }
+        }}
+        onCancel={() => setDeleteAddress(null)}
+      />
 
 
 

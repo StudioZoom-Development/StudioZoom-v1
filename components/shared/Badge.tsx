@@ -45,6 +45,10 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   pending:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   weekOff:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
   permission:      { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
+  // Time Logs
+  flagged:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  clean:           { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  corrected:       { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
 }
 
 const LABELS: Record<string, string> = {
@@ -58,6 +62,10 @@ const LABELS: Record<string, string> = {
   done:           'Done',
   in:             'In',
   notIn:          'Not in',
+  // Time Logs
+  flagged:        'Flagged',
+  clean:          'Clean',
+  corrected:      'Corrected',
   // Attendance
   present:        'P',
   late:           'L',

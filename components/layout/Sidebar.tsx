@@ -27,10 +27,10 @@ const CRM_ITEMS: NavItem[] = [
 const HRMS_ITEMS: NavItem[] = [
   { id: 'attendance',  label: 'Attendance',  icon: 'ti-checklist',    href: '/hrms/attendance',  roles: ['admin','manager','staff'] },
   { id: 'timeclock',   label: 'Time Clock',  icon: 'ti-clock',        href: '/hrms/timeclock',   roles: ['admin','manager','staff'] },
-  { id: 'timelogs',    label: 'Time Logs',   icon: 'ti-history',      href: '/hrms/timelogs',    roles: ['admin','manager'] },
+  { id: 'timelogs',    label: 'Time Logs',   icon: 'ti-history',      href: '/hrms/timelogs',    roles: ['admin','manager','staff'] },
   { id: 'staff',       label: 'Staff',       icon: 'ti-id-badge-2',   href: '/hrms/staff',       roles: ['admin'] },
   { id: 'freelancers', label: 'Freelancers', icon: 'ti-user-star',    href: '/hrms/freelancers', roles: ['admin','manager'] },
-  { id: 'salary',      label: 'Salary',      icon: 'ti-cash',         href: '/hrms/salary',      roles: ['admin'] },
+  { id: 'salary',      label: 'Salary',      icon: 'ti-cash',         href: '/hrms/salary',      roles: ['admin','manager'] },
   { id: 'payslips',    label: 'Payslips',    icon: 'ti-file-invoice', href: '/hrms/payslips',    roles: ['admin','staff'] },
 ]
 
@@ -57,7 +57,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router   = useRouter()
   const appUser  = useAuthStore(s => s.appUser)
-  const { theme, toggleTheme, sidebarCollapsed, toggleSidebarCollapsed } = useUIStore()
+  const { theme, toggleTheme, sidebarCollapsed } = useUIStore()
   const role = appUser?.role ?? 'staff'
 
   const ALL_NAV_HREFS = [
@@ -172,7 +172,7 @@ export function Sidebar() {
         display: 'flex', flexDirection: 'column', gap: '8px',
         flexShrink: 0,
       }}>
-        {role === 'admin' && (
+        {(role === 'admin' || role === 'manager') && (
           <NavLink
             href="/settings" icon="ti-settings" label="Settings"
             active={isActive('/settings')}

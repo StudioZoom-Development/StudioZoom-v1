@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { TimeField } from '@/components/shared/TimeField'
+import { LocationAutocomplete } from '@/components/shared/LocationAutocomplete'
 import { EventType } from '@/types'
 import { BookingWizardState, BookingAction } from '../bookingReducer'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
@@ -195,10 +196,10 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
           }}>
             Location
           </label>
-          <Input
-            placeholder="Venue, city"
+          <LocationAutocomplete
+            placeholder="Venue, city or saved address"
             value={state.location}
-            onChange={e => dispatch({ type: 'SET_FIELD', field: 'location', value: e.target.value })}
+            onChange={val => dispatch({ type: 'SET_FIELD', field: 'location', value: val })}
             className="h-9"
           />
         </div>
@@ -415,14 +416,14 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                         Location
                       </label>
                     )}
-                    <Input
+                    <LocationAutocomplete
                       placeholder="Venue (optional)"
                       value={ed.location}
-                      onChange={e => dispatch({
+                      onChange={val => dispatch({
                         type: 'UPDATE_EVENT_DATE',
                         id: ed.id,
                         field: 'location',
-                        value: e.target.value,
+                        value: val,
                       })}
                       className="h-9"
                     />

@@ -72,13 +72,14 @@ function dayTotalMinutes(sessions: TimeLog[], now: Date, dateStr: string): numbe
 interface ApplyPopupProps {
   open: boolean
   onClose: () => void
-  onSubmit: (date: string, type: LeaveRequestType) => void
+  onSubmit: (date: string, type: LeaveRequestType, reason: string) => void
   submitting: boolean
   submitError: string
 }
 
 function ApplyPopup({ open, onClose, onSubmit, submitting, submitError }: ApplyPopupProps) {
   const [applyDate, setApplyDate] = useState(getTodayDateString())
+  const [reason, setReason] = useState('')
   const applyType: LeaveRequestType = 'leave'
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
@@ -87,6 +88,7 @@ function ApplyPopup({ open, onClose, onSubmit, submitting, submitError }: ApplyP
     setPrevOpen(open)
     if (open) {
       setApplyDate(getTodayDateString())
+      setReason('')
       setConfirmOpen(false)
     }
   }
@@ -94,7 +96,7 @@ function ApplyPopup({ open, onClose, onSubmit, submitting, submitError }: ApplyP
   if (!open) return null
 
   const handleApplyClick = () => setConfirmOpen(true)
-  const handleConfirm = () => onSubmit(applyDate, applyType)
+  const handleConfirm = () => onSubmit(applyDate, applyType, reason)
   const handleCancelConfirm = () => setConfirmOpen(false)
 
   const SELECT_STYLE: React.CSSProperties = {
@@ -187,6 +189,33 @@ function ApplyPopup({ open, onClose, onSubmit, submitting, submitError }: ApplyP
             <select id="apply-type-select" value={applyType} onChange={() => {}} style={SELECT_STYLE}>
               <option value="leave">Leave</option>
             </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label
+              style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--color-foreground-subtle)',
+              }}
+            >
+              Reason for Leave
+            </label>
+            <textarea
+              id="apply-reason-input"
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="Enter reason for leave..."
+              rows={3}
+              style={{
+                ...SELECT_STYLE,
+                height: 'auto',
+                padding: '8px 10px',
+                resize: 'none',
+              }}
+            />
           </div>
 
           {submitError && (
@@ -1037,12 +1066,12 @@ function MyAttendancePage() {
 
   const appUid = appUser?.uid
   const handleSubmit = useCallback(
-    async (date: string, type: LeaveRequestType) => {
+    async (date: string, type: LeaveRequestType, reason: string) => {
       if (!appUid) return
       setSubmitting(true)
       setSubmitError('')
       try {
-        await submitLeaveRequest(appUid, date, type)
+        await submitLeaveRequest(appUid, date, type, reason)
         setApplyOpen(false)
       } catch (err) {
         setSubmitError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
