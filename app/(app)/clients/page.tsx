@@ -120,18 +120,6 @@ export default function ClientsPage() {
   })
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('studio_zoom_clients_page_size')
-      if (saved) {
-        const parsed = Number(saved)
-        if ([10, 25, 50, 100].includes(parsed)) {
-          setPageSize(parsed)
-        }
-      }
-    } catch {}
-  }, [])
-
-  useEffect(() => {
     const unsubProj = subscribeToProjects(data => setProjects(data || []))
     const unsubFl   = subscribeToFreelancers(data => setFreelancers(data || []))
     const unsubSt   = subscribeToStaff(data => setStaffMembers(data || []))

@@ -1064,14 +1064,17 @@ function EventsBoardContent() {
   // Automatically expand Delivered / Completed Archive when navigating to a finished project (e.g. from client page)
   useEffect(() => {
     if (!selectedProjectId) return
-    const group = contractGroups.find(g => g.sessions.some(s => s.projectId === selectedProjectId))
-    if (group) {
-      if (group.timeBucket === 'delivered') {
-        setCollapsedSections(prev => ({ ...prev, delivered: false }))
-      } else if (group.timeBucket === 'completed') {
-        setCollapsedSections(prev => ({ ...prev, completed: false }))
+    const timer = setTimeout(() => {
+      const group = contractGroups.find(g => g.sessions.some(s => s.projectId === selectedProjectId))
+      if (group) {
+        if (group.timeBucket === 'delivered') {
+          setCollapsedSections(prev => ({ ...prev, delivered: false }))
+        } else if (group.timeBucket === 'completed') {
+          setCollapsedSections(prev => ({ ...prev, completed: false }))
+        }
       }
-    }
+    }, 0)
+    return () => clearTimeout(timer)
   }, [selectedProjectId, contractGroups])
 
   const bucketGroups = useMemo(() => {

@@ -68,18 +68,6 @@ export default function LeadsPage() {
     return 10
   })
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('studio_zoom_leads_page_size')
-      if (saved) {
-        const parsed = Number(saved)
-        if ([10, 25, 50, 100].includes(parsed)) {
-          setPageSize(parsed)
-        }
-      }
-    } catch {}
-  }, [])
-
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [deleting, setDeleting] = useState(false)
