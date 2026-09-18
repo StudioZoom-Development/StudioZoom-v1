@@ -1,6 +1,6 @@
 import {
   collection, query, onSnapshot, getDocs, getDoc,
-  addDoc, updateDoc, doc, setDoc,
+  addDoc, updateDoc, doc, setDoc, writeBatch,
   serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
@@ -31,24 +31,122 @@ function docToWorkItem(d: { id: string; data: () => Record<string, unknown> }): 
   } as WorkItem
 }
 
-/** Real-time subscription to all non-deleted work items */
+/** Proactively heals orphaned work items in Firestore by marking them soft-deleted */
+export async function healOrphanedWorkItems(ids: string[]): Promise<void> {
+  if (!ids || ids.length === 0) return
+  const uniqueIds = Array.from(new Set(ids))
+  let batch = writeBatch(db)
+  let count = 0
+
+  for (const wid of uniqueIds) {
+    batch.update(doc(db, 'workItems', wid), {
+      isDeleted: true,
+      updatedAt: serverTimestamp(),
+    })
+    count++
+    if (count >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      count = 0
+    }
+  }
+
+  if (count > 0) {
+    await batch.commit()
+  }
+}
+
+/** Real-time subscription to all active work items — excludes work items belonging to deleted projects/clients */
 export function subscribeToWorkItems(
   callback: (items: WorkItem[]) => void
 ): () => void {
-  const q = query(collection(db, 'workItems'))
-  return onSnapshot(q, snap => {
-    const list = snap.docs
-      .map(d => docToWorkItem(d))
-      .filter(w => !w.isDeleted && isAllowedByTestMode(w.createdAt))
-      .sort((a, b) => {
-        const timeA = a.createdAt instanceof Date && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0
-        const timeB = b.createdAt instanceof Date && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0
-        return timeB - timeA
-      })
+  let latestWorkDocs: WorkItem[] = []
+  let deletedProjectIds = new Set<string>()
+  let deletedClientIds = new Set<string>()
+  let hasWorkLoaded = false
+  let hasProjectsLoaded = false
+  let hasClientsLoaded = false
+
+  const emit = () => {
+    if (!hasWorkLoaded) return
+
+    const orphanedWorkItemIdsToHeal: string[] = []
+
+    const list = latestWorkDocs.filter(w => {
+      if (w.isDeleted || !isAllowedByTestMode(w.createdAt)) return false
+      if (w.projectId && deletedProjectIds.has(w.projectId)) {
+        orphanedWorkItemIdsToHeal.push(w.workItemId)
+        return false
+      }
+      if (w.clientId && deletedClientIds.has(w.clientId)) {
+        orphanedWorkItemIdsToHeal.push(w.workItemId)
+        return false
+      }
+      return true
+    })
+
+    list.sort((a, b) => {
+      const timeA = a.createdAt instanceof Date && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : 0
+      const timeB = b.createdAt instanceof Date && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : 0
+      return timeB - timeA
+    })
+
     callback(list)
+
+    if (orphanedWorkItemIdsToHeal.length > 0) {
+      healOrphanedWorkItems(orphanedWorkItemIdsToHeal).catch(err => {
+        console.warn('healOrphanedWorkItems warning:', err)
+      })
+    }
+  }
+
+  const unsubProjects = onSnapshot(collection(db, 'projects'), snap => {
+    const newDeleted = new Set<string>()
+    snap.docs.forEach(d => {
+      const data = d.data()
+      if (data.isDeleted || data.status === 'cancelled') {
+        newDeleted.add(d.id)
+      }
+    })
+    deletedProjectIds = newDeleted
+    hasProjectsLoaded = true
+    emit()
+  }, err => {
+    console.error('subscribeToWorkItems projects listener error:', err)
+    hasProjectsLoaded = true
+    emit()
+  })
+
+  const unsubClients = onSnapshot(collection(db, 'clients'), snap => {
+    const newDeleted = new Set<string>()
+    snap.docs.forEach(d => {
+      const data = d.data()
+      if (data.isDeleted) {
+        newDeleted.add(d.id)
+      }
+    })
+    deletedClientIds = newDeleted
+    hasClientsLoaded = true
+    emit()
+  }, err => {
+    console.error('subscribeToWorkItems clients listener error:', err)
+    hasClientsLoaded = true
+    emit()
+  })
+
+  const unsubWork = onSnapshot(query(collection(db, 'workItems')), snap => {
+    latestWorkDocs = snap.docs.map(d => docToWorkItem(d))
+    hasWorkLoaded = true
+    emit()
   }, err => {
     console.error('subscribeToWorkItems error:', err)
   })
+
+  return () => {
+    unsubProjects()
+    unsubClients()
+    unsubWork()
+  }
 }
 
 export interface CreateWorkItemData {

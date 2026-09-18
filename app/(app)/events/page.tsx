@@ -21,6 +21,7 @@ import {
   assignFreelancerToProject,
   unassignFreelancerFromProject,
 } from '@/lib/firebase/queries/freelancers'
+import { subscribeToClients } from '@/lib/firebase/queries/clients'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Badge } from '@/components/shared/Badge'
@@ -303,6 +304,28 @@ interface Point {
   y: number
 }
 
+interface ContractGroup {
+  id: string
+  clientId: string
+  clientName: string
+  eventName: string
+  eventType: string
+  customEventType?: string
+  bookingType: string
+  isRecurring: boolean
+  totalSessions: number
+  sessions: Project[]
+  primaryProject: Project
+  timeBucket: 'thisWeek' | 'upcoming' | 'delivered' | 'completed'
+  isDone: boolean
+  isOverdue: boolean
+  isOngoing: boolean
+  isFullyCompleted?: boolean
+  isDeliveredPending?: boolean
+  pendingBalanceDue?: number
+  isSignoffPending?: boolean
+}
+
 function EventsBoardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -317,9 +340,18 @@ function EventsBoardContent() {
   const [projects, setProjects] = useState<Project[]>([])
   const [staffList, setStaffList] = useState<StaffMember[]>(() => testDatasetMode ? [] : MOCK_STAFF)
   const [freelancerList, setFreelancerList] = useState<Freelancer[]>(() => testDatasetMode ? [] : MOCK_FREELANCERS)
+  const [clientsMap, setClientsMap] = useState<Map<string, Client>>(new Map())
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [railFilter, setRailFilter] = useState<'active' | 'done' | 'overdue'>('active')
+  const [railFilter, setRailFilter] = useState<'active' | 'done' | 'overdue' | 'all'>('active')
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    thisWeek: false,
+    upcoming: false,
+    delivered: true,
+    completed: true,
+  })
+  const [expandedContracts, setExpandedContracts] = useState<Record<string, boolean>>({})
+  const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false)
   const [panelStageKey, setPanelStageKey] = useState<ProjectStage | null>(null)
   const [overrideReason, setOverrideReason] = useState('')
   const [isAdvancing, setIsAdvancing] = useState(false)
@@ -341,6 +373,19 @@ function EventsBoardContent() {
   const canvasRef = useRef<HTMLDivElement>(null)
   const innerContainerRef = useRef<HTMLDivElement>(null)
   const wheelCleanupRef = useRef<(() => void) | null>(null)
+  const sessionDropdownRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!sessionDropdownOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sessionDropdownRef.current && !sessionDropdownRef.current.contains(e.target as Node)) {
+        setSessionDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sessionDropdownOpen])
+
   const [ports, setPorts] = useState<Record<string, Point>>({})
   // Guard so URL params (project + stage) are only applied once on initial load,
   // not every time the projects array updates from Firestore
@@ -668,13 +713,9 @@ function EventsBoardContent() {
     }
 
     const filterActiveBoardProjects = (raw: Project[]): Project[] => {
-      const nowMs = Date.now()
       return raw.filter(p => {
-        const isCompleted = p.stage === 'delivered' || p.status === 'completed'
-        if (!isCompleted) return true
-        const { endDate } = getProjectEffectiveDateRange(p)
-        const daysSinceEvent = (nowMs - endDate.getTime()) / (1000 * 60 * 60 * 24)
-        return daysSinceEvent <= 30
+        if (p.isDeleted || p.status === 'cancelled') return false
+        return true
       })
     }
 
@@ -704,10 +745,17 @@ function EventsBoardContent() {
       setFreelancerList(data || [])
     })
 
+    const unsubClients = subscribeToClients({}, clientList => {
+      const map = new Map<string, Client>()
+      ;(clientList || []).forEach(c => map.set(c.clientId, c))
+      setClientsMap(map)
+    })
+
     return () => {
       unsubProjects()
       unsubStaff()
       unsubFreelancers()
+      unsubClients()
       window.removeEventListener('studio_zoom_projects_changed', handleSync)
     }
   }, [paramProject, testDatasetMode, testModeCutoff])
@@ -737,6 +785,10 @@ function EventsBoardContent() {
     const unsub = onSnapshot(doc(db, 'clients', selectedProject.clientId), snap => {
       if (snap.exists()) {
         const d = snap.data()
+        if (d.isDeleted) {
+          setSelectedClient(null)
+          return
+        }
         setSelectedClient({
           ...d,
           clientId: snap.id,
@@ -801,9 +853,7 @@ function EventsBoardContent() {
         const match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
         if (match) {
           setSelectedProjectId(match.projectId)
-          const signoffKey = `${match.projectId}_delivered_Client sign-off received`
-          const isSignoffDone = Boolean(gateOverrides[signoffKey] || match.stageGates?.delivered?.['Client sign-off received'])
-          const isDone = match.stage === 'delivered' && match.status === 'completed' && Boolean(match.stageCompletedAt?.delivered) && isSignoffDone
+          const isDone = match.stage === 'delivered' || match.status === 'completed'
           const isOverdue = !isDone && isProjectOverdue(match, now)
           if (isDone) setRailFilter('done')
           else if (isOverdue) setRailFilter('overdue')
@@ -824,25 +874,156 @@ function EventsBoardContent() {
     return () => clearTimeout(timer)
   }, [paramProject, paramStage, projects, now, gateOverrides])
 
-  // ─── HELPER: Check if a project is fully finished/done ────────────────────
+  // ─── HELPERS: Check if a project / session is delivered, signed off, and dues cleared ──
   const isProjectFullyDone = useCallback((p: Project): boolean => {
-    if (p.stage !== 'delivered') return false
+    if (p.stage === 'delivered' || p.status === 'completed') return true
+    return false
+  }, [])
+
+  const isProjectSignoffReceived = useCallback((p: Project): boolean => {
     const signoffKey = `${p.projectId}_delivered_Client sign-off received`
-    const isSignoffDone = Boolean(gateOverrides[signoffKey] || p.stageGates?.delivered?.['Client sign-off received'])
-    return p.status === 'completed' && Boolean(p.stageCompletedAt?.delivered) && isSignoffDone
+    return Boolean(gateOverrides[signoffKey] || p.stageGates?.delivered?.['Client sign-off received'])
   }, [gateOverrides])
 
-  // ─── KPI METRICS ────────────────────────────────────────────────────────
+  const isProjectBalanceCleared = useCallback((p: Project): boolean => {
+    const client = clientsMap.get(p.clientId)
+    if (client) {
+      return (client.balanceDue ?? 0) <= 0 || client.paymentStatus === 'paid'
+    }
+    const balKey = `${p.projectId}_delivered_Outstanding balance = ₹0`
+    return Boolean(gateOverrides[balKey] || p.stageGates?.delivered?.['Outstanding balance = ₹0'] || p.status === 'completed')
+  }, [clientsMap, gateOverrides])
+
+  // ─── CONTRACT GROUPS & AGGREGATION ───────────────────────────────────────
+  const contractGroups = useMemo((): ContractGroup[] => {
+    const groupsMap = new Map<string, Project[]>()
+
+    projects.forEach(p => {
+      const isRec = p.bookingType === 'recurring' || p.sessionIndex !== undefined
+      const groupId = isRec
+        ? (p.bookingGroupId || `rec_${p.clientId}_${p.eventType || 'event'}`)
+        : p.projectId
+
+      if (!groupsMap.has(groupId)) {
+        groupsMap.set(groupId, [])
+      }
+      groupsMap.get(groupId)!.push(p)
+    })
+
+    const result: ContractGroup[] = []
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const sevenDaysAhead = new Date(startOfToday.getTime() + 7 * 86400000)
+
+    groupsMap.forEach((sessList, gId) => {
+      const isRecurring = sessList.length > 1 || sessList[0].bookingType === 'recurring' || sessList[0].sessionIndex !== undefined
+
+      // Sort sessions by sessionIndex or eventDate
+      const sorted = [...sessList].sort((a, b) => {
+        if (a.sessionIndex !== undefined && b.sessionIndex !== undefined) {
+          return a.sessionIndex - b.sessionIndex
+        }
+        const da = a.eventDate instanceof Date ? a.eventDate.getTime() : new Date(a.eventDate).getTime()
+        const db = b.eventDate instanceof Date ? b.eventDate.getTime() : new Date(b.eventDate).getTime()
+        return da - db
+      })
+
+      const firstP = sorted[0]
+      const baseEventName = (firstP.eventName || firstP.clientName || 'Untitled')
+        .replace(/ — Session \d+.*$/i, '')
+        .trim()
+
+      const sessionsDone = sorted.map(s => isProjectFullyDone(s))
+      const sessionsOverdue = sorted.map((s, idx) => !sessionsDone[idx] && isProjectOverdue(s, now))
+
+      const isAllDelivered = sorted.every((_, idx) => sessionsDone[idx])
+
+      const client = clientsMap.get(firstP.clientId)
+      const clientBalance = client ? (client.balanceDue ?? 0) : 0
+      const clientHasPendingBalance = client ? (clientBalance > 0 && client.paymentStatus !== 'paid') : false
+
+      const allSignedOff = sorted.every(s => isProjectSignoffReceived(s))
+      const allBalancesCleared = sorted.every(s => isProjectBalanceCleared(s)) && !clientHasPendingBalance
+
+      const isFullyCompleted = sorted.every(s => s.status === 'completed') || (allSignedOff && allBalancesCleared)
+
+      // Find primary project: next active/upcoming session closest to today
+      let primary = sorted.find((s, idx) => !sessionsDone[idx])
+      if (!primary) {
+        primary = sorted[sorted.length - 1]
+      }
+
+      const primaryDate = primary.eventDate instanceof Date ? primary.eventDate : new Date(primary.eventDate)
+
+      let timeBucket: 'thisWeek' | 'upcoming' | 'delivered' | 'completed'
+      let isDeliveredPending = false
+      let isSignoffPending = false
+      let pendingBalanceDue = 0
+
+      if (isAllDelivered) {
+        if (isFullyCompleted) {
+          timeBucket = 'completed'
+        } else {
+          timeBucket = 'delivered'
+          isDeliveredPending = true
+          isSignoffPending = !allSignedOff
+          pendingBalanceDue = clientBalance > 0 ? clientBalance : 0
+        }
+      } else if (primaryDate.getTime() > sevenDaysAhead.getTime()) {
+        timeBucket = 'upcoming'
+      } else {
+        timeBucket = 'thisWeek'
+      }
+
+      const isDone = timeBucket === 'delivered' || timeBucket === 'completed'
+      const isOverdue = !isDone && sorted.some((_, idx) => sessionsOverdue[idx])
+      const isOngoing = !isDone && !isOverdue
+
+      const totalSessions = Math.max(
+        firstP.totalSessions || 0,
+        sorted.length,
+        ...sorted.map(s => s.sessionIndex || 0)
+      )
+
+      result.push({
+        id: gId,
+        clientId: firstP.clientId,
+        clientName: firstP.clientName,
+        eventName: baseEventName,
+        eventType: firstP.eventType,
+        customEventType: firstP.customEventType,
+        bookingType: isRecurring ? 'recurring' : (firstP.bookingType || 'oneTime'),
+        isRecurring,
+        totalSessions,
+        sessions: sorted,
+        primaryProject: primary,
+        timeBucket,
+        isDone,
+        isOverdue,
+        isOngoing,
+        isFullyCompleted,
+        isDeliveredPending,
+        pendingBalanceDue,
+        isSignoffPending,
+      })
+    })
+
+    return result.sort((a, b) => {
+      const dateA = a.primaryProject.eventDate instanceof Date ? a.primaryProject.eventDate.getTime() : new Date(a.primaryProject.eventDate).getTime()
+      const dateB = b.primaryProject.eventDate instanceof Date ? b.primaryProject.eventDate.getTime() : new Date(b.primaryProject.eventDate).getTime()
+      return dateA - dateB
+    })
+  }, [projects, now, isProjectFullyDone, isProjectSignoffReceived, isProjectBalanceCleared, clientsMap])
+
+  // ─── ACCURATE CONTRACT-LEVEL KPI METRICS ─────────────────────────────────
   const { ongoingCount, doneCount, overdueCount } = useMemo(() => {
     let ongoing = 0
     let done = 0
     let overdue = 0
 
-    projects.forEach(p => {
-      const isDone = isProjectFullyDone(p)
-      if (isDone) {
+    contractGroups.forEach(g => {
+      if (g.isDone) {
         done++
-      } else if (isProjectOverdue(p, now)) {
+      } else if (g.isOverdue) {
         overdue++
       } else {
         ongoing++
@@ -850,45 +1031,83 @@ function EventsBoardContent() {
     })
 
     return { ongoingCount: ongoing, doneCount: done, overdueCount: overdue }
-  }, [projects, now, isProjectFullyDone])
+  }, [contractGroups])
 
-  // ─── FILTERED PROJECTS IN LEFT RAIL ─────────────────────────────────────
-  const filteredProjects = useMemo(() => {
-    return projects.filter(p => {
-      const isDone = isProjectFullyDone(p)
-      const isPastDue = !isDone && isProjectOverdue(p, now)
-      const isOngoing = !isDone && !isPastDue
+  // ─── FILTERED CONTRACT GROUPS & TIME BUCKETS ─────────────────────────────
+  const filteredGroups = useMemo(() => {
+    return contractGroups.filter(g => {
+      const isCurrentlySelected = Boolean(selectedProjectId && g.sessions.some(s => s.projectId === selectedProjectId))
 
-      // Requirement 2: Completed or done events should not exist after 30 days from the event
-      if (isDone) {
-        const { endDate } = getProjectEffectiveDateRange(p)
-        const diffMs = now.getTime() - endDate.getTime()
-        const diffDays = diffMs / (1000 * 60 * 60 * 24)
-        if (diffDays > 30) return false
-      }
-
-      // Mutually exclusive tabs (no leak between ongoing, done, overdue):
-      if (railFilter === 'active' && !isOngoing) return false
-      if (railFilter === 'done' && !isDone) return false
-      if (railFilter === 'overdue' && !isPastDue) return false
+      if (railFilter === 'active' && !g.isOngoing && !isCurrentlySelected) return false
+      if (railFilter === 'done' && !g.isDone && !isCurrentlySelected) return false
+      if (railFilter === 'overdue' && !g.isOverdue && !isCurrentlySelected) return false
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
-        const matchName = (p.eventName || '').toLowerCase().includes(q)
-        const matchClient = (p.clientName || '').toLowerCase().includes(q)
-        const matchType = (p.eventType || '').toLowerCase().includes(q)
-        const matchCustom = (p.customEventType || '').toLowerCase().includes(q)
-        const matchLabel = (p.dateLabel || '').toLowerCase().includes(q)
-        const matchLocation = (p.location || '').toLowerCase().includes(q)
-        const matchBookingType = (p.bookingType || '').toLowerCase().includes(q)
-        if (!matchName && !matchClient && !matchType && !matchCustom && !matchLabel && !matchLocation && !matchBookingType) {
+        const matchName = g.eventName.toLowerCase().includes(q)
+        const matchClient = (g.clientName || '').toLowerCase().includes(q)
+        const matchType = (g.eventType || '').toLowerCase().includes(q)
+        const matchCustom = (g.customEventType || '').toLowerCase().includes(q)
+        const matchSession = g.isRecurring && g.sessions.some(s => {
+          const sNum = `session ${s.sessionIndex || 1}`
+          return sNum.includes(q) || (s.eventName || '').toLowerCase().includes(q) || (s.dateLabel || '').toLowerCase().includes(q)
+        })
+        if (!matchName && !matchClient && !matchType && !matchCustom && !matchSession) {
           return false
         }
       }
 
       return true
     })
-  }, [projects, railFilter, searchQuery, now, isProjectFullyDone])
+  }, [contractGroups, railFilter, searchQuery, selectedProjectId])
+
+  // Automatically expand Delivered / Completed Archive when navigating to a finished project (e.g. from client page)
+  useEffect(() => {
+    if (!selectedProjectId) return
+    const group = contractGroups.find(g => g.sessions.some(s => s.projectId === selectedProjectId))
+    if (group) {
+      if (group.timeBucket === 'delivered') {
+        setCollapsedSections(prev => ({ ...prev, delivered: false }))
+      } else if (group.timeBucket === 'completed') {
+        setCollapsedSections(prev => ({ ...prev, completed: false }))
+      }
+    }
+  }, [selectedProjectId, contractGroups])
+
+  const bucketGroups = useMemo(() => {
+    const thisWeek: ContractGroup[] = []
+    const upcoming: ContractGroup[] = []
+    const delivered: ContractGroup[] = []
+    const completed: ContractGroup[] = []
+
+    filteredGroups.forEach(g => {
+      if (g.timeBucket === 'completed') {
+        completed.push(g)
+      } else if (g.timeBucket === 'delivered') {
+        delivered.push(g)
+      } else if (g.timeBucket === 'thisWeek') {
+        thisWeek.push(g)
+      } else {
+        upcoming.push(g)
+      }
+    })
+
+    return { thisWeek, upcoming, delivered, completed }
+  }, [filteredGroups])
+
+  // Sibling sessions of the currently active canvas project (for canvas topbar switcher)
+  const siblingSessions = useMemo(() => {
+    if (!selectedProject || (!selectedProject.sessionIndex && selectedProject.bookingType !== 'recurring')) return []
+    const groupId = selectedProject.bookingGroupId
+    if (groupId) {
+      return projects
+        .filter(p => p.bookingGroupId === groupId)
+        .sort((a, b) => (a.sessionIndex ?? 0) - (b.sessionIndex ?? 0))
+    }
+    return projects
+      .filter(p => p.clientId === selectedProject.clientId && (p.bookingType === 'recurring' || p.sessionIndex !== undefined))
+      .sort((a, b) => (a.sessionIndex ?? 0) - (b.sessionIndex ?? 0))
+  }, [selectedProject, projects])
 
   // ─── STAGE PROGRESS HELPERS ─────────────────────────────────────────────
   const currentStageIndex = useMemo(() => {
@@ -2617,12 +2836,9 @@ function EventsBoardContent() {
             {/* Ongoing Chip */}
             <div
               onClick={() => {
-                setRailFilter('active')
-                const match = projects.find(p => {
-                  const ed = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
-                  return p.stage !== 'delivered' && p.status !== 'completed' && ed.getTime() >= now.getTime()
-                })
-                if (match) handleSelectProject(match.projectId)
+                setRailFilter(prev => prev === 'active' ? 'all' : 'active')
+                const match = contractGroups.find(g => g.isOngoing)
+                if (match) handleSelectProject(match.primaryProject.projectId)
               }}
               style={{
                 flex: 1,
@@ -2648,9 +2864,10 @@ function EventsBoardContent() {
             {/* Done Chip */}
             <div
               onClick={() => {
-                setRailFilter('done')
-                const match = projects.find(p => p.stage === 'delivered' || p.status === 'completed')
-                if (match) handleSelectProject(match.projectId)
+                setRailFilter(prev => prev === 'done' ? 'all' : 'done')
+                setCollapsedSections(prev => ({ ...prev, delivered: false, completed: false }))
+                const match = contractGroups.find(g => g.isDone)
+                if (match) handleSelectProject(match.primaryProject.projectId)
               }}
               style={{
                 flex: 1,
@@ -2676,12 +2893,10 @@ function EventsBoardContent() {
             {/* Overdue Chip */}
             <div
               onClick={() => {
-                setRailFilter('overdue')
-                const match = projects.find(p => {
-                  const ed = p.eventDate instanceof Date ? p.eventDate : new Date(p.eventDate)
-                  return (p.stage !== 'delivered' && p.status !== 'completed') && ed.getTime() < now.getTime()
-                })
-                if (match) handleSelectProject(match.projectId)
+                setRailFilter(prev => prev === 'overdue' ? 'all' : 'overdue')
+                setCollapsedSections(prev => ({ ...prev, thisWeek: false }))
+                const match = contractGroups.find(g => g.isOverdue)
+                if (match) handleSelectProject(match.primaryProject.projectId)
               }}
               style={{
                 flex: 1,
@@ -2721,7 +2936,7 @@ function EventsBoardContent() {
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search events"
+              placeholder="Search events, clients, sessions…"
               style={{
                 fontFamily: 'var(--font-inter)',
                 width: '100%',
@@ -2754,9 +2969,9 @@ function EventsBoardContent() {
           </div>
         </div>
 
-        {/* Scrollable Project Cards */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {filteredProjects.length === 0 ? (
+        {/* Scrollable Project Cards & Accordions */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filteredGroups.length === 0 ? (
             <div style={{
               textAlign: 'center',
               padding: '36px 16px',
@@ -2785,110 +3000,370 @@ function EventsBoardContent() {
               </div>
             </div>
           ) : (
-            filteredProjects.map(p => {
-              const isSelected = p.projectId === selectedProject?.projectId
-              const isOverdue = isProjectOverdue(p, now)
-              const isMultiDay = (p.eventDates && p.eventDates.length > 1) || p.bookingType === 'multiDate'
-              const isRecurring = p.bookingType === 'recurring'
+            ([
+              {
+                key: 'thisWeek',
+                title: 'Active & This Week',
+                icon: 'ti-calendar-event',
+                color: 'var(--color-success)',
+                items: bucketGroups.thisWeek,
+              },
+              {
+                key: 'upcoming',
+                title: 'Upcoming Later',
+                icon: 'ti-calendar-time',
+                color: 'var(--color-accent)',
+                items: bucketGroups.upcoming,
+              },
+              {
+                key: 'delivered',
+                title: 'Delivered (Pending Closeout)',
+                icon: 'ti-truck-delivery',
+                color: 'var(--color-secondary)',
+                items: bucketGroups.delivered,
+              },
+              {
+                key: 'completed',
+                title: 'Completed Archive',
+                icon: 'ti-circle-check',
+                color: 'var(--color-success)',
+                items: bucketGroups.completed,
+              },
+            ] as const).map(sec => {
+              if (sec.items.length === 0 && !searchQuery.trim() && railFilter !== 'all') {
+                return null
+              }
+              const isCollapsed = !searchQuery.trim() && Boolean(collapsedSections[sec.key])
 
               return (
-                <div
-                  key={p.projectId}
-                  onClick={() => handleSelectProject(p.projectId)}
-                  style={{
-                    cursor: 'pointer',
-                    borderRadius: '10px',
-                    padding: '12px 14px',
-                    background: isSelected ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
-                    borderTop: isSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
-                    borderRight: isSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
-                    borderBottom: isSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
-                    borderLeft: `4px solid ${isSelected ? 'var(--color-primary)' : 'transparent'}`,
-                    boxShadow: isSelected
-                      ? '0 2px 10px rgba(198, 83, 159, 0.2), inset 0 0 0 0.5px var(--color-primary)'
-                      : 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                      {isSelected && (
-                        <span style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          background: 'var(--color-primary)',
-                          flexShrink: 0,
-                        }} />
-                      )}
+                <div key={sec.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {/* Section Accordion Header */}
+                  <div
+                    onClick={() => {
+                      setCollapsedSections(prev => ({
+                        ...prev,
+                        [sec.key]: !prev[sec.key],
+                      }))
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '4px 6px',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      borderRadius: '6px',
+                      background: 'transparent',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className={`ti ${sec.icon}`} style={{ fontSize: '13px', color: sec.color }} />
                       <span style={{
-                        fontSize: 'var(--text-sm)',
+                        fontSize: '11px',
                         fontWeight: 700,
-                        color: isSelected ? 'var(--color-primary)' : 'var(--color-foreground)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        color: 'var(--color-foreground-muted)',
                       }}>
-                        {p.eventName || p.clientName}
+                        {sec.title}
+                      </span>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        background: 'var(--color-surface-raised)',
+                        color: 'var(--color-foreground-subtle)',
+                        border: '0.5px solid var(--color-border)',
+                      }}>
+                        {sec.items.length}
                       </span>
                     </div>
-                    {isMultiDay && (
-                      <span style={{
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        padding: '1px 5px',
-                        borderRadius: '4px',
-                        background: 'var(--color-accent-muted)',
-                        color: 'var(--color-accent)',
-                      }}>
-                        Multi-Day
-                      </span>
-                    )}
-                    {isRecurring && (
-                      <span style={{
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        padding: '1px 5px',
-                        borderRadius: '4px',
-                        background: 'var(--color-purple-muted)',
-                        color: 'var(--color-purple)',
-                      }}>
-                        {p.sessionIndex ? `Session ${p.sessionIndex}/${p.totalSessions || ''}` : 'Recurring'}
-                      </span>
-                    )}
+                    <i
+                      className={`ti ti-chevron-${isCollapsed ? 'right' : 'down'}`}
+                      style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)' }}
+                    />
                   </div>
 
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ textTransform: 'capitalize' }}>
-                      {p.eventType === 'other' && p.customEventType ? p.customEventType : p.eventType}
-                    </span>
-                    <span>·</span>
-                    {p.sessionIndex ? (
-                      <span>{formatShortDate(p.eventDate)}{p.sessionRate ? ` · ₹${p.sessionRate.toLocaleString('en-IN')}` : ''}</span>
-                    ) : isRecurring && p.recurringSchedule ? (
-                      <span>
-                        {formatShortDate(p.recurringSchedule.startDate)}
-                        {p.recurringSchedule.frequency ? ` · ${p.recurringSchedule.frequency}` : ''}
-                      </span>
-                    ) : (
-                      <span>{formatShortDate(p.eventDate)}</span>
-                    )}
-                  </div>
+                  {/* Section Items */}
+                  {!isCollapsed && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {sec.items.length === 0 ? (
+                        <div style={{
+                          padding: '10px 12px',
+                          fontSize: 'var(--text-xs)',
+                          color: 'var(--color-foreground-subtle)',
+                          fontStyle: 'italic',
+                        }}>
+                          No events in this section
+                        </div>
+                      ) : (
+                        sec.items.map(group => {
+                          const isGroupSelected = group.sessions.some(s => s.projectId === selectedProject?.projectId)
+                          const isContractExpanded = Boolean(expandedContracts[group.id])
+                          const primary = group.primaryProject
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
-                    <Badge variant={p.stage} />
-                    {isOverdue && (
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <i className="ti ti-alert-triangle" style={{ fontSize: '12px' }} />
-                        Overdue
-                      </span>
-                    )}
-                  </div>
+                          return (
+                            <div
+                              key={group.id}
+                              onClick={() => handleSelectProject(primary.projectId)}
+                              style={{
+                                cursor: 'pointer',
+                                borderRadius: '10px',
+                                padding: '10px 12px',
+                                background: isGroupSelected ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                                borderTop: isGroupSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                                borderRight: isGroupSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                                borderBottom: isGroupSelected ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                                borderLeft: `4px solid ${isGroupSelected ? 'var(--color-primary)' : 'transparent'}`,
+                                boxShadow: isGroupSelected
+                                  ? '0 2px 10px rgba(198, 83, 159, 0.2), inset 0 0 0 0.5px var(--color-primary)'
+                                  : 'none',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {/* Card Title Row */}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                                  {isGroupSelected && (
+                                    <span style={{
+                                      width: '6px',
+                                      height: '6px',
+                                      borderRadius: '50%',
+                                      background: 'var(--color-primary)',
+                                      flexShrink: 0,
+                                    }} />
+                                  )}
+                                  <span style={{
+                                    fontSize: 'var(--text-sm)',
+                                    fontWeight: 700,
+                                    color: isGroupSelected ? 'var(--color-primary)' : 'var(--color-foreground)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}>
+                                    {group.eventName || group.clientName}
+                                  </span>
+                                </div>
+
+                                {group.isRecurring ? (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    background: 'var(--color-purple-muted)',
+                                    color: 'var(--color-purple)',
+                                    border: '0.5px solid var(--color-border)',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
+                                  }}>
+                                    Session {primary.sessionIndex || 1}/{group.totalSessions}
+                                  </span>
+                                ) : (primary.eventDates && primary.eventDates.length > 1) || primary.bookingType === 'multiDate' ? (
+                                  <span style={{
+                                    fontSize: '9px',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    background: 'var(--color-accent-muted)',
+                                    color: 'var(--color-accent)',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
+                                  }}>
+                                    Multi-Day
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              {/* Card Subtitle Row */}
+                              <div style={{
+                                fontSize: 'var(--text-xs)',
+                                color: 'var(--color-foreground-muted)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                <span style={{ textTransform: 'capitalize' }}>
+                                  {group.eventType === 'other' && group.customEventType ? group.customEventType : group.eventType}
+                                </span>
+                                <span>·</span>
+                                {group.isRecurring ? (
+                                  <span>Next: Session {primary.sessionIndex || 1} ({formatShortDate(primary.eventDate)})</span>
+                                ) : (
+                                  <span>{formatShortDate(primary.eventDate)}</span>
+                                )}
+                              </div>
+
+                              {/* Card Bottom Row: Badges & Expand Toggle */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px', flexWrap: 'wrap', gap: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <Badge variant={primary.stage} />
+                                  {group.isOverdue && (
+                                    <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <i className="ti ti-alert-triangle" style={{ fontSize: '12px' }} />
+                                      Overdue
+                                    </span>
+                                  )}
+                                  {group.timeBucket === 'delivered' && (
+                                    <>
+                                      {group.pendingBalanceDue && group.pendingBalanceDue > 0 ? (
+                                        <span style={{
+                                          fontSize: '9px',
+                                          fontWeight: 600,
+                                          color: 'var(--color-danger)',
+                                          background: 'var(--color-danger-muted)',
+                                          padding: '1px 5px',
+                                          borderRadius: '4px',
+                                          border: '0.5px solid var(--color-danger-muted)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '2px',
+                                        }}>
+                                          <i className="ti ti-currency-rupee" style={{ fontSize: '10px' }} />
+                                          ₹{group.pendingBalanceDue.toLocaleString('en-IN')} Due
+                                        </span>
+                                      ) : null}
+                                      {group.isSignoffPending ? (
+                                        <span style={{
+                                          fontSize: '9px',
+                                          fontWeight: 600,
+                                          color: 'var(--color-secondary)',
+                                          background: 'var(--color-secondary-muted)',
+                                          padding: '1px 5px',
+                                          borderRadius: '4px',
+                                          border: '0.5px solid var(--color-secondary-muted)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '2px',
+                                        }}>
+                                          <i className="ti ti-signature" style={{ fontSize: '10px' }} />
+                                          Sign-off Due
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  )}
+                                  {group.timeBucket === 'completed' && (
+                                    <span style={{
+                                      fontSize: '9px',
+                                      fontWeight: 600,
+                                      color: 'var(--color-success)',
+                                      background: 'var(--color-success-muted)',
+                                      padding: '1px 5px',
+                                      borderRadius: '4px',
+                                      border: '0.5px solid var(--color-success-muted)',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                    }}>
+                                      <i className="ti ti-check" style={{ fontSize: '10px' }} />
+                                      All Settled
+                                    </span>
+                                  )}
+                                </div>
+
+                                {group.isRecurring && group.sessions.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setExpandedContracts(prev => ({
+                                        ...prev,
+                                        [group.id]: !prev[group.id],
+                                      }))
+                                    }}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      padding: '2px 4px',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                      color: 'var(--color-purple)',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                    }}
+                                  >
+                                    <i className={`ti ti-chevron-${isContractExpanded ? 'down' : 'right'}`} style={{ fontSize: '10px' }} />
+                                    <span>{group.sessions.length} Sessions</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Expanded Child Sessions */}
+                              {group.isRecurring && isContractExpanded && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    marginTop: '4px',
+                                    paddingTop: '6px',
+                                    borderTop: '0.5px solid var(--color-border)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '4px',
+                                  }}
+                                >
+                                  {group.sessions.map(s => {
+                                    const isThisSessSelected = s.projectId === selectedProject?.projectId
+                                    const sessOverdue = isProjectOverdue(s, now)
+
+                                    return (
+                                      <div
+                                        key={s.projectId}
+                                        onClick={() => handleSelectProject(s.projectId)}
+                                        style={{
+                                          padding: '6px 8px',
+                                          borderRadius: '6px',
+                                          background: isThisSessSelected ? 'var(--color-purple-muted)' : 'var(--color-surface)',
+                                          border: `0.5px solid ${isThisSessSelected ? 'var(--color-purple)' : 'var(--color-border)'}`,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          cursor: 'pointer',
+                                          gap: '6px',
+                                          transition: 'all 0.1s ease',
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{
+                                              fontSize: '11px',
+                                              fontWeight: isThisSessSelected ? 700 : 500,
+                                              color: isThisSessSelected ? 'var(--color-purple)' : 'var(--color-foreground)',
+                                              whiteSpace: 'nowrap',
+                                            }}>
+                                              Session {s.sessionIndex || 1}
+                                            </span>
+                                            {sessOverdue && (
+                                              <i className="ti ti-alert-triangle" style={{ fontSize: '10px', color: 'var(--color-danger)' }} />
+                                            )}
+                                          </div>
+                                          <span style={{ fontSize: '9px', color: 'var(--color-foreground-subtle)' }}>
+                                            {formatShortDate(s.eventDate)} {s.startTime ? `· ${s.startTime}` : ''}
+                                          </span>
+                                        </div>
+                                        <Badge variant={s.stage} />
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })
@@ -2986,21 +3461,120 @@ function EventsBoardContent() {
                     {multiEventDays.length} Tracks
                   </span>
                 )}
-                {selectedProject.sessionIndex ? (
+                {selectedProject.sessionIndex || (selectedProject.bookingType === 'recurring' && siblingSessions.length > 1) ? (
                   <>
-                    <span style={{
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 600,
-                      padding: '2px 8px',
-                      borderRadius: '10px',
-                      background: 'var(--color-purple-muted)',
-                      color: 'var(--color-purple)',
-                      border: '0.5px solid var(--color-border)',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                    }}>
-                      Recurring · Session {selectedProject.sessionIndex} of {selectedProject.totalSessions || ''}
-                    </span>
+                    {/* Interactive Session Switcher Dropdown */}
+                    <div style={{ position: 'relative' }} ref={sessionDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setSessionDropdownOpen(prev => !prev)}
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: 'var(--color-purple-muted)',
+                          color: 'var(--color-purple)',
+                          border: '0.5px solid var(--color-purple)',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <i className="ti ti-repeat" style={{ fontSize: '12px' }} />
+                        <span>
+                          Session {selectedProject.sessionIndex || 1} of {selectedProject.totalSessions || siblingSessions.length || 1}
+                          {' · '}
+                          {formatShortDate(selectedProject.eventDate)}
+                        </span>
+                        <i className={`ti ti-chevron-${sessionDropdownOpen ? 'up' : 'down'}`} style={{ fontSize: '10px' }} />
+                      </button>
+
+                      {sessionDropdownOpen && siblingSessions.length > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: 'calc(100% + 6px)',
+                          left: 0,
+                          width: '280px',
+                          maxHeight: '340px',
+                          overflowY: 'auto',
+                          background: 'var(--color-surface-overlay)',
+                          border: '0.5px solid var(--color-border)',
+                          borderRadius: '10px',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                          padding: '6px',
+                          zIndex: 100,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                        }}>
+                          <div style={{
+                            padding: '6px 8px 4px 8px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            color: 'var(--color-foreground-subtle)',
+                            borderBottom: '0.5px solid var(--color-border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}>
+                            <span>Contract Sessions</span>
+                            <span>{siblingSessions.length} total</span>
+                          </div>
+                          {siblingSessions.map(s => {
+                            const isCurrent = s.projectId === selectedProject.projectId
+                            return (
+                              <button
+                                key={s.projectId}
+                                type="button"
+                                onClick={() => {
+                                  handleSelectProject(s.projectId)
+                                  setSessionDropdownOpen(false)
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '7px 10px',
+                                  borderRadius: '6px',
+                                  background: isCurrent ? 'var(--color-purple-muted)' : 'transparent',
+                                  border: isCurrent ? '0.5px solid var(--color-purple)' : '0.5px solid transparent',
+                                  cursor: 'pointer',
+                                  color: isCurrent ? 'var(--color-purple)' : 'var(--color-foreground)',
+                                  textAlign: 'left',
+                                  width: '100%',
+                                  gap: '8px',
+                                  transition: 'background 0.1s ease',
+                                }}
+                                onMouseEnter={e => {
+                                  if (!isCurrent) e.currentTarget.style.background = 'var(--color-surface-raised)'
+                                }}
+                                onMouseLeave={e => {
+                                  if (!isCurrent) e.currentTarget.style.background = 'transparent'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: isCurrent ? 700 : 500 }}>
+                                    Session {s.sessionIndex || 1}
+                                  </span>
+                                  <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                                    {formatShortDate(s.eventDate)} {s.startTime ? `· ${s.startTime}` : ''}
+                                  </span>
+                                </div>
+                                <Badge variant={s.stage} />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                     {sessionRate > 0 && (
                       <span style={{
                         fontSize: 'var(--text-xs)',

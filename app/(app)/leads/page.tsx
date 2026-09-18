@@ -55,7 +55,30 @@ export default function LeadsPage() {
 
   // Pagination states
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('studio_zoom_leads_page_size')
+        if (saved) {
+          const parsed = Number(saved)
+          if ([10, 25, 50, 100].includes(parsed)) return parsed
+        }
+      } catch {}
+    }
+    return 10
+  })
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('studio_zoom_leads_page_size')
+      if (saved) {
+        const parsed = Number(saved)
+        if ([10, 25, 50, 100].includes(parsed)) {
+          setPageSize(parsed)
+        }
+      }
+    } catch {}
+  }, [])
 
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
@@ -275,8 +298,12 @@ export default function LeadsPage() {
                 <select
                   value={pageSize}
                   onChange={e => {
-                    setPageSize(Number(e.target.value))
+                    const next = Number(e.target.value)
+                    setPageSize(next)
                     setPage(1)
+                    try {
+                      localStorage.setItem('studio_zoom_leads_page_size', String(next))
+                    } catch {}
                   }}
                   style={{
                     fontFamily:   'var(--font-inter)',
