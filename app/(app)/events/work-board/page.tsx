@@ -1808,18 +1808,18 @@ export default function WorkBoardPage() {
     })
 
     const unsub2 = subscribeToProjects(projs => {
+      const activeIds = new Set((projs || []).map(p => p.projectId))
       setProjects(projs || [])
-      if (projs && projs.length > 0) {
-        setLocalItems(prev => prev.filter(local => {
-          if (local.workItemId.startsWith('postprod-')) {
-            const proj = projs.find(p => p.projectId === local.projectId)
-            if (proj?.postProduction) {
-              return false
-            }
+      setLocalItems(prev => prev.filter(local => {
+        if (local.projectId && !activeIds.has(local.projectId)) return false
+        if (local.workItemId.startsWith('postprod-')) {
+          const proj = (projs || []).find(p => p.projectId === local.projectId)
+          if (proj?.postProduction) {
+            return false
           }
-          return true
-        }))
-      }
+        }
+        return true
+      }))
     })
 
     let unsub3 = () => {}
@@ -1862,11 +1862,15 @@ export default function WorkBoardPage() {
       return { name: uid, isFreelancer: false }
     }
 
+    const activeProjectIds = new Set(projects.map(p => p.projectId))
+
     // 1. Base on real Firestore workItems, overlaying any pending optimistic edits
-    const combined: WorkItem[] = workItems.map(item => {
-      const local = localItems.find(l => l.workItemId === item.workItemId)
-      return local ? { ...item, ...local } : item
-    })
+    const combined: WorkItem[] = workItems
+      .filter(item => !item.isDeleted && (!item.projectId || activeProjectIds.has(item.projectId)))
+      .map(item => {
+        const local = localItems.find(l => l.workItemId === item.workItemId)
+        return local ? { ...item, ...local } : item
+      })
 
     // 2. Add localItems that are purely optimistic (e.g. newly created before Firestore snapshot)
     for (const local of localItems) {
@@ -1960,7 +1964,7 @@ export default function WorkBoardPage() {
 
     // 2. Add from staffAssignments collection
     for (const a of assignments) {
-      if (testDatasetMode && !projects.some(p => p.projectId === a.projectId)) continue
+      if (!projects.some(p => p.projectId === a.projectId)) continue
       const exists = combined.some(
         w => w.projectId === a.projectId && w.assignedToUid === a.staffUid
       )
@@ -2341,7 +2345,11 @@ export default function WorkBoardPage() {
         seenWork.set(workKey, { ...chosen, startDate: resolvedStartDate, dueDate: resolvedDueDate })
       }
     }
-    const finalItems = Array.from(seenWork.values())
+    const finalItems = Array.from(seenWork.values()).filter(w => {
+      if (w.isDeleted) return false
+      if (w.projectId && !activeProjectIds.has(w.projectId)) return false
+      return true
+    })
 
     return testDatasetMode
       ? finalItems.filter(w => isAllowedByTestMode(w.createdAt))
