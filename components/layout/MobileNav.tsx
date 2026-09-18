@@ -12,11 +12,12 @@ interface MobileNavItem {
 }
 
 const MOBILE_NAV: MobileNavItem[] = [
-  { href: '/dashboard',       icon: 'ti-layout-dashboard', label: 'Home',     roles: ['admin','manager','staff'] },
-  { href: '/events',          icon: 'ti-route',            label: 'Events',   roles: ['admin','manager'] },
-  { href: '/events/editing',  icon: 'ti-wand',             label: 'Editing',  roles: ['admin','manager','staff'] },
-  { href: '/hrms/attendance', icon: 'ti-checklist',        label: 'HRMS',     roles: ['admin','manager','staff'] },
-  { href: '/hrms/timeclock',  icon: 'ti-clock',            label: 'Clock',    roles: ['admin','manager','staff'] },
+  { href: '/dashboard',         icon: 'ti-layout-dashboard', label: 'Home',       roles: ['admin','manager'] },
+  { href: '/events',            icon: 'ti-route',            label: 'Events',     roles: ['admin','manager'] },
+  { href: '/hrms/timeclock',    icon: 'ti-clock',            label: 'Clock',      roles: ['admin','manager','staff'] },
+  { href: '/events/work-board', icon: 'ti-layout-kanban',    label: 'Work',       roles: ['admin','manager','staff'] },
+  { href: '/hrms/attendance',   icon: 'ti-checklist',        label: 'Attendance', roles: ['admin','manager','staff'] },
+  { href: '/hrms/payslips',     icon: 'ti-file-invoice',     label: 'Payslips',   roles: ['admin','staff'] },
 ]
 
 export function MobileNav() {

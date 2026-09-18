@@ -43,6 +43,13 @@ const ERP_ITEMS: NavItem[] = [
   { id: 'accounts',   label: 'Accounts',   icon: 'ti-scale',     href: '/erp/accounts',   roles: ['admin'] },
 ]
 
+const STAFF_ITEMS: NavItem[] = [
+  { id: 'timeclock',   label: 'Time Clock',    icon: 'ti-clock',         href: '/hrms/timeclock',   roles: ['staff'] },
+  { id: 'work-board',  label: 'Work Board',    icon: 'ti-layout-kanban', href: '/events/work-board', roles: ['staff'] },
+  { id: 'attendance',  label: 'My Attendance', icon: 'ti-checklist',     href: '/hrms/attendance',  roles: ['staff'] },
+  { id: 'payslips',    label: 'My Payslips',   icon: 'ti-file-invoice',  href: '/hrms/payslips',    roles: ['staff'] },
+]
+
 const NAV_GROUPS = [
   { label: 'CRM',  items: CRM_ITEMS  },
   { label: 'HRMS', items: HRMS_ITEMS },
@@ -60,11 +67,13 @@ export function Sidebar() {
   const { theme, toggleTheme, sidebarCollapsed } = useUIStore()
   const role = appUser?.role ?? 'staff'
 
-  const ALL_NAV_HREFS = [
-    '/dashboard',
-    ...NAV_GROUPS.flatMap(g => g.items.map(i => i.href)),
-    ...(role === 'admin' ? ['/settings'] : []),
-  ]
+  const ALL_NAV_HREFS = role === 'staff'
+    ? STAFF_ITEMS.map(i => i.href)
+    : [
+        '/dashboard',
+        ...NAV_GROUPS.flatMap(g => g.items.map(i => i.href)),
+        ...(role === 'admin' ? ['/settings'] : []),
+      ]
 
   const isActive = (href: string) => {
     if (pathname === href) return true
@@ -121,47 +130,80 @@ export function Sidebar() {
           padding: sidebarCollapsed ? '12px 6px' : '12px 10px',
           display: 'flex', flexDirection: 'column', gap: '2px',
         }}>
-          {/* Dashboard — all roles */}
-          <NavLink
-            href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
-            active={isActive('/dashboard')}
-            collapsed={sidebarCollapsed}
-          />
+          {/* Dashboard — admins & managers only */}
+          {role !== 'staff' && (
+            <NavLink
+              href="/dashboard" icon="ti-layout-dashboard" label="Dashboard"
+              active={isActive('/dashboard')}
+              collapsed={sidebarCollapsed}
+            />
+          )}
 
-          {NAV_GROUPS.map(group => {
-            const visible = group.items.filter(item => item.roles.includes(role))
-            if (!visible.length) return null
-            return (
-              <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {sidebarCollapsed ? (
-                  <div
-                    title={group.label}
-                    style={{
-                      height: '1px',
-                      background: 'var(--color-border)',
-                      margin: '10px 6px',
-                      opacity: 0.6,
-                    }}
-                  />
-                ) : (
-                  <div style={{
-                    fontSize: 'var(--text-xs)', fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: '0.04em',
-                    color: 'var(--color-foreground-subtle)',
-                    margin: '16px 0 4px', padding: '0 10px',
-                  }}>{group.label}</div>
-                )}
-                {visible.map(item => (
-                  <NavLink
-                    key={item.id}
-                    href={item.href} icon={item.icon} label={item.label}
-                    active={isActive(item.href)}
-                    collapsed={sidebarCollapsed}
-                  />
-                ))}
-              </div>
-            )
-          })}
+          {role === 'staff' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {sidebarCollapsed ? (
+                <div
+                  title="My Work"
+                  style={{
+                    height: '1px',
+                    background: 'var(--color-border)',
+                    margin: '10px 6px',
+                    opacity: 0.6,
+                  }}
+                />
+              ) : (
+                <div style={{
+                  fontSize: 'var(--text-xs)', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                  margin: '8px 0 4px', padding: '0 10px',
+                }}>MY WORK</div>
+              )}
+              {STAFF_ITEMS.map(item => (
+                <NavLink
+                  key={item.id}
+                  href={item.href} icon={item.icon} label={item.label}
+                  active={isActive(item.href)}
+                  collapsed={sidebarCollapsed}
+                />
+              ))}
+            </div>
+          ) : (
+            NAV_GROUPS.map(group => {
+              const visible = group.items.filter(item => item.roles.includes(role))
+              if (!visible.length) return null
+              return (
+                <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {sidebarCollapsed ? (
+                    <div
+                      title={group.label}
+                      style={{
+                        height: '1px',
+                        background: 'var(--color-border)',
+                        margin: '10px 6px',
+                        opacity: 0.6,
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      fontSize: 'var(--text-xs)', fontWeight: 600,
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                      color: 'var(--color-foreground-subtle)',
+                      margin: '16px 0 4px', padding: '0 10px',
+                    }}>{group.label}</div>
+                  )}
+                  {visible.map(item => (
+                    <NavLink
+                      key={item.id}
+                      href={item.href} icon={item.icon} label={item.label}
+                      active={isActive(item.href)}
+                      collapsed={sidebarCollapsed}
+                    />
+                  ))}
+                </div>
+              )
+            })
+          )}
         </div>
       </nav>
 

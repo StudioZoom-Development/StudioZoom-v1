@@ -21,10 +21,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     document.body.setAttribute('data-theme', theme)
   }, [theme])
 
-  // Redirect unauthenticated users
+  // Redirect unauthenticated users or staff from dashboard
   useEffect(() => {
-    if (!loading && !appUser) router.replace('/login')
-  }, [appUser, loading, router])
+    if (!loading && !appUser) {
+      router.replace('/login')
+    } else if (!loading && appUser?.role === 'staff' && pathname === '/dashboard') {
+      router.replace('/hrms/timeclock')
+    }
+  }, [appUser, loading, pathname, router])
 
   // Full-screen spinner while checking auth
   if (loading) {

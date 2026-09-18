@@ -22,7 +22,8 @@ service cloud.firestore {
     }
 
     match /clients/{clientId} {
-      allow read, write: if isAdminOrManager();
+      allow read:        if isSignedIn();
+      allow write:       if isAdminOrManager();
       allow delete:      if isAdmin();
       match /payments/{paymentId} {
         allow read, write: if isAdminOrManager();
@@ -81,9 +82,10 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.staffUid || isAdminOrManager()
       );
-      // Staff can create their own check-in record
-      allow create: if isSignedIn() &&
-        request.resource.data.staffUid == request.auth.uid;
+      // Staff can create their own check-in record, or Admins/Managers can create
+      allow create: if isAdminOrManager() || (
+        isSignedIn() && request.resource.data.staffUid == request.auth.uid
+      );
       // Staff can update only their own open sessions (check-out)
       allow update: if isAdminOrManager() || (
         isSignedIn() &&
@@ -103,9 +105,10 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.staffUid || isAdminOrManager()
       );
-      // Staff can submit their own leave/permission requests
-      allow create: if isSignedIn() &&
-        request.resource.data.staffUid == request.auth.uid;
+      // Staff can submit their own leave/permission requests, or Admins/Managers can create
+      allow create: if isAdminOrManager() || (
+        isSignedIn() && request.resource.data.staffUid == request.auth.uid
+      );
       // Admins/managers can review/approve/reject requests
       allow update, delete: if isAdminOrManager();
     }
