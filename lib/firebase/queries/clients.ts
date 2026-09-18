@@ -627,63 +627,137 @@ export async function updateClient(
 
 /** Soft delete — isDeleted: true, never hard-delete */
 export async function softDeleteClient(clientId: string, deletedBy: string): Promise<void> {
-  const batch = writeBatch(db)
   const clientRef = doc(db, 'clients', clientId)
   const clientSnap = await getDoc(clientRef)
-  
+
+  const projectIdsToDelete = new Set<string>()
+
+  if (clientSnap.exists()) {
+    const data = clientSnap.data()
+    if (data.projectId && typeof data.projectId === 'string') {
+      projectIdsToDelete.add(data.projectId)
+    }
+    if (Array.isArray(data.projectIds)) {
+      data.projectIds.forEach((pid: unknown) => {
+        if (typeof pid === 'string' && pid) projectIdsToDelete.add(pid)
+      })
+    }
+    if (data.bookingGroupId && typeof data.bookingGroupId === 'string') {
+      try {
+        const bgSnap = await getDocs(query(collection(db, 'projects'), where('bookingGroupId', '==', data.bookingGroupId)))
+        bgSnap.forEach(d => projectIdsToDelete.add(d.id))
+      } catch (err) {
+        console.warn('softDeleteClient query bookingGroupId error:', err)
+      }
+    }
+  }
+
+  // Also query projects by clientId directly to catch all sessions (recurring, multi-date, etc.)
+  try {
+    const clientProjectsSnap = await getDocs(query(collection(db, 'projects'), where('clientId', '==', clientId)))
+    clientProjectsSnap.forEach(d => projectIdsToDelete.add(d.id))
+  } catch (err) {
+    console.warn('softDeleteClient query clientId error:', err)
+  }
+
+  // Also query by contract_${clientId} if used as bookingGroupId
+  try {
+    const contractProjectsSnap = await getDocs(query(collection(db, 'projects'), where('bookingGroupId', '==', `contract_${clientId}`)))
+    contractProjectsSnap.forEach(d => projectIdsToDelete.add(d.id))
+  } catch (err) {
+    console.warn('softDeleteClient query contract bookingGroupId error:', err)
+  }
+
+  let batch = writeBatch(db)
+  let count = 0
+
+  const commitBatchIfNeeded = async () => {
+    count++
+    if (count >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      count = 0
+    }
+  }
+
+  // 1. Soft-delete client document
   batch.update(clientRef, {
     isDeleted:  true,
     deletedBy,
     deletedAt:  serverTimestamp(),
     updatedAt:  serverTimestamp(),
   })
+  await commitBatchIfNeeded()
 
-  let projectId = ''
-  if (clientSnap.exists()) {
-    const data = clientSnap.data()
-    if (data.projectId) {
-      projectId = data.projectId
-      batch.update(doc(db, 'projects', data.projectId), {
-        isDeleted:  true,
-        deletedBy,
-        deletedAt:  serverTimestamp(),
-        updatedAt:  serverTimestamp(),
-      })
-    }
-  }
-
-  // Soft-delete related work items
-  if (projectId) {
-    const wSnap1 = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', projectId)))
-    wSnap1.forEach(d => {
-      batch.update(d.ref, {
-        isDeleted:  true,
-        deletedBy,
-        deletedAt:  serverTimestamp(),
-        updatedAt:  serverTimestamp(),
-      })
-    })
-
-    const aSnap1 = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', projectId)))
-    aSnap1.forEach(d => {
-      batch.update(d.ref, {
-        isDeleted:  true,
-        deletedBy,
-        deletedAt:  serverTimestamp(),
-        updatedAt:  serverTimestamp(),
-      })
-    })
-  }
-
-  const wSnap2 = await getDocs(query(collection(db, 'workItems'), where('clientId', '==', clientId)))
-  wSnap2.forEach(d => {
-    batch.update(d.ref, {
+  // 2. Soft-delete all linked projects
+  for (const pid of projectIdsToDelete) {
+    batch.update(doc(db, 'projects', pid), {
       isDeleted:  true,
+      status:     'cancelled',
       deletedBy,
       deletedAt:  serverTimestamp(),
       updatedAt:  serverTimestamp(),
     })
-  })
+    await commitBatchIfNeeded()
 
-  await batch.commit()
+    // Soft-delete work items for this project
+    try {
+      const wSnap = await getDocs(query(collection(db, 'workItems'), where('projectId', '==', pid)))
+      for (const d of wSnap.docs) {
+        batch.update(d.ref, {
+          isDeleted:  true,
+          deletedBy,
+          deletedAt:  serverTimestamp(),
+          updatedAt:  serverTimestamp(),
+        })
+        await commitBatchIfNeeded()
+      }
+    } catch {}
+
+    // Soft-delete staff assignments for this project
+    try {
+      const aSnap = await getDocs(query(collection(db, 'staffAssignments'), where('projectId', '==', pid)))
+      for (const d of aSnap.docs) {
+        batch.update(d.ref, {
+          isDeleted:  true,
+          deletedBy,
+          deletedAt:  serverTimestamp(),
+          updatedAt:  serverTimestamp(),
+        })
+        await commitBatchIfNeeded()
+      }
+    } catch {}
+  }
+
+  // 3. Soft-delete work items linked directly to clientId
+  try {
+    const wSnap2 = await getDocs(query(collection(db, 'workItems'), where('clientId', '==', clientId)))
+    for (const d of wSnap2.docs) {
+      batch.update(d.ref, {
+        isDeleted:  true,
+        deletedBy,
+        deletedAt:  serverTimestamp(),
+        updatedAt:  serverTimestamp(),
+      })
+      await commitBatchIfNeeded()
+    }
+  } catch {}
+
+  // 4. Soft-delete staff assignments linked directly to clientId
+  try {
+    const aSnap2 = await getDocs(query(collection(db, 'staffAssignments'), where('clientId', '==', clientId)))
+    for (const d of aSnap2.docs) {
+      batch.update(d.ref, {
+        isDeleted:  true,
+        deletedBy,
+        deletedAt:  serverTimestamp(),
+        updatedAt:  serverTimestamp(),
+      })
+      await commitBatchIfNeeded()
+    }
+  } catch {}
+
+  if (count > 0) {
+    await batch.commit()
+  }
 }
