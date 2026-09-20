@@ -507,21 +507,35 @@ export interface FreelancerPayout {
 
 // ─── EXPENSES ─────────────────────────────────────────────────────────────
 export type ExpenseCategory =
-  | 'equipment' | 'travel' | 'freelancer' | 'outsourcing'
-  | 'rent' | 'utilities' | 'marketing' | 'misc'
+  | 'equipment'
+  | 'travel'
+  | 'freelancer'
+  | 'studioRent'
+  | 'rent'
+  | 'utilities'
+  | 'propsSets'
+  | 'props'
+  | 'marketing'
+  | 'misc'
+  | 'salaries'
+  | string
 
 export interface Expense {
-  expenseId:  string
-  date:       Date
-  category:   ExpenseCategory
-  amount:     number
-  method:     string
-  vendor?:    string
-  note?:      string
-  projectId?: string
-  source:     'manual' | 'freelancerPayout' | 'salary'
-  createdBy:  string
-  createdAt:  Date
+  expenseId:    string
+  code?:        string
+  date:         Date
+  category:     ExpenseCategory
+  amount:       number
+  method:       string
+  vendor?:      string
+  note?:        string
+  description?: string
+  projectId?:   string
+  projectName?: string
+  source:       'manual' | 'freelancerPayout' | 'salary' | 'autoPayout' | string
+  createdBy:    string
+  createdAt:    Date
+  isDeleted?:   boolean
 }
 
 export interface Budget {
