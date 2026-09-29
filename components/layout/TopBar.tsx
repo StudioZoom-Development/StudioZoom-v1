@@ -26,6 +26,8 @@ const PAGE_TITLES: Record<string, string> = {
   '/erp/quotations':     'Quotations',
   '/erp/invoices':       'Invoices',
   '/erp/expenses':       'Expenses',
+  '/erp/expenses/new':   'Add Expense',
+  '/erp/expenses/edit':  'Edit Expense',
   '/erp/cashflow':       'Cashflow',
   '/erp/accounts':       'Accounts & Budgets',
   '/settings':           'Settings',
