@@ -366,20 +366,17 @@ export default function ExpensesPage() {
     })
   }, [filteredExpenses, sortField, sortOrder])
 
-  // Reset page when filters, sorting, or period change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [keyword, selectedCategory, selectedMethod, selectedSource, selectedProject, minAmount, maxAmount, periodView, sortField, sortOrder])
-
-  // Pagination slicing
+  // Pagination slicing with safe bounds to prevent out-of-range pages when filters change
   const totalPages = Math.max(1, Math.ceil(sortedExpenses.length / pageSize))
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
   const paginatedExpenses = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
+    const start = (safeCurrentPage - 1) * pageSize
     return sortedExpenses.slice(start, start + pageSize)
-  }, [sortedExpenses, currentPage, pageSize])
+  }, [sortedExpenses, safeCurrentPage, pageSize])
 
   // Toggle column sorting
   const handleSortToggle = (field: SortField) => {
+    setCurrentPage(1)
     if (sortField === field) {
       setSortOrder(o => (o === 'asc' ? 'desc' : 'asc'))
     } else {
@@ -591,6 +588,7 @@ export default function ExpensesPage() {
     setSelectedProject('All')
     setMinAmount('')
     setMaxAmount('')
+    setCurrentPage(1)
   }
 
   const hasActiveFilters =
@@ -714,7 +712,10 @@ export default function ExpensesPage() {
                 <button
                   key={view}
                   type="button"
-                  onClick={() => setPeriodView(view)}
+                  onClick={() => {
+                    setPeriodView(view)
+                    setCurrentPage(1)
+                  }}
                   style={{
                     background: active ? 'var(--color-surface)' : 'transparent',
                     color: active ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
@@ -820,11 +821,23 @@ export default function ExpensesPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>From:</span>
             <div style={{ width: '135px' }}>
-              <DateField value={customStartDate} onChange={setCustomStartDate} />
+              <DateField
+                value={customStartDate}
+                onChange={v => {
+                  setCustomStartDate(v)
+                  setCurrentPage(1)
+                }}
+              />
             </div>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>To:</span>
             <div style={{ width: '135px' }}>
-              <DateField value={customEndDate} onChange={setCustomEndDate} />
+              <DateField
+                value={customEndDate}
+                onChange={v => {
+                  setCustomEndDate(v)
+                  setCurrentPage(1)
+                }}
+              />
             </div>
           </div>
         )}
@@ -1072,7 +1085,10 @@ export default function ExpensesPage() {
                           }}
                           onMouseEnter={() => setHoveredCategory(cat.label)}
                           onMouseLeave={() => setHoveredCategory(null)}
-                          onClick={() => setSelectedCategory(cat.label)}
+                          onClick={() => {
+                            setSelectedCategory(cat.label)
+                            setCurrentPage(1)
+                          }}
                         />
                       )
                     })
@@ -1111,7 +1127,10 @@ export default function ExpensesPage() {
                 {categoryBreakdown.slice(0, 5).map((cat, i) => (
                   <div
                     key={i}
-                    onClick={() => setSelectedCategory(cat.label)}
+                    onClick={() => {
+                      setSelectedCategory(cat.label)
+                      setCurrentPage(1)
+                    }}
                     onMouseEnter={() => setHoveredCategory(cat.label)}
                     onMouseLeave={() => setHoveredCategory(null)}
                     style={{
@@ -1327,7 +1346,10 @@ export default function ExpensesPage() {
               type="text"
               placeholder="Search serial # (EXP-...), vendor, note, description, client..."
               value={keyword}
-              onChange={e => setKeyword(e.target.value)}
+              onChange={e => {
+                setKeyword(e.target.value)
+                setCurrentPage(1)
+              }}
               style={{
                 paddingLeft: '34px',
                 paddingRight: keyword ? '32px' : '12px',
@@ -1338,7 +1360,10 @@ export default function ExpensesPage() {
             {keyword && (
               <button
                 type="button"
-                onClick={() => setKeyword('')}
+                onClick={() => {
+                  setKeyword('')
+                  setCurrentPage(1)
+                }}
                 title="Clear search"
                 style={{
                   position: 'absolute',
@@ -1405,7 +1430,10 @@ export default function ExpensesPage() {
           {/* Category Filter */}
           <select
             value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
+            onChange={e => {
+              setSelectedCategory(e.target.value)
+              setCurrentPage(1)
+            }}
             style={{
               fontFamily: 'var(--font-inter)',
               height: '36px',
@@ -1435,7 +1463,10 @@ export default function ExpensesPage() {
           {/* Payment Method Filter */}
           <select
             value={selectedMethod}
-            onChange={e => setSelectedMethod(e.target.value)}
+            onChange={e => {
+              setSelectedMethod(e.target.value)
+              setCurrentPage(1)
+            }}
             style={{
               fontFamily: 'var(--font-inter)',
               height: '36px',
@@ -1461,7 +1492,10 @@ export default function ExpensesPage() {
           {/* Source Filter (Manual vs Auto Payouts vs Salary) */}
           <select
             value={selectedSource}
-            onChange={e => setSelectedSource(e.target.value)}
+            onChange={e => {
+              setSelectedSource(e.target.value)
+              setCurrentPage(1)
+            }}
             style={{
               fontFamily: 'var(--font-inter)',
               height: '36px',
@@ -1486,7 +1520,10 @@ export default function ExpensesPage() {
           {/* Project Filter */}
           <select
             value={selectedProject}
-            onChange={e => setSelectedProject(e.target.value)}
+            onChange={e => {
+              setSelectedProject(e.target.value)
+              setCurrentPage(1)
+            }}
             style={{
               fontFamily: 'var(--font-inter)',
               height: '36px',
@@ -1516,7 +1553,10 @@ export default function ExpensesPage() {
                 type="number"
                 placeholder="Min ₹"
                 value={minAmount}
-                onChange={e => setMinAmount(e.target.value)}
+                onChange={e => {
+                  setMinAmount(e.target.value)
+                  setCurrentPage(1)
+                }}
                 style={{ height: '36px', fontSize: 'var(--text-xs)' }}
               />
             </div>
@@ -1525,7 +1565,10 @@ export default function ExpensesPage() {
                 type="number"
                 placeholder="Max ₹"
                 value={maxAmount}
-                onChange={e => setMaxAmount(e.target.value)}
+                onChange={e => {
+                  setMaxAmount(e.target.value)
+                  setCurrentPage(1)
+                }}
                 style={{ height: '36px', fontSize: 'var(--text-xs)' }}
               />
             </div>
@@ -1538,6 +1581,7 @@ export default function ExpensesPage() {
               const [f, o] = e.target.value.split('_') as [SortField, SortOrder]
               setSortField(f)
               setSortOrder(o)
+              setCurrentPage(1)
             }}
             style={{
               fontFamily: 'var(--font-inter)',
@@ -2274,7 +2318,7 @@ export default function ExpensesPage() {
           {/* Left on desktop, Top on mobile: Summary text & Rows Selector */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }} className="md:!w-auto md:!gap-4">
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-              Showing <b>{Math.min(sortedExpenses.length, (currentPage - 1) * pageSize + 1)}</b>–<b>{Math.min(sortedExpenses.length, currentPage * pageSize)}</b> of <b>{sortedExpenses.length}</b> expenses
+              Showing <b>{Math.min(sortedExpenses.length, (safeCurrentPage - 1) * pageSize + 1)}</b>–<b>{Math.min(sortedExpenses.length, safeCurrentPage * pageSize)}</b> of <b>{sortedExpenses.length}</b> expenses
             </div>
 
             {/* Page Size Selector */}
@@ -2311,7 +2355,7 @@ export default function ExpensesPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage <= 1}
+              disabled={safeCurrentPage <= 1}
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               style={{ flex: 1, maxWidth: '100px', height: '34px', padding: '0 12px', fontSize: 'var(--text-xs)', gap: '4px' }}
               className="md:!flex-none"
@@ -2321,13 +2365,13 @@ export default function ExpensesPage() {
             </Button>
 
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, padding: '0 8px', color: 'var(--color-foreground)', whiteSpace: 'nowrap' }}>
-              Page {currentPage} of {totalPages}
+              Page {safeCurrentPage} of {totalPages}
             </span>
 
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage >= totalPages}
+              disabled={safeCurrentPage >= totalPages}
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               style={{ flex: 1, maxWidth: '100px', height: '34px', padding: '0 12px', fontSize: 'var(--text-xs)', gap: '4px' }}
               className="md:!flex-none"
