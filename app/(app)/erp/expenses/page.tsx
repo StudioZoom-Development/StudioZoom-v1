@@ -643,8 +643,8 @@ export default function ExpensesPage() {
           gap: '12px',
         }}
       >
-        <div>
-          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>
+        <div style={{ flex: 1, minWidth: '220px' }}>
+          <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }} className="md:!text-2xl">
             Expenses & Payouts
           </h1>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
@@ -652,12 +652,13 @@ export default function ExpensesPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }} className="md:!w-auto">
           <Button
             variant="outline"
             onClick={handleExportCSV}
             disabled={filteredExpenses.length === 0}
-            style={{ height: '36px', fontSize: 'var(--text-xs)', gap: '6px' }}
+            style={{ height: '36px', fontSize: 'var(--text-xs)', gap: '6px', flex: 1 }}
+            className="md:!flex-none"
           >
             <i className="ti ti-download" style={{ fontSize: '14px' }} />
             Export CSV
@@ -665,7 +666,8 @@ export default function ExpensesPage() {
 
           <Button
             onClick={() => router.push('/erp/expenses/new')}
-            style={{ height: '36px', fontWeight: 500, gap: '6px' }}
+            style={{ height: '36px', fontWeight: 600, gap: '6px', flex: 1 }}
+            className="md:!flex-none"
           >
             <i className="ti ti-plus" style={{ fontSize: '14px' }} />
             Add expense
@@ -681,52 +683,71 @@ export default function ExpensesPage() {
           borderRadius: '12px',
           padding: '10px 14px',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
           gap: '12px',
         }}
+        className="md:flex-row md:items-center md:justify-between"
       >
         {/* Period Switcher Tabs */}
         <div
           style={{
-            display: 'inline-flex',
-            background: 'var(--color-surface-raised)',
-            borderRadius: '8px',
-            padding: '3px',
-            border: '0.5px solid var(--color-border)',
+            maxWidth: '100%',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            paddingBottom: '2px',
           }}
         >
-          {(['daily', 'weekly', 'monthly', 'yearly', 'custom'] as PeriodView[]).map(view => {
-            const active = periodView === view
-            return (
-              <button
-                key={view}
-                type="button"
-                onClick={() => setPeriodView(view)}
-                style={{
-                  background: active ? 'var(--color-surface)' : 'transparent',
-                  color: active ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: active ? 600 : 500,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
-                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {view}
-              </button>
-            )
-          })}
+          <div
+            style={{
+              display: 'inline-flex',
+              background: 'var(--color-surface-raised)',
+              borderRadius: '8px',
+              padding: '3px',
+              border: '0.5px solid var(--color-border)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {(['daily', 'weekly', 'monthly', 'yearly', 'custom'] as PeriodView[]).map(view => {
+              const active = periodView === view
+              return (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setPeriodView(view)}
+                  style={{
+                    background: active ? 'var(--color-surface)' : 'transparent',
+                    color: active ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: active ? 600 : 500,
+                    cursor: 'pointer',
+                    textTransform: 'capitalize',
+                    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {view}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Date Navigator Controls */}
         {periodView !== 'custom' ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              width: '100%',
+            }}
+            className="md:!w-auto md:!justify-end"
+          >
             <button
               type="button"
               onClick={handlePrevPeriod}
@@ -742,6 +763,7 @@ export default function ExpensesPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <i className="ti ti-chevron-left" style={{ fontSize: '15px' }} />
@@ -749,13 +771,17 @@ export default function ExpensesPage() {
 
             <span
               style={{
-                fontSize: 'var(--text-sm)',
+                fontSize: 'var(--text-xs)',
                 fontWeight: 600,
                 color: 'var(--color-foreground)',
-                padding: '0 8px',
-                minWidth: '140px',
+                padding: '0 4px',
+                minWidth: '120px',
                 textAlign: 'center',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
+              className="md:!text-sm md:!min-w-[140px]"
             >
               {periodLabel}
             </span>
@@ -775,6 +801,7 @@ export default function ExpensesPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <i className="ti ti-chevron-right" style={{ fontSize: '15px' }} />
@@ -784,7 +811,7 @@ export default function ExpensesPage() {
               variant="outline"
               size="sm"
               onClick={handleTodayPeriod}
-              style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+              style={{ height: '32px', fontSize: 'var(--text-xs)', padding: '0 10px', flexShrink: 0 }}
             >
               Today
             </Button>
@@ -1282,9 +1309,9 @@ export default function ExpensesPage() {
         }}
       >
         {/* Row 1: Search + Quick Mobile Filter Toggle */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* Keyword Search Input */}
-          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
             <i
               className="ti ti-search"
               style={{
@@ -1304,7 +1331,7 @@ export default function ExpensesPage() {
               style={{
                 paddingLeft: '34px',
                 paddingRight: keyword ? '32px' : '12px',
-                height: '36px',
+                height: '38px',
                 fontSize: 'var(--text-xs)',
               }}
             />
@@ -1336,35 +1363,42 @@ export default function ExpensesPage() {
               variant="outline"
               size="sm"
               onClick={handleClearFilters}
-              style={{ height: '36px', fontSize: 'var(--text-xs)', gap: '4px', borderColor: 'var(--color-secondary)' }}
+              style={{ height: '38px', fontSize: 'var(--text-xs)', gap: '4px', borderColor: 'var(--color-secondary)', flexShrink: 0 }}
             >
               <i className="ti ti-filter-off" style={{ fontSize: '13px' }} />
-              Reset Filters
+              <span className="hidden sm:inline">Reset</span>
             </Button>
           )}
 
           {/* Mobile Filter Expand Toggle */}
-          <div className="block md:hidden">
+          <div className="block md:hidden" style={{ flexShrink: 0 }}>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowMobileFilters(s => !s)}
-              style={{ height: '36px', fontSize: 'var(--text-xs)', gap: '4px' }}
+              style={{
+                height: '38px',
+                fontSize: 'var(--text-xs)',
+                gap: '4px',
+                background: showMobileFilters ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                borderColor: showMobileFilters ? 'var(--color-primary)' : 'var(--color-border)',
+                color: showMobileFilters ? 'var(--color-primary)' : 'var(--color-foreground)',
+              }}
             >
               <i className="ti ti-adjustments" style={{ fontSize: '14px' }} />
-              Filters {hasActiveFilters && '•'}
+              <span>Filters{hasActiveFilters ? ' •' : ''}</span>
             </Button>
           </div>
         </div>
 
         {/* Row 2: Comprehensive Multi-field Filter Bar */}
         <div
-          className={`${showMobileFilters ? 'flex' : 'hidden md:flex'}`}
+          className={`${showMobileFilters ? 'grid grid-cols-1 sm:grid-cols-2 md:flex' : 'hidden md:flex'}`}
           style={{
             alignItems: 'center',
             gap: '10px',
             flexWrap: 'wrap',
-            paddingTop: '6px',
+            paddingTop: '8px',
             borderTop: '0.5px solid var(--color-border)',
           }}
         >
@@ -1475,26 +1509,26 @@ export default function ExpensesPage() {
             ))}
           </select>
 
-          {/* Min Amount */}
-          <div style={{ width: '110px' }}>
-            <Input
-              type="number"
-              placeholder="Min ₹"
-              value={minAmount}
-              onChange={e => setMinAmount(e.target.value)}
-              style={{ height: '36px', fontSize: 'var(--text-xs)' }}
-            />
-          </div>
-
-          {/* Max Amount */}
-          <div style={{ width: '110px' }}>
-            <Input
-              type="number"
-              placeholder="Max ₹"
-              value={maxAmount}
-              onChange={e => setMaxAmount(e.target.value)}
-              style={{ height: '36px', fontSize: 'var(--text-xs)' }}
-            />
+          {/* Min & Max Amount */}
+          <div style={{ display: 'flex', gap: '8px' }} className="w-full sm:w-auto">
+            <div style={{ flex: 1 }} className="sm:w-[110px]">
+              <Input
+                type="number"
+                placeholder="Min ₹"
+                value={minAmount}
+                onChange={e => setMinAmount(e.target.value)}
+                style={{ height: '36px', fontSize: 'var(--text-xs)' }}
+              />
+            </div>
+            <div style={{ flex: 1 }} className="sm:w-[110px]">
+              <Input
+                type="number"
+                placeholder="Max ₹"
+                value={maxAmount}
+                onChange={e => setMaxAmount(e.target.value)}
+                style={{ height: '36px', fontSize: 'var(--text-xs)' }}
+              />
+            </div>
           </div>
 
           {/* Sort By Selector */}
@@ -2030,15 +2064,16 @@ export default function ExpensesPage() {
                     background: 'var(--color-surface)',
                     border: '0.5px solid var(--color-border)',
                     borderRadius: '12px',
-                    padding: '14px 16px',
+                    padding: '14px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '10px',
+                    gap: '11px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                   }}
                 >
                   {/* Header: Serial Number & Badges */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span
                         style={{
                           fontFamily: 'monospace',
@@ -2046,9 +2081,10 @@ export default function ExpensesPage() {
                           fontSize: 'var(--text-xs)',
                           color: 'var(--color-foreground)',
                           background: 'var(--color-surface-raised)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
                           border: '0.5px solid var(--color-border)',
+                          letterSpacing: '0.02em',
                         }}
                       >
                         #{code}
@@ -2061,16 +2097,17 @@ export default function ExpensesPage() {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '3px',
-                          fontSize: '10px',
+                          gap: '4px',
+                          fontSize: '11px',
                           fontWeight: 600,
                           color: 'var(--color-purple)',
                           background: 'var(--color-purple-muted)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-purple-muted)',
                         }}
                       >
-                        <i className="ti ti-bolt" />
+                        <i className="ti ti-bolt" style={{ fontSize: '11px' }} />
                         {autoMeta.typeLabel}
                       </span>
                     )}
@@ -2078,12 +2115,12 @@ export default function ExpensesPage() {
 
                   {/* Description & Vendor */}
                   <div>
-                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', lineHeight: 1.4, wordBreak: 'break-word' }}>
                       {e.description || e.note || '—'}
                     </div>
                     {e.vendor && (
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                        Vendor: <b style={{ color: 'var(--color-foreground)' }}>{e.vendor}</b>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '3px' }}>
+                        Vendor: <b style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{e.vendor}</b>
                       </div>
                     )}
                   </div>
@@ -2094,69 +2131,124 @@ export default function ExpensesPage() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '8px 12px',
+                      padding: '10px 12px',
                       borderRadius: '8px',
                       background: 'var(--color-surface-raised)',
                       border: '0.5px solid var(--color-border)',
                     }}
                   >
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                      Amount ({e.method || 'GPay'})
-                    </span>
-                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                        Amount
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'var(--color-surface-overlay)',
+                          border: '0.5px solid var(--color-border)',
+                          color: 'var(--color-foreground-subtle)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {e.method || 'GPay'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-foreground)' }}>
                       ₹{Number(e.amount || 0).toLocaleString('en-IN')}
                     </span>
                   </div>
 
                   {/* Metadata: Date & Project */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <i className="ti ti-calendar" style={{ fontSize: '13px' }} />
-                      {format(e.date, 'd MMM yyyy')}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                      <i className="ti ti-calendar" style={{ fontSize: '14px', color: 'var(--color-foreground-subtle)' }} />
+                      <span>{format(e.date, 'd MMM yyyy')}</span>
                     </div>
-                    {projectName && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <i className="ti ti-folder" style={{ fontSize: '13px' }} />
-                        {projectName}
+                    {projectName ? (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: 'var(--color-foreground)',
+                        }}
+                        title={projectName}
+                      >
+                        <i className="ti ti-folder" style={{ fontSize: '13px', color: 'var(--color-primary)', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectName}</span>
                       </div>
+                    ) : (
+                      <span style={{ color: 'var(--color-foreground-subtle)' }}>—</span>
                     )}
                   </div>
 
-                  {/* Card Action Footer */}
+                  {/* Card Action Footer: High-contrast, prominent Edit & Delete buttons */}
                   <div
                     style={{
                       display: 'flex',
-                      gap: '8px',
+                      gap: '10px',
                       borderTop: '0.5px solid var(--color-border)',
-                      paddingTop: '10px',
-                      marginTop: '2px',
+                      paddingTop: '12px',
+                      marginTop: '4px',
                     }}
                   >
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <button
+                      type="button"
+                      aria-label="Edit expense"
                       onClick={() => router.push(`/erp/expenses/edit/${e.expenseId}`)}
-                      style={{ flex: 1, height: '40px', fontSize: 'var(--text-xs)', gap: '4px' }}
+                      style={{
+                        flex: 1,
+                        height: '38px',
+                        borderRadius: '8px',
+                        background: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border-strong)',
+                        color: 'var(--color-foreground)',
+                        fontWeight: 600,
+                        fontSize: 'var(--text-xs)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                        transition: 'all 0.15s ease',
+                      }}
                     >
-                      <i className="ti ti-edit" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                      <i className="ti ti-pencil" style={{ fontSize: '15px', color: 'var(--color-primary)' }} />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      aria-label="Delete expense"
                       onClick={() => setExpenseToDelete(e)}
                       style={{
                         flex: 1,
-                        height: '40px',
-                        fontSize: 'var(--text-xs)',
-                        gap: '4px',
+                        height: '38px',
+                        borderRadius: '8px',
+                        background: 'var(--color-danger-muted)',
+                        border: '0.5px solid var(--color-danger)',
                         color: 'var(--color-danger)',
-                        borderColor: 'var(--color-danger-muted)',
+                        fontWeight: 600,
+                        fontSize: 'var(--text-xs)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                        transition: 'all 0.15s ease',
                       }}
                     >
-                      <i className="ti ti-trash" />
-                      Delete
-                    </Button>
+                      <i className="ti ti-trash" style={{ fontSize: '15px', color: 'var(--color-danger)' }} />
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
               )
@@ -2172,62 +2264,63 @@ export default function ExpensesPage() {
             background: 'var(--color-surface)',
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px',
-            padding: '10px 16px',
+            padding: '12px 16px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
+            flexDirection: 'column',
             gap: '12px',
           }}
+          className="md:!flex-row md:!items-center md:!justify-between"
         >
-          {/* Left: Summary text */}
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            Showing <b>{Math.min(sortedExpenses.length, (currentPage - 1) * pageSize + 1)}</b> to{' '}
-            <b>{Math.min(sortedExpenses.length, currentPage * pageSize)}</b> of <b>{sortedExpenses.length}</b> expenses
+          {/* Left on desktop, Top on mobile: Summary text & Rows Selector */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }} className="md:!w-auto md:!gap-4">
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+              Showing <b>{Math.min(sortedExpenses.length, (currentPage - 1) * pageSize + 1)}</b>–<b>{Math.min(sortedExpenses.length, currentPage * pageSize)}</b> of <b>{sortedExpenses.length}</b> expenses
+            </div>
+
+            {/* Page Size Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>Rows:</span>
+              <select
+                value={pageSize}
+                onChange={e => {
+                  setPageSize(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+                style={{
+                  fontFamily: 'var(--font-inter)',
+                  height: '30px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '6px',
+                  padding: '0 8px',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-foreground)',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
           </div>
 
-          {/* Center: Page Size Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>Rows:</span>
-            <select
-              value={pageSize}
-              onChange={e => {
-                setPageSize(Number(e.target.value))
-                setCurrentPage(1)
-              }}
-              style={{
-                fontFamily: 'var(--font-inter)',
-                height: '30px',
-                background: 'var(--color-surface-raised)',
-                border: '0.5px solid var(--color-border)',
-                borderRadius: '6px',
-                padding: '0 8px',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--color-foreground)',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-
-          {/* Right: Page Navigation Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Right on desktop, Bottom on mobile: Navigation Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%' }} className="md:!w-auto">
             <Button
               variant="outline"
               size="sm"
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              style={{ height: '30px', padding: '0 10px', fontSize: 'var(--text-xs)', gap: '4px' }}
+              style={{ flex: 1, maxWidth: '100px', height: '34px', padding: '0 12px', fontSize: 'var(--text-xs)', gap: '4px' }}
+              className="md:!flex-none"
             >
               <i className="ti ti-chevron-left" />
               Prev
             </Button>
 
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, padding: '0 6px', color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, padding: '0 8px', color: 'var(--color-foreground)', whiteSpace: 'nowrap' }}>
               Page {currentPage} of {totalPages}
             </span>
 
@@ -2236,7 +2329,8 @@ export default function ExpensesPage() {
               size="sm"
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              style={{ height: '30px', padding: '0 10px', fontSize: 'var(--text-xs)', gap: '4px' }}
+              style={{ flex: 1, maxWidth: '100px', height: '34px', padding: '0 12px', fontSize: 'var(--text-xs)', gap: '4px' }}
+              className="md:!flex-none"
             >
               Next
               <i className="ti ti-chevron-right" />
