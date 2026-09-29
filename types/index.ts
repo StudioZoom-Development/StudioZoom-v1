@@ -321,30 +321,67 @@ export interface WorkItem {
 
 // ─── EQUIPMENT ────────────────────────────────────────────────────────────
 export type EquipmentCategory =
-  | 'cameraBody' | 'lens' | 'camcorder' | 'drone' | 'flash'
-  | 'gimbal' | 'light' | 'sdCard' | 'battery' | 'charger' | 'wire' | 'other'
+  | 'cameraBody' | 'camera' | 'lens' | 'camcorder' | 'drone' | 'flash'
+  | 'gimbal' | 'light' | 'tripod' | 'backdrop' | 'sdCard' | 'memoryCard'
+  | 'battery' | 'charger' | 'wire' | 'other'
+  | (string & {})
 
-export type EquipmentCondition = 'good' | 'excellent' | 'canUse' | 'service'
-export type EquipmentStatus    = 'available' | 'out' | 'service'
+export type EquipmentCondition = 'excellent' | 'good' | 'canUse' | 'service' | 'damaged'
+export type EquipmentStatus    = 'available' | 'out' | 'service' | 'maintenance' | 'repair' | 'damaged' | 'lost' | 'retired'
 
 export interface Equipment {
   itemId:               string
-  itemCode:             string      // "001"–"057"
+  itemCode:             string      // "CAM-001", "LEN-002", "EQ-001", etc.
   name:                 string
   category:             EquipmentCategory
   brand:                string
   model:                string
   serialNumber:         string
+  purchaseDate?:        Date
   purchasePrice:        number
+  vendor?:              string
+  warrantyExpiry?:      Date
   condition:            EquipmentCondition
   location:             string
+  photoUrl?:            string
   status:               EquipmentStatus    // CACHED — source of truth is checkouts
   assignedToUid?:       string             // CACHED current holder
+  assignedToName?:      string             // CACHED current holder name
   currentCheckoutId?:   string             // CACHED current checkout doc id
+  dueBackDate?:         Date
   lastUsedDate?:        Date
   nextMaintenanceDate?: Date
+  notes?:               string
+  qrCode?:              string
+  barcode?:             string
+  kitId?:               string
+  parentItemId?:        string
+  retiredReason?:       string
+  retiredAt?:           Date
   isDeleted?:           boolean
   createdAt:            Date
+  updatedAt?:           Date
+}
+
+export interface EquipmentKit {
+  kitId:        string
+  name:         string
+  description?: string
+  itemIds:      string[]
+  isDeleted?:   boolean
+  createdAt:    Date
+  updatedAt?:   Date
+}
+
+export interface EquipmentStatusLog {
+  logId:        string
+  itemId:       string
+  fromStatus:   EquipmentStatus
+  toStatus:     EquipmentStatus
+  changedByUid: string
+  changedByName:string
+  reason?:      string
+  timestamp:    Date
 }
 
 // ─── CHECKOUTS — key collection for equipment conflict detection ──────────
@@ -365,6 +402,7 @@ export interface Checkout {
   dueBack:          Date
   checkedInAt?:     Date             // null while still out
   returnCondition?: string
+  notes?:           string
   status:           CheckoutStatus
 }
 

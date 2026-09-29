@@ -120,7 +120,7 @@ export default function ExpensesPage() {
   const [selectedProject, setSelectedProject] = useState<string>('All')
   const [minAmount, setMinAmount] = useState<string>('')
   const [maxAmount, setMaxAmount] = useState<string>('')
-  const [showMobileFilters, setShowMobileFilters] = useState<boolean>(false)
+  const [showFilters, setShowFilters] = useState<boolean>(true)
 
   // Sort state: Default to newest added expense first (createdAt descending)
   const [sortField, setSortField] = useState<SortField>('createdAt')
@@ -650,13 +650,13 @@ export default function ExpensesPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }} className="md:!w-auto">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} className="w-full md:!w-auto">
           <Button
             variant="outline"
             onClick={handleExportCSV}
             disabled={filteredExpenses.length === 0}
-            style={{ height: '36px', fontSize: 'var(--text-xs)', gap: '6px', flex: 1 }}
-            className="md:!flex-none"
+            style={{ height: '36px', fontSize: 'var(--text-xs)', gap: '6px' }}
+            className="flex-1 md:!flex-none"
           >
             <i className="ti ti-download" style={{ fontSize: '14px' }} />
             Export CSV
@@ -664,8 +664,8 @@ export default function ExpensesPage() {
 
           <Button
             onClick={() => router.push('/erp/expenses/new')}
-            style={{ height: '36px', fontWeight: 600, gap: '6px', flex: 1 }}
-            className="md:!flex-none"
+            style={{ height: '36px', fontWeight: 600, gap: '6px' }}
+            className="flex-1 md:!flex-none"
           >
             <i className="ti ti-plus" style={{ fontSize: '14px' }} />
             Add expense
@@ -681,10 +681,9 @@ export default function ExpensesPage() {
           borderRadius: '12px',
           padding: '10px 14px',
           display: 'flex',
-          flexDirection: 'column',
           gap: '12px',
         }}
-        className="md:flex-row md:items-center md:justify-between"
+        className="flex-col md:!flex-row md:!items-center md:!justify-between"
       >
         {/* Period Switcher Tabs */}
         <div
@@ -693,18 +692,19 @@ export default function ExpensesPage() {
             overflowX: 'auto',
             WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'none',
-            paddingBottom: '2px',
           }}
+          className="w-full md:!w-auto"
         >
           <div
             style={{
-              display: 'inline-flex',
+              display: 'flex',
               background: 'var(--color-surface-raised)',
               borderRadius: '8px',
               padding: '3px',
               border: '0.5px solid var(--color-border)',
               whiteSpace: 'nowrap',
             }}
+            className="w-full md:!w-auto"
           >
             {(['daily', 'weekly', 'monthly', 'yearly', 'custom'] as PeriodView[]).map(view => {
               const active = periodView === view
@@ -729,6 +729,7 @@ export default function ExpensesPage() {
                     boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                     transition: 'all 0.15s ease',
                   }}
+                  className="flex-1 md:!flex-none text-center"
                 >
                   {view}
                 </button>
@@ -743,84 +744,85 @@ export default function ExpensesPage() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'space-between',
               gap: '8px',
-              width: '100%',
             }}
-            className="md:!w-auto md:!justify-end"
+            className="w-full md:!w-auto md:!justify-end"
           >
-            <button
-              type="button"
-              onClick={handlePrevPeriod}
-              title="Previous period"
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '6px',
-                border: '0.5px solid var(--color-border)',
-                background: 'var(--color-surface-raised)',
-                color: 'var(--color-foreground)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <i className="ti ti-chevron-left" style={{ fontSize: '15px' }} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }} className="flex-1 md:!flex-none">
+              <button
+                type="button"
+                onClick={handlePrevPeriod}
+                title="Previous period"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  border: '0.5px solid var(--color-border)',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-foreground)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <i className="ti ti-chevron-left" style={{ fontSize: '15px' }} />
+              </button>
 
-            <span
-              style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--color-foreground)',
-                padding: '0 4px',
-                minWidth: '120px',
-                textAlign: 'center',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-              className="md:!text-sm md:!min-w-[140px]"
-            >
-              {periodLabel}
-            </span>
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  color: 'var(--color-foreground)',
+                  padding: '0 4px',
+                  minWidth: '120px',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                className="md:!text-sm md:!min-w-[140px]"
+              >
+                {periodLabel}
+              </span>
 
-            <button
-              type="button"
-              onClick={handleNextPeriod}
-              title="Next period"
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '6px',
-                border: '0.5px solid var(--color-border)',
-                background: 'var(--color-surface-raised)',
-                color: 'var(--color-foreground)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <i className="ti ti-chevron-right" style={{ fontSize: '15px' }} />
-            </button>
+              <button
+                type="button"
+                onClick={handleNextPeriod}
+                title="Next period"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  border: '0.5px solid var(--color-border)',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-foreground)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <i className="ti ti-chevron-right" style={{ fontSize: '15px' }} />
+              </button>
+            </div>
 
             <Button
               variant="outline"
               size="sm"
               onClick={handleTodayPeriod}
-              style={{ height: '32px', fontSize: 'var(--text-xs)', padding: '0 10px', flexShrink: 0 }}
+              style={{ height: '32px', fontSize: 'var(--text-xs)', padding: '0 12px', flexShrink: 0 }}
             >
               Today
             </Button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }} className="w-full md:!w-auto">
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>From:</span>
-            <div style={{ width: '135px' }}>
+            <div style={{ flex: 1, minWidth: '120px' }}>
               <DateField
                 value={customStartDate}
                 onChange={v => {
@@ -830,7 +832,7 @@ export default function ExpensesPage() {
               />
             </div>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>To:</span>
-            <div style={{ width: '135px' }}>
+            <div style={{ flex: 1, minWidth: '120px' }}>
               <DateField
                 value={customEndDate}
                 onChange={v => {
@@ -844,20 +846,14 @@ export default function ExpensesPage() {
       </div>
 
       {/* ─── DASHBOARD SUMMARY METRIC CARDS (4-GRID) ───────────────────────── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '12px',
-        }}
-      >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Card 1: Total Spend */}
         <div
+          className="p-3 md:p-4"
           style={{
             background: 'var(--color-surface)',
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px',
-            padding: '16px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
@@ -882,7 +878,7 @@ export default function ExpensesPage() {
               <i className="ti ti-wallet" style={{ fontSize: '15px' }} />
             </span>
           </div>
-          <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+          <div className="text-xl md:!text-3xl" style={{ fontWeight: 700, color: 'var(--color-foreground)' }}>
             ₹{totalSpend.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
@@ -892,11 +888,11 @@ export default function ExpensesPage() {
 
         {/* Card 2: Auto Payouts & Salaries (Special Focus) */}
         <div
+          className="p-3 md:p-4"
           style={{
             background: 'var(--color-surface)',
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px',
-            padding: '16px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
@@ -904,7 +900,7 @@ export default function ExpensesPage() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)', textTransform: 'uppercase' }}>
-              Auto Payouts & Salaries
+              Auto Payouts
             </span>
             <span
               style={{
@@ -921,24 +917,24 @@ export default function ExpensesPage() {
               <i className="ti ti-bolt" style={{ fontSize: '15px' }} />
             </span>
           </div>
-          <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-purple)' }}>
+          <div className="text-xl md:!text-3xl" style={{ fontWeight: 700, color: 'var(--color-purple)' }}>
             ₹{autoPayoutsTotal.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'var(--color-surface-raised)', fontWeight: 600 }}>
               {autoPayoutsCount} payouts
             </span>
-            <span>noted with EXP serials</span>
+            <span className="hidden sm:inline">noted with EXP serials</span>
           </div>
         </div>
 
         {/* Card 3: Average / Transaction */}
         <div
+          className="p-3 md:p-4"
           style={{
             background: 'var(--color-surface)',
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px',
-            padding: '16px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
@@ -963,21 +959,21 @@ export default function ExpensesPage() {
               <i className="ti ti-calculator" style={{ fontSize: '15px' }} />
             </span>
           </div>
-          <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+          <div className="text-xl md:!text-3xl" style={{ fontWeight: 700, color: 'var(--color-foreground)' }}>
             ₹{avgExpense.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            Mean spend per recorded item
+            Mean spend per item
           </div>
         </div>
 
         {/* Card 4: Top Category */}
         <div
+          className="p-3 md:p-4"
           style={{
             background: 'var(--color-surface)',
             border: '0.5px solid var(--color-border)',
             borderRadius: '12px',
-            padding: '16px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
@@ -1002,22 +998,18 @@ export default function ExpensesPage() {
               <i className="ti ti-chart-pie" style={{ fontSize: '15px' }} />
             </span>
           </div>
-          <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div className="text-lg md:!text-2xl" style={{ fontWeight: 700, color: 'var(--color-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {topCategory ? topCategory.label : 'None'}
           </div>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            {topCategory ? `₹${topCategory.amount.toLocaleString('en-IN')} (${topCategory.percent}% of total)` : 'No transactions recorded'}
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {topCategory ? `₹${topCategory.amount.toLocaleString('en-IN')} (${topCategory.percent}%)` : 'No transactions'}
           </div>
         </div>
       </div>
 
       {/* ─── CHARTS SECTION: DONUT (CATEGORY) & BARS (TREND) ──────────────── */}
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '14px',
-        }}
+        className="grid grid-cols-1 md:grid-cols-2 gap-3.5"
       >
         {/* CHART 1: Category Donut Chart */}
         <div
@@ -1395,19 +1387,19 @@ export default function ExpensesPage() {
             </Button>
           )}
 
-          {/* Mobile Filter Expand Toggle */}
-          <div className="block md:hidden" style={{ flexShrink: 0 }}>
+          {/* Filter Expand/Collapse Toggle (Desktop & Mobile) */}
+          <div style={{ flexShrink: 0 }}>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowMobileFilters(s => !s)}
+              onClick={() => setShowFilters(s => !s)}
               style={{
                 height: '38px',
                 fontSize: 'var(--text-xs)',
                 gap: '4px',
-                background: showMobileFilters ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
-                borderColor: showMobileFilters ? 'var(--color-primary)' : 'var(--color-border)',
-                color: showMobileFilters ? 'var(--color-primary)' : 'var(--color-foreground)',
+                background: showFilters ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                borderColor: showFilters ? 'var(--color-primary)' : 'var(--color-border)',
+                color: showFilters ? 'var(--color-primary)' : 'var(--color-foreground)',
               }}
             >
               <i className="ti ti-adjustments" style={{ fontSize: '14px' }} />
@@ -1417,16 +1409,15 @@ export default function ExpensesPage() {
         </div>
 
         {/* Row 2: Comprehensive Multi-field Filter Bar */}
-        <div
-          className={`${showMobileFilters ? 'grid grid-cols-1 sm:grid-cols-2 md:flex' : 'hidden md:flex'}`}
-          style={{
-            alignItems: 'center',
-            gap: '10px',
-            flexWrap: 'wrap',
-            paddingTop: '8px',
-            borderTop: '0.5px solid var(--color-border)',
-          }}
-        >
+        {showFilters && (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2"
+            style={{
+              alignItems: 'center',
+              paddingTop: '10px',
+              borderTop: '0.5px solid var(--color-border)',
+            }}
+          >
           {/* Category Filter */}
           <select
             value={selectedCategory}
@@ -1440,12 +1431,12 @@ export default function ExpensesPage() {
               background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '8px',
-              padding: '0 10px',
+              padding: '0 8px',
               fontSize: 'var(--text-xs)',
               color: selectedCategory === 'All' ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
               outline: 'none',
               cursor: 'pointer',
-              flex: '1 1 130px',
+              width: '100%',
             }}
           >
             <option value="All">Category · All</option>
@@ -1473,12 +1464,12 @@ export default function ExpensesPage() {
               background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '8px',
-              padding: '0 10px',
+              padding: '0 8px',
               fontSize: 'var(--text-xs)',
               color: selectedMethod === 'All' ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
               outline: 'none',
               cursor: 'pointer',
-              flex: '1 1 130px',
+              width: '100%',
             }}
           >
             <option value="All">Method · All</option>
@@ -1502,12 +1493,12 @@ export default function ExpensesPage() {
               background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '8px',
-              padding: '0 10px',
+              padding: '0 8px',
               fontSize: 'var(--text-xs)',
               color: selectedSource === 'All' ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
               outline: 'none',
               cursor: 'pointer',
-              flex: '1 1 140px',
+              width: '100%',
             }}
           >
             <option value="All">Source · All</option>
@@ -1530,12 +1521,12 @@ export default function ExpensesPage() {
               background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '8px',
-              padding: '0 10px',
+              padding: '0 8px',
               fontSize: 'var(--text-xs)',
               color: selectedProject === 'All' ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
               outline: 'none',
               cursor: 'pointer',
-              flex: '1 1 140px',
+              width: '100%',
             }}
           >
             <option value="All">Project · All</option>
@@ -1547,8 +1538,8 @@ export default function ExpensesPage() {
           </select>
 
           {/* Min & Max Amount */}
-          <div style={{ display: 'flex', gap: '8px' }} className="w-full sm:w-auto">
-            <div style={{ flex: 1 }} className="sm:w-[110px]">
+          <div style={{ display: 'flex', gap: '6px' }} className="w-full">
+            <div style={{ flex: 1, minWidth: 0 }}>
               <Input
                 type="number"
                 placeholder="Min ₹"
@@ -1557,10 +1548,10 @@ export default function ExpensesPage() {
                   setMinAmount(e.target.value)
                   setCurrentPage(1)
                 }}
-                style={{ height: '36px', fontSize: 'var(--text-xs)' }}
+                style={{ height: '36px', fontSize: 'var(--text-xs)', padding: '0 6px' }}
               />
             </div>
-            <div style={{ flex: 1 }} className="sm:w-[110px]">
+            <div style={{ flex: 1, minWidth: 0 }}>
               <Input
                 type="number"
                 placeholder="Max ₹"
@@ -1569,7 +1560,7 @@ export default function ExpensesPage() {
                   setMaxAmount(e.target.value)
                   setCurrentPage(1)
                 }}
-                style={{ height: '36px', fontSize: 'var(--text-xs)' }}
+                style={{ height: '36px', fontSize: 'var(--text-xs)', padding: '0 6px' }}
               />
             </div>
           </div>
@@ -1589,25 +1580,25 @@ export default function ExpensesPage() {
               background: 'var(--color-surface-raised)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '8px',
-              padding: '0 10px',
+              padding: '0 8px',
               fontSize: 'var(--text-xs)',
               color: 'var(--color-foreground)',
               outline: 'none',
               cursor: 'pointer',
-              flex: '1 1 160px',
+              width: '100%',
             }}
           >
-            <option value="createdAt_desc">Sort: Newest first (Recently Added)</option>
-            <option value="date_desc">Sort: Expense Date (Newest first)</option>
-            <option value="date_asc">Sort: Expense Date (Oldest first)</option>
-            <option value="amount_desc">Sort: Amount (High to Low)</option>
-            <option value="amount_asc">Sort: Amount (Low to High)</option>
-            <option value="code_asc">Sort: Serial # (A to Z)</option>
-            <option value="code_desc">Sort: Serial # (Z to A)</option>
-            <option value="vendor_asc">Sort: Vendor (A to Z)</option>
-            <option value="category_asc">Sort: Category (A to Z)</option>
+            <option value="createdAt_desc">Sort: Newest (Recent)</option>
+            <option value="date_desc">Sort: Date (Newest)</option>
+            <option value="date_asc">Sort: Date (Oldest)</option>
+            <option value="amount_desc">Sort: Amount (High-Low)</option>
+            <option value="amount_asc">Sort: Amount (Low-High)</option>
+            <option value="code_asc">Sort: Serial (A-Z)</option>
+            <option value="code_desc">Sort: Serial (Z-A)</option>
+            <option value="vendor_asc">Sort: Vendor (A-Z)</option>
           </select>
         </div>
+        )}
       </div>
 
       {/* ─── DESKTOP DATA TABLE (hidden md:block) ─────────────────────────── */}
@@ -2310,10 +2301,9 @@ export default function ExpensesPage() {
             borderRadius: '12px',
             padding: '12px 16px',
             display: 'flex',
-            flexDirection: 'column',
             gap: '12px',
           }}
-          className="md:!flex-row md:!items-center md:!justify-between"
+          className="flex-col md:!flex-row md:!items-center md:!justify-between"
         >
           {/* Left on desktop, Top on mobile: Summary text & Rows Selector */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }} className="md:!w-auto md:!gap-4">

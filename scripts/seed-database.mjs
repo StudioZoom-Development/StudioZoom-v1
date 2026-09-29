@@ -139,20 +139,36 @@ async function runSeed() {
   // 2. /equipment
   console.log('\n--- Seeding Equipment ---')
   const equipmentItems = [
-    { itemCode: '001', name: 'Canon EOS R6', category: 'cameraBody', brand: 'Canon', serialNumber: 'R6-8841', purchasePrice: 185000, condition: 'excellent', location: 'Studio Cabinet A', status: 'available' },
-    { itemCode: '023', name: 'RF 24-70mm f/2.8', category: 'lens', brand: 'Canon', serialNumber: 'L24-1192', purchasePrice: 145000, condition: 'good', location: 'Studio Cabinet A', status: 'available' },
-    { itemCode: '027', name: 'RF 50mm f/1.2', category: 'lens', brand: 'Canon', serialNumber: 'L50-0420', purchasePrice: 165000, condition: 'excellent', location: 'Studio Cabinet A', status: 'available' },
-    { itemCode: '041', name: 'DJI Air 3', category: 'drone', brand: 'DJI', serialNumber: 'DA3-7765', purchasePrice: 85000, condition: 'good', location: 'Studio Cabinet B', status: 'available' },
-    { itemCode: '031', name: 'Godox SL-60W', category: 'light', brand: 'Godox', serialNumber: 'GX-SL60-112', purchasePrice: 12000, condition: 'good', location: 'Studio Cabinet B', status: 'available' },
+    { itemCode: 'CAM-01', name: 'Sony A7 IV', category: 'camera', brand: 'Sony', model: 'ILCE-7M4', serialNumber: 'SN-4482-A7M4-2201', purchasePrice: 215000, condition: 'good', location: 'Shelf B2 · Studio', status: 'out', assignedToName: 'Siva Prakash', assignedToUid: 'uid_siva_prakash', notes: 'Sensor clean & firmware 3.1 completed' },
+    { itemCode: 'CAM-02', name: 'Canon EOS R6 Mark II', category: 'camera', brand: 'Canon', model: 'EOS R6 Mark II', serialNumber: 'SN-3891-R6M2-0442', purchasePrice: 245000, condition: 'good', location: 'Camera Vault A1', status: 'available' },
+    { itemCode: 'CAM-03', name: 'Sony FX3 Cinema Line', category: 'camcorder', brand: 'Sony', model: 'ILME-FX3', serialNumber: 'SN-8829-FX3-9103', purchasePrice: 380000, condition: 'excellent', location: 'Pelican Case #1', status: 'available' },
+    { itemCode: 'LEN-01', name: 'Sony FE 24-70mm f/2.8 GM II', category: 'lens', brand: 'Sony', model: 'SEL2470GM2', serialNumber: 'SN-3392-GM2-0191', purchasePrice: 195000, condition: 'good', location: 'Lens Vault A', status: 'available' },
+    { itemCode: 'LEN-04', name: 'Sony FE 70-200mm f/2.8 GM OSS II', category: 'lens', brand: 'Sony', model: 'SEL70200GM2', serialNumber: 'SN-7729-GM2-1025', purchasePrice: 245000, condition: 'good', location: 'Lens Vault A', status: 'out', assignedToName: 'Siva Prakash', assignedToUid: 'uid_siva_prakash' },
+    { itemCode: 'LEN-07', name: 'Sigma 35mm f/1.4 DG DN Art', category: 'lens', brand: 'Sigma', model: '35mm F1.4 Art', serialNumber: 'SN-5521-ART-3501', purchasePrice: 75000, condition: 'good', location: 'Lens Vault B', status: 'available' },
+    { itemCode: 'LEN-08', name: 'Canon RF 50mm f/1.2L USM', category: 'lens', brand: 'Canon', model: 'RF 50mm f/1.2L', serialNumber: 'SN-1142-RF50-8802', purchasePrice: 198000, condition: 'excellent', location: 'Lens Vault A', status: 'available' },
+    { itemCode: 'DRN-01', name: 'DJI Mavic 3 Pro Cine Drone', category: 'drone', brand: 'DJI', model: 'Mavic 3 Pro Cine', serialNumber: 'SN-1928-M3P-4019', purchasePrice: 290000, condition: 'good', location: 'Drone Vault B', status: 'out', assignedToName: 'Deepak S', assignedToUid: 'staff_deepak' },
+    { itemCode: 'GIM-02', name: 'DJI RS 3 Pro Gimbal Stabilizer', category: 'gimbal', brand: 'DJI', model: 'RS 3 Pro Combo', serialNumber: 'SN-5520-RS3-1944', purchasePrice: 72000, condition: 'service', location: 'Service Shelf S1', status: 'service', notes: 'Roll axis balancing in progress' },
+    { itemCode: 'FLS-01', name: 'Godox V1 Round-Head Flash', category: 'flash', brand: 'Godox', model: 'V1-S', serialNumber: 'SN-9912-V1S-8831', purchasePrice: 21000, condition: 'good', location: 'Flash Shelf F1', status: 'available' },
+    { itemCode: 'FLS-03', name: 'Godox AD600Pro Witstro Outdoor Strobe', category: 'flash', brand: 'Godox', model: 'AD600Pro', serialNumber: 'SN-4410-AD60-2940', purchasePrice: 65000, condition: 'good', location: 'Studio Lighting Rack', status: 'out', assignedToName: 'Ramesh D', assignedToUid: 'staff_ramesh' },
+    { itemCode: 'LGT-05', name: 'Aputure Light Storm LS 300d II', category: 'light', brand: 'Aputure', model: 'LS 300d II', serialNumber: 'SN-6652-300D-0193', purchasePrice: 95000, condition: 'good', location: 'Studio Floor Stand Rack', status: 'available' },
+    { itemCode: 'LGT-06', name: 'Nanlite Pavotube II 30X RGB LED Tube', category: 'light', brand: 'Nanlite', model: 'Pavotube II 30X', serialNumber: 'SN-8821-PAVO-3001', purchasePrice: 38000, condition: 'excellent', location: 'Lighting Case C', status: 'available' },
+    { itemCode: 'TRP-01', name: 'Manfrotto 055 Carbon Fiber Tripod', category: 'tripod', brand: 'Manfrotto', model: 'MT055CXPRO3', serialNumber: 'SN-2210-MNF-0553', purchasePrice: 34000, condition: 'good', location: 'Studio Grip Stand Area', status: 'available' },
+    { itemCode: 'AUD-01', name: 'Sennheiser EW-DP Wireless Mic System', category: 'other', brand: 'Sennheiser', model: 'EW-DP ME2 Set', serialNumber: 'SN-7731-SENN-9920', purchasePrice: 58000, condition: 'excellent', location: 'Audio Locker A2', status: 'available' },
+    { itemCode: 'MEM-01', name: 'SanDisk Extreme PRO 128GB V90 SDXC', category: 'sdCard', brand: 'SanDisk', model: 'SDSDXDK-128G', serialNumber: 'SN-1092-SAND-128V', purchasePrice: 14500, condition: 'excellent', location: 'Memory Vault M1', status: 'available' },
+    { itemCode: 'BAT-01', name: 'Sony NP-FZ100 Rechargeable Battery Set (x4)', category: 'battery', brand: 'Sony', model: 'NP-FZ100', serialNumber: 'SN-4431-BAT-0044', purchasePrice: 28000, condition: 'good', location: 'Charging Station Rack', status: 'available' },
   ]
 
   for (const item of equipmentItems) {
-    const itemRef = doc(db, 'equipment', `eq_${item.itemCode}`)
+    const docId = `eq_${item.itemCode.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
+    const itemRef = doc(db, 'equipment', docId)
     await setDoc(itemRef, {
       ...item,
-      createdAt: serverTimestamp()
+      itemId: docId,
+      isDeleted: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     }, { merge: true })
-    console.log(`  ✓ Equipment written: ${item.name} (${item.itemCode})`)
+    console.log(`  ✓ Equipment written: ${item.name} (${item.itemCode}) [${item.status}]`)
   }
 
   // 3. /studioSettings — 4 focused documents

@@ -11,12 +11,8 @@ service cloud.firestore {
     function isAdminOrManager() { return isAdmin() || isManager(); }
 
     match /users/{uid} {
-      // Any signed-in user can read their own doc (avoids recursive getRole() deadlock)
-      // Admins/managers can read all user docs
-      allow read:   if isSignedIn() && (
-                      request.auth.uid == uid ||
-                      isAdminOrManager()
-                    );
+      // Any signed-in user can read user profiles (for team assignments, author info & pickers)
+      allow read:   if isSignedIn();
       allow write:  if isAdmin();
       allow delete: if false;
     }
@@ -65,12 +61,30 @@ service cloud.firestore {
 
     match /equipment/{itemId} {
       allow read:  if isSignedIn();
+      // Admins/managers have full write permissions
+      // Signed-in staff can update custody and status fields during checkout / check-in
+      allow write: if isAdminOrManager() || (
+        isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'assignedToUid', 'assignedToName', 'currentCheckoutId',
+          'dueBackDate', 'lastUsedDate', 'updatedAt', 'condition'
+        ])
+      );
+
+      match /statusLogs/{logId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /equipmentKits/{kitId} {
+      allow read:  if isSignedIn();
       allow write: if isAdminOrManager();
     }
 
     match /checkouts/{checkoutId} {
       allow read:  if isSignedIn();
-      allow write: if isAdminOrManager();
+      // Allow signed-in staff, managers, and admins to record checkouts and returns
+      allow write: if isSignedIn();
     }
 
     match /attendance/{attendanceId} {

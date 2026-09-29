@@ -35,7 +35,7 @@ const HRMS_ITEMS: NavItem[] = [
 ]
 
 const ERP_ITEMS: NavItem[] = [
-  { id: 'equipment',  label: 'Equipment',  icon: 'ti-camera',    href: '/erp/equipment',  roles: ['admin','manager'] },
+  { id: 'equipment',  label: 'Equipment',  icon: 'ti-camera',    href: '/erp/equipment',  roles: ['admin','manager','staff'] },
   { id: 'quotations', label: 'Quotations', icon: 'ti-file-text', href: '/erp/quotations', roles: ['admin','manager'] },
   { id: 'invoices',   label: 'Invoices',   icon: 'ti-receipt',   href: '/erp/invoices',   roles: ['admin'] },
   { id: 'expenses',   label: 'Expenses',   icon: 'ti-wallet',    href: '/erp/expenses',   roles: ['admin'] },
@@ -46,6 +46,7 @@ const ERP_ITEMS: NavItem[] = [
 const STAFF_ITEMS: NavItem[] = [
   { id: 'timeclock',   label: 'Time Clock',    icon: 'ti-clock',         href: '/hrms/timeclock',   roles: ['staff'] },
   { id: 'work-board',  label: 'Work Board',    icon: 'ti-layout-kanban', href: '/events/work-board', roles: ['staff'] },
+  { id: 'equipment',   label: 'Equipment',     icon: 'ti-camera',        href: '/erp/equipment',    roles: ['staff'] },
   { id: 'attendance',  label: 'My Attendance', icon: 'ti-checklist',     href: '/hrms/attendance',  roles: ['staff'] },
   { id: 'payslips',    label: 'My Payslips',   icon: 'ti-file-invoice',  href: '/hrms/payslips',    roles: ['staff'] },
 ]
