@@ -167,7 +167,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
       </div>
 
       {/* Event Type + Location (always shown) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{
             fontSize: 'var(--text-sm)',
@@ -227,7 +227,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
 
       {/* ──── ONE-TIME: Single date & timings ──── */}
       {!isMultiDate && !isRecurring && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+        <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr] gap-3">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{
               fontSize: 'var(--text-sm)',
@@ -304,13 +304,16 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                   zIndex: state.eventDates.length - idx + 10,
                 }}
               >
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 150px 125px 125px 1fr 36px',
-                  gap: '8px',
-                  alignItems: 'end',
-                  paddingBottom: '8px',
-                }}>
+                {/* Desktop 6-column grid view (>= 768px) */}
+                <div
+                  className="hidden md:grid"
+                  style={{
+                    gridTemplateColumns: '1.2fr 150px 125px 125px 1fr 36px',
+                    gap: '8px',
+                    alignItems: 'end',
+                    paddingBottom: '8px',
+                  }}
+                >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {idx === 0 && (
                       <label style={{
@@ -454,6 +457,76 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                     <i className="ti ti-trash" />
                   </motion.button>
                 </div>
+
+                {/* Mobile stacked card view (< 768px) */}
+                <div className="flex md:hidden flex-col gap-2.5 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] mb-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Input
+                      placeholder={`Event ${idx + 1} Label`}
+                      value={ed.label}
+                      onChange={e => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'label',
+                        value: e.target.value,
+                      })}
+                      className="h-9 font-medium flex-1"
+                    />
+                    {state.eventDates.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'REMOVE_EVENT_DATE', id: ed.id })}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-danger)] hover:bg-[var(--color-danger-muted)] transition-colors"
+                      >
+                        <i className="ti ti-trash text-base" />
+                      </button>
+                    )}
+                  </div>
+                  <DateField
+                    value={ed.date}
+                    onChange={val => dispatch({
+                      type: 'UPDATE_EVENT_DATE',
+                      id: ed.id,
+                      field: 'date',
+                      value: val,
+                    })}
+                    className="h-9 w-full"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <TimeField
+                      value={ed.startTime || '09:00'}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'startTime',
+                        value: val,
+                      })}
+                      className="h-9 w-full"
+                    />
+                    <TimeField
+                      value={ed.endTime || '18:00'}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'endTime',
+                        value: val,
+                      })}
+                      className="h-9 w-full"
+                      align="right"
+                    />
+                  </div>
+                  <LocationAutocomplete
+                    placeholder="Venue (optional)"
+                    value={ed.location}
+                    onChange={val => dispatch({
+                      type: 'UPDATE_EVENT_DATE',
+                      id: ed.id,
+                      field: 'location',
+                      value: val,
+                    })}
+                    className="h-9 w-full"
+                  />
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -507,7 +580,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             Recurring schedule &amp; timings
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{
                 fontSize: 'var(--text-sm)',
@@ -562,7 +635,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{
                 fontSize: 'var(--text-sm)',

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
@@ -12,8 +12,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { theme }            = useUIStore()
   const router               = useRouter()
   const pathname             = usePathname()
+  const [authTimedOut, setAuthTimedOut] = useState(false)
 
   const isFullBleed = pathname === '/events'
+
+  // Safety fallback: if auth takes longer than 1.5s, drop out of loading state
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAuthTimedOut(true)
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Sync theme attribute to document element and body for global CSS variables
   useEffect(() => {
@@ -23,15 +32,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Redirect unauthenticated users or staff from dashboard
   useEffect(() => {
-    if (!loading && !appUser) {
+    if ((!loading || authTimedOut) && !appUser) {
       router.replace('/login')
     } else if (!loading && appUser?.role === 'staff' && pathname === '/dashboard') {
       router.replace('/hrms/timeclock')
     }
-  }, [appUser, loading, pathname, router])
+  }, [appUser, loading, authTimedOut, pathname, router])
 
-  // Full-screen spinner while checking auth
-  if (loading) {
+  // Full-screen spinner while checking auth (capped at 1.5s)
+  if (loading && !authTimedOut) {
     return (
       <div
         data-theme={theme}
@@ -58,7 +67,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div
       data-theme={theme}
       style={{
-        display: 'flex', height: '100vh', overflow: 'hidden',
+        display: 'flex', height: '100dvh', minHeight: '100vh', overflow: 'hidden',
         fontFamily: 'var(--font-inter)',
         background: 'var(--color-background)',
         color: 'var(--color-foreground)',
@@ -85,11 +94,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         ) : (
           <main style={{
             flex: 1, overflowY: 'auto', overflowX: 'hidden',
+            WebkitOverflowScrolling: 'touch',
             background: 'var(--color-background)',
             // Extra bottom padding on mobile for the bottom nav bar
             paddingBottom: 'env(safe-area-inset-bottom)',
           }}>
-            <div className="md:pb-0 pb-20" style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
+            <div
+              className="!pb-28 md:!pb-6"
+              style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}
+            >
               {children}
             </div>
           </main>
@@ -98,7 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile bottom nav */}
       <div className="md:hidden">
-        <MobileNav />
+        {pathname !== '/events' && <MobileNav />}
       </div>
     </div>
   )

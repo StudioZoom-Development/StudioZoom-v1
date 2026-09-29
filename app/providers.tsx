@@ -1,14 +1,7 @@
 'use client'
-import React from 'react'
-import ReactDOM from 'react-dom'
+import React, { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
 import { useAuthListener } from '@/hooks/useAuth'
-
-if (typeof window !== 'undefined') {
-  (window as unknown as { React: typeof React; ReactDOM: typeof ReactDOM }).React = React;
-  (window as unknown as { React: typeof React; ReactDOM: typeof ReactDOM }).ReactDOM = ReactDOM;
-}
 
 function AuthListenerMount() {
   useAuthListener()

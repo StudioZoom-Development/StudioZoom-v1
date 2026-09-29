@@ -71,19 +71,14 @@ export default function StepBookingType({ selectedType, dispatch }: StepBookingT
             <motion.div
               key={bt.type}
               onClick={() => dispatch({ type: 'SET_BOOKING_TYPE', payload: bt.type })}
+              className="p-3.5 sm:p-5 flex items-start gap-3 sm:gap-4 rounded-xl cursor-pointer"
               style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '16px',
-                padding: '20px',
-                borderRadius: '12px',
                 border: isSelected
                   ? '2px solid var(--color-primary)'
                   : '0.5px solid var(--color-border)',
                 background: isSelected
                   ? 'var(--color-primary-muted)'
                   : 'var(--color-surface)',
-                cursor: 'pointer',
                 transition: 'border-color 0.15s ease, background 0.15s ease',
               }}
               whileHover={{ scale: 1.01 }}

@@ -418,26 +418,16 @@ export default function StepReview({
       </SectionCard>
 
       {/* Action buttons */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'flex-end',
-        gap: '10px',
-        paddingTop: '8px',
-      }}>
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2">
         <motion.button
           onClick={() => onSubmit(true)}
           disabled={isSaving}
+          className="h-10 sm:h-9 px-5 rounded-lg font-medium text-sm w-full sm:w-auto flex items-center justify-center cursor-pointer"
           style={{
             fontFamily: 'var(--font-inter)',
-            height: '40px',
-            padding: '0 20px',
-            borderRadius: '8px',
             border: '0.5px solid var(--color-border)',
             background: 'transparent',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 500,
             color: 'var(--color-foreground)',
-            cursor: isSaving ? 'not-allowed' : 'pointer',
             opacity: isSaving ? 0.5 : 1,
           }}
           whileHover={{ scale: 1.02 }}
@@ -448,17 +438,12 @@ export default function StepReview({
         <motion.button
           onClick={() => onSubmit(false)}
           disabled={isSaving}
+          className="h-10 sm:h-9 px-6 rounded-lg font-semibold text-sm w-full sm:w-auto flex items-center justify-center cursor-pointer"
           style={{
             fontFamily: 'var(--font-inter)',
-            height: '40px',
-            padding: '0 24px',
-            borderRadius: '8px',
             border: 'none',
             background: 'var(--color-primary)',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 600,
             color: '#ffffff',
-            cursor: isSaving ? 'not-allowed' : 'pointer',
             opacity: isSaving ? 0.5 : 1,
           }}
           whileHover={{ scale: 1.02 }}

@@ -7,6 +7,7 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { PhoneNumberInput, parsePhoneNumber } from '@/components/shared/PhoneNumberInput'
 import { useUIStore } from '@/store/uiStore'
 import { useRole } from '@/hooks/useAuth'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   StudioBranding,
@@ -38,27 +39,56 @@ import type { SavedAddress } from '@/types'
 
 type Page = 'Studio branding' | 'Packages' | 'Numbering' | 'Saved Address' | 'User management'
 
-const NAV_ITEMS: Array<{ label: Page; icon: string }> = [
-  { label: 'Studio branding', icon: 'ti-aperture'   },
-  { label: 'Packages',        icon: 'ti-package'    },
-  { label: 'Numbering',       icon: 'ti-percentage' },
-  { label: 'Saved Address',   icon: 'ti-map-pin'    },
-  { label: 'User management', icon: 'ti-users'      },
+const SETTINGS_SECTIONS: Array<{
+  label: Page
+  icon: string
+  description: string
+  adminOnly?: boolean
+}> = [
+  {
+    label: 'Studio branding',
+    icon: 'ti-aperture',
+    description: 'Studio identity, contacts, GSTIN & UPI details',
+  },
+  {
+    label: 'Packages',
+    icon: 'ti-package',
+    description: 'Service packages, pricing & deliverable line items',
+  },
+  {
+    label: 'Numbering',
+    icon: 'ti-percentage',
+    description: 'Invoice & quotation prefixes, start numbers & GST',
+  },
+  {
+    label: 'Saved Address',
+    icon: 'ti-map-pin',
+    description: 'Frequently used wedding venues & studio addresses',
+  },
+  {
+    label: 'User management',
+    icon: 'ti-users',
+    description: 'Team member logins, roles & access permissions',
+    adminOnly: true,
+  },
 ]
 
-// Hardcoded studio entities — not from Firestore
+const NAV_ITEMS: Array<{ label: Page; icon: string }> = SETTINGS_SECTIONS.map(s => ({
+  label: s.label,
+  icon: s.icon,
+}))
+
+// Studio entities
 const STUDIOS = [
   {
     id:      'studio-zoom',
     name:    'Studio Zoom',
     tagline: 'Weddings & events',
-    gstin:   '33ABCDE1234F1Z5',
   },
   {
     id:      'studio-zoom-productions',
     name:    'Studio Zoom Productions',
     tagline: 'Films & corporate AV',
-    gstin:   '33ABCDE1234F2Z4',
   },
 ]
 
@@ -296,7 +326,7 @@ function PackageModal({ pkg, onSave, onDelete, onClose }: PackageModalProps) {
         </div>
 
         {/* Name & Price */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flexShrink: 0 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Name</label>
             <Input value={name} onChange={e => setName(e.target.value)} className="h-9" placeholder="e.g. Platinum" />
@@ -720,32 +750,16 @@ function AddressModal({ address, onSave, onClose }: AddressModalProps) {
           </div>
         </div>
 
-        <div style={{
-          display: 'flex',
-          gap: '10px',
-          justifyContent: 'flex-end',
-          borderTop: '0.5px solid var(--color-border)',
-          paddingTop: '16px',
-        }}>
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 border-t border-[var(--color-border)]">
           <button
             type="button"
             onClick={onClose}
-            style={{
-              height: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              background: 'transparent',
-              border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)',
-              fontSize: 'var(--text-sm)',
-              fontFamily: 'var(--font-inter)',
-            }}
+            className="w-full md:w-auto h-10 md:h-9 px-4 rounded-lg cursor-pointer bg-transparent border border-[var(--color-border)] text-[var(--color-foreground)] text-sm font-sans"
           >
             Cancel
           </button>
           <Button
-            className="h-9 font-medium"
+            className="w-full md:w-auto h-10 md:h-9 font-medium"
             onClick={handleSave}
             disabled={saving}
           >
@@ -785,12 +799,11 @@ function EditUserModal({ user, onClose }: EditUserModalProps) {
       background: 'rgba(0,0,0,0.7)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font-inter)',
+      padding: '16px',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: '420px', background: 'var(--color-surface-overlay)',
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-[420px] rounded-2xl flex flex-col gap-3.5 p-5 md:p-6 shadow-2xl" style={{
+        background: 'var(--color-surface-overlay)',
         border: '0.5px solid var(--color-border)',
-        borderRadius: '16px', padding: '24px',
-        display: 'flex', flexDirection: 'column', gap: '14px',
       }}>
         <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Edit user</div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{user.email}</div>
@@ -825,13 +838,11 @@ function EditUserModal({ user, onClose }: EditUserModalProps) {
           </select>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-          <button onClick={onClose} style={{
-            height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
-            background: 'transparent', border: '0.5px solid var(--color-border)',
-            color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-          }}>Cancel</button>
-          <Button className="h-9 font-medium" onClick={handleSave} disabled={saving}>
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 mt-1 border-t border-[var(--color-border)]">
+          <button onClick={onClose} className="w-full md:w-auto h-10 md:h-9 px-4 rounded-lg cursor-pointer bg-transparent border border-[var(--color-border)] text-[var(--color-foreground)] text-sm font-sans">
+            Cancel
+          </button>
+          <Button className="w-full md:w-auto h-10 md:h-9 font-medium" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
@@ -886,12 +897,11 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
       background: 'rgba(0,0,0,0.7)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font-inter)',
+      padding: '16px',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: '460px', background: 'var(--color-surface-overlay)',
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-[460px] rounded-2xl flex flex-col gap-4 p-5 md:p-6 shadow-2xl" style={{
+        background: 'var(--color-surface-overlay)',
         border: '0.5px solid var(--color-border)',
-        borderRadius: '16px', padding: '24px',
-        display: 'flex', flexDirection: 'column', gap: '16px',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>Reset password</div>
@@ -952,14 +962,12 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
-          <button onClick={onClose} style={{
-            height: '36px', padding: '0 16px', borderRadius: '8px', cursor: 'pointer',
-            background: 'transparent', border: '0.5px solid var(--color-border)',
-            color: 'var(--color-foreground)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-inter)',
-          }}>{sent || link ? 'Done' : 'Close'}</button>
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 border-t border-[var(--color-border)]">
+          <button onClick={onClose} className="w-full md:w-auto h-10 md:h-9 px-4 rounded-lg cursor-pointer bg-transparent border border-[var(--color-border)] text-[var(--color-foreground)] text-sm font-sans">
+            {sent || link ? 'Done' : 'Close'}
+          </button>
           {!sent && !link && (
-            <Button className="h-9 font-medium" onClick={handleGenerate} disabled={loading}>
+            <Button className="w-full md:w-auto h-10 md:h-9 font-medium" onClick={handleGenerate} disabled={loading}>
               {loading ? 'Sending…' : 'Send reset email'}
             </Button>
           )}
@@ -980,6 +988,46 @@ export default function SettingsPage() {
   const { isAdmin, isManager } = useRole()
   const testDatasetMode = useUIStore(s => s.testDatasetMode)
   const testModeCutoff = useUIStore(s => s.testModeCutoff)
+  const [mobileSection, setMobileSection] = useState<Page | null>(() => {
+    if (tabParam === 'users' || tabParam === 'user-management') return 'User management'
+    if (tabParam === 'packages') return 'Packages'
+    if (tabParam === 'numbering') return 'Numbering'
+    if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') return 'Saved Address'
+    if (tabParam === 'branding') return 'Studio branding'
+    return null
+  })
+
+  const { backSwipeHandlers } = useBackSwipe(() => {
+    if (mobileSection) {
+      setMobileSection(null)
+      router.push('/settings')
+    } else {
+      router.back()
+    }
+  })
+
+  // Listen for TopBar mobile back button event
+  useEffect(() => {
+    const handleTopBarBack = () => {
+      if (mobileSection) {
+        setMobileSection(null)
+        router.push('/settings')
+      }
+    }
+    window.addEventListener('studio-settings-back', handleTopBarBack)
+    return () => window.removeEventListener('studio-settings-back', handleTopBarBack)
+  }, [mobileSection, router])
+
+  // Track if mobile section is open for TopBar handleBack
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (mobileSection) {
+        window.sessionStorage.setItem('studio_settings_mobile_open', 'true')
+      } else {
+        window.sessionStorage.removeItem('studio_settings_mobile_open')
+      }
+    }
+  }, [mobileSection])
 
   const [prevTabParam, setPrevTabParam] = useState<string | null>(tabParam)
   const [page, setPage] = useState<Page>(() => {
@@ -994,11 +1042,24 @@ export default function SettingsPage() {
   // Synchronize state during render pass if URL tab parameter changes
   if (tabParam !== prevTabParam) {
     setPrevTabParam(tabParam)
-    if (tabParam === 'users' || tabParam === 'user-management') setPage('User management')
-    else if (tabParam === 'packages') setPage('Packages')
-    else if (tabParam === 'numbering') setPage('Numbering')
-    else if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') setPage('Saved Address')
-    else if (tabParam === 'branding') setPage('Studio branding')
+    if (tabParam === 'users' || tabParam === 'user-management') {
+      setPage('User management')
+      setMobileSection('User management')
+    } else if (tabParam === 'packages') {
+      setPage('Packages')
+      setMobileSection('Packages')
+    } else if (tabParam === 'numbering') {
+      setPage('Numbering')
+      setMobileSection('Numbering')
+    } else if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') {
+      setPage('Saved Address')
+      setMobileSection('Saved Address')
+    } else if (tabParam === 'branding') {
+      setPage('Studio branding')
+      setMobileSection('Studio branding')
+    } else if (!tabParam) {
+      setMobileSection(null)
+    }
   }
   const [users, setUsers] = useState<UserRow[]>([])
 
@@ -1295,18 +1356,105 @@ export default function SettingsPage() {
   const deletingUser = users.find(u => u.uid === deleteUid)
 
   return (
-    <div style={{
-      maxWidth: '1100px', margin: '0 auto', padding: '24px',
-      display: 'flex', gap: '20px', alignItems: 'start',
-      fontFamily: 'var(--font-inter)', color: 'var(--color-foreground)',
-    }}>
+    <div
+      {...backSwipeHandlers}
+      className="flex flex-col md:flex-row gap-5 pb-24 md:pb-6 px-4 md:px-6"
+      style={{
+        maxWidth: '1100px', margin: '0 auto',
+        fontFamily: 'var(--font-inter)', color: 'var(--color-foreground)',
+      }}
+    >
+      {/* ── Mobile Level 1: Page-view Settings Menu (when no section is selected) */}
+      {!mobileSection && (
+        <div className="flex md:hidden flex-col w-full gap-3">
+          <div style={{ marginBottom: '4px' }}>
+            <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+              Settings
+            </h2>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
+              Select a section to manage studio configurations
+            </p>
+          </div>
 
-      {/* ── Left nav */}
-      <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '14px',
+              overflow: 'hidden',
+            }}
+          >
+            {SETTINGS_SECTIONS.filter(s => !s.adminOnly || isAdmin).map((section, idx, arr) => (
+              <div
+                key={section.label}
+                onClick={() => {
+                  setPage(section.label)
+                  setMobileSection(section.label)
+                  const tabMap: Record<Page, string> = {
+                    'Studio branding': 'branding',
+                    'Packages': 'packages',
+                    'Numbering': 'numbering',
+                    'Saved Address': 'address',
+                    'User management': 'users',
+                  }
+                  const slug = tabMap[section.label]
+                  if (slug) router.push(`/settings?tab=${slug}`)
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '16px',
+                  cursor: 'pointer',
+                  borderBottom: idx < arr.length - 1 ? '0.5px solid var(--color-border)' : 'none',
+                  background: 'transparent',
+                  transition: 'background 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '10px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      color: 'var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <i className={`ti ${section.icon}`} style={{ fontSize: '20px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                      {section.label}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                      {section.description}
+                    </span>
+                  </div>
+                </div>
+                <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: 'var(--color-foreground-subtle)' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Desktop Left nav */}
+      <div className="hidden md:flex flex-col gap-1 w-[200px] shrink-0">
         {NAV_ITEMS.filter(item => item.label !== 'User management' || isAdmin).map(item => (
           <div
             key={item.label}
-            onClick={() => setPage(item.label)}
+            onClick={() => {
+              setPage(item.label)
+              setMobileSection(item.label)
+            }}
             style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               height: '38px', padding: '0 12px', borderRadius: '8px', cursor: 'pointer',
@@ -1322,8 +1470,19 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {/* ── Content panel */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* ── Content panel (Hidden on mobile if on Level 1 menu, Visible on desktop & active mobile section) */}
+      <div className={`flex-1 min-w-0 ${!mobileSection ? 'hidden md:block' : 'block'}`}>
+        {/* Mobile Section Header (Title & Breadcrumb - TopBar provides the single back button) */}
+        {mobileSection && (
+          <div className="flex md:hidden flex-col mb-4">
+            <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)', letterSpacing: '-0.02em' }}>
+              {page}
+            </span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+              Settings &gt; {page}
+            </span>
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════
             A — STUDIO BRANDING
@@ -1343,7 +1502,7 @@ export default function SettingsPage() {
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
                 Select which studio this document set belongs to · appears on quotations, invoices and payslips
               </div>
-              <div style={{ display: 'flex', gap: '12px', paddingBottom: '4px' }}>
+              <div className="flex flex-col sm:flex-row gap-3 pb-1">
                 {STUDIOS.map(studio => {
                   const isSelected = selectedStudio === studio.id
                   return (
@@ -1389,33 +1548,34 @@ export default function SettingsPage() {
                         </div>
                       </div>
 
-                      {/* Radio indicator */}
-                      <div style={{
-                        width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
-                        background:  isSelected ? 'var(--color-primary)' : 'transparent',
-                        border:      isSelected ? 'none' : '1.5px solid var(--color-foreground-subtle)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'background 0.15s, border 0.15s',
-                      }}>
-                        {isSelected && (
-                          <i className="ti ti-check" style={{ fontSize: '12px', color: '#ffffff' }} />
-                        )}
-                      </div>
+                      {/* Active indicator dot */}
+                      {isSelected && (
+                        <div style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: 'var(--color-primary)', flexShrink: 0,
+                        }} />
+                      )}
                     </div>
                   )
                 })}
               </div>
             </div>
 
-            {/* ── Branding fields header with edit toggle */}
+            {/* ── Subtitle row with edit / save */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
-                {STUDIOS.find(s => s.id === selectedStudio)?.name} details
+              <div>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>
+                  {STUDIOS.find(s => s.id === selectedStudio)?.name}
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                  {brandData[selectedStudio]?.gstin ? `GSTIN: ${brandData[selectedStudio].gstin}` : 'GSTIN: Not configured'}
+                </div>
               </div>
+
               {!brandEditMode ? (
                 <span
-                  onClick={() => { setBrandEditMode(true); setBrandError('') }}
-                  title="Edit details"
+                  onClick={() => setBrandEditMode(true)}
+                  title="Edit branding details"
                   style={{
                     width: '30px', height: '30px', borderRadius: '8px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1454,8 +1614,8 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ── 6 branding fields — 3-col grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+            {/* ── 6 branding fields — responsive grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
               {BRAND_FIELDS.map(f => {
                 const val = (brandData[selectedStudio] ?? EMPTY_BRAND)[f.key]
                 return (
@@ -1546,14 +1706,15 @@ export default function SettingsPage() {
                   onDragOver={e => handleDragOver(e, index)}
                   onDrop={() => handleDrop(index)}
                   onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null) }}
+                  className="p-3 sm:p-4 md:px-5 md:py-4"
                   style={{
                     background: 'var(--color-surface)',
                     border: isDragOver
                       ? '1.5px solid var(--color-primary)'
                       : '0.5px solid var(--color-border)',
                     opacity: isDragging ? 0.4 : 1,
-                    borderRadius: '12px', padding: '16px 20px',
-                    display: 'flex', alignItems: 'center', gap: '16px',
+                    borderRadius: '12px',
+                    display: 'flex', alignItems: 'center', gap: '12px',
                     transition: 'border-color 0.15s, opacity 0.15s',
                     cursor: 'grab',
                   }}
@@ -1565,39 +1726,54 @@ export default function SettingsPage() {
                   }}
                 >
                   {/* Drag handle */}
-                  <i className="ti ti-grip-vertical" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)', cursor: 'grab' }} />
+                  <i className="ti ti-grip-vertical" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)', cursor: 'grab', flexShrink: 0 }} />
 
                   {/* Package icon */}
                   <div style={{
-                    width: '40px', height: '40px', borderRadius: '10px', flexShrink: 0,
+                    width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0,
                     background: colour.bg, color: colour.fg,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <i className="ti ti-package" style={{ fontSize: '20px' }} />
+                    <i className="ti ti-package" style={{ fontSize: '18px' }} />
                   </div>
 
                   {/* Name + description */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{p.items}</div>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, wordBreak: 'break-word', lineHeight: 1.3 }}>
+                      {p.name}
+                    </div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', wordBreak: 'break-word' }}>
+                      {p.items}
+                    </div>
                   </div>
 
-                  {/* Price */}
-                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>
-                    ₹{displayPrice.toLocaleString('en-IN')}
-                  </div>
+                  {/* Price & Edit Button */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      ₹{displayPrice.toLocaleString('en-IN')}
+                    </div>
 
-                  {/* Edit */}
-                  <span
-                    onClick={e => {
-                      e.stopPropagation()
-                      setEditPkg(p)
-                      setShowPkgModal(true)
-                    }}
-                    style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500 }}
-                  >
-                    Edit
-                  </span>
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation()
+                        setEditPkg(p)
+                        setShowPkgModal(true)
+                      }}
+                      style={{
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-accent)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        background: 'var(--color-accent-muted)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -1623,8 +1799,8 @@ export default function SettingsPage() {
             borderRadius: '12px', padding: '24px',
             display: 'flex', flexDirection: 'column', gap: '18px',
           }}>
-            {/* 3-col grid — Invoice prefix / Quotation prefix / Next number */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+            {/* Responsive grid — Invoice prefix / Quotation prefix / Next number */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Invoice prefix</label>
                 <Input value={invoicePrefix} onChange={e => setInvoicePrefix(e.target.value)} className="h-9" placeholder="ZS-INV-" />
@@ -1777,7 +1953,8 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            <div style={{
+            {/* Desktop Table */}
+            <div className="hidden md:block" style={{
               background: 'var(--color-surface)', border: '0.5px solid var(--color-border)',
               borderRadius: '12px', overflow: 'hidden',
             }}>
@@ -1910,6 +2087,105 @@ export default function SettingsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile User Cards */}
+            <div className="flex flex-col md:hidden gap-3">
+              {users.map(u => (
+                <div
+                  key={u.uid}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                        background: 'var(--color-primary-muted)', color: 'var(--color-primary)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '12px', fontWeight: 700,
+                      }}>
+                        {getInitials(u.name)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 'var(--text-base)' }}>{u.name}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>{u.email}</div>
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 'var(--text-xs)', fontWeight: 600,
+                      padding: '2px 8px', borderRadius: '10px',
+                      background: ROLE_STYLE[u.role]?.bg ?? 'var(--color-surface-overlay)',
+                      color:      ROLE_STYLE[u.role]?.fg ?? 'var(--color-foreground-muted)',
+                    }}>
+                      {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    paddingTop: '10px', borderTop: '0.5px solid var(--color-border)',
+                  }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                      <span style={{
+                        width: '8px', height: '8px', borderRadius: '50%',
+                        background: u.isActive ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                        flexShrink: 0,
+                      }} />
+                      {u.isActive ? 'Active' : 'Inactive'}
+                    </span>
+
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditUser(u)}
+                        style={{
+                          height: '34px', padding: '0 10px', borderRadius: '8px',
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          color: 'var(--color-accent)', background: 'var(--color-accent-muted)',
+                          fontSize: 'var(--text-xs)', fontWeight: 500, border: 'none', cursor: 'pointer',
+                        }}
+                      >
+                        <i className="ti ti-pencil" style={{ fontSize: '14px' }} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResetUser(u)}
+                        style={{
+                          width: '34px', height: '34px', borderRadius: '8px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--color-foreground-muted)', background: 'var(--color-surface-raised)',
+                          border: 'none', cursor: 'pointer',
+                        }}
+                        title="Reset password"
+                      >
+                        <i className="ti ti-key" style={{ fontSize: '15px' }} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteUid(u.uid)}
+                        style={{
+                          width: '34px', height: '34px', borderRadius: '8px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--color-danger)', background: 'var(--color-danger-muted)',
+                          border: 'none', cursor: 'pointer',
+                        }}
+                        title="Delete user"
+                      >
+                        <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

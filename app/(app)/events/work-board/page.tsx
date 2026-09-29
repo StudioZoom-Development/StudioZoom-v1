@@ -1,9 +1,17 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
+
+const emptySubscribe = () => () => {}
+function useMounted(): boolean {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false)
+}
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { Badge } from '@/components/shared/Badge'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import {
   subscribeToWorkItems,
   createWorkItem,
@@ -330,6 +338,10 @@ function WorkItemSidePanel({
   freelancers,
   isStaff = false,
 }: SidePanelProps) {
+  const theme = useUIStore(s => s.theme)
+  const mounted = useMounted()
+
+
   const [showReassign, setShowReassign] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
 
@@ -448,31 +460,35 @@ function WorkItemSidePanel({
     setIsEditing(false)
   }
 
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: 9998,
-        display: 'flex', justifyContent: 'flex-end',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
+  if (!item || !mounted || typeof document === 'undefined') return null
+
+  return createPortal(
+    <div data-theme={theme}>
       <div
         style={{
-          width: '450px',
-          maxWidth: '92vw',
-          height: '100vh',
-          background: 'var(--color-surface)',
-          borderLeft: '0.5px solid var(--color-border)',
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.35)',
-          display: 'flex',
-          flexDirection: 'column',
-          fontFamily: 'var(--font-inter)',
-          overflowY: 'auto',
-          animation: 'slideInRight 0.2s ease-out',
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.5)',
+          zIndex: 99998,
+          display: 'flex', justifyContent: 'flex-end',
         }}
+        onClick={e => { if (e.target === e.currentTarget) onClose() }}
       >
+        <div
+          style={{
+            width: '450px',
+            maxWidth: '100vw',
+            height: '100dvh',
+            maxHeight: '100vh',
+            background: 'var(--color-surface)',
+            borderLeft: '0.5px solid var(--color-border)',
+            boxShadow: '-8px 0 32px rgba(0,0,0,0.35)',
+            display: 'flex',
+            flexDirection: 'column',
+            fontFamily: 'var(--font-inter)',
+            overflowY: 'auto',
+            animation: 'slideInRight 0.2s ease-out',
+          }}
+        >
         {/* Header */}
         <div style={{
           padding: '24px 28px 18px',
@@ -1165,6 +1181,8 @@ function WorkItemSidePanel({
         )}
       </div>
     </div>
+    </div>,
+    document.body
   )
 }
 
@@ -1191,6 +1209,10 @@ function CreateWorkModal({
   onWorkCreated,
   onWorkIdResolved,
 }: CreateModalProps) {
+  const theme = useUIStore(s => s.theme)
+  const mounted = useMounted()
+
+
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
 
@@ -1331,28 +1353,31 @@ function CreateWorkModal({
     fontFamily: 'var(--font-inter)',
   }
 
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.7)',
-        zIndex: 9999, display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '24px',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{
-        background: 'var(--color-surface-overlay)',
-        border: '0.5px solid var(--color-border)',
-        borderRadius: '16px',
-        padding: '28px',
-        width: '100%',
-        maxWidth: '640px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        fontFamily: 'var(--font-inter)',
-      }}>
+  if (!mounted || typeof document === 'undefined') return null
+
+  return createPortal(
+    <div data-theme={theme}>
+      <div
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          zIndex: 99999, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          padding: '16px',
+        }}
+        onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      >
+        <div style={{
+          background: 'var(--color-surface-overlay)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '16px',
+          padding: '24px',
+          width: '100%',
+          maxWidth: '640px',
+          maxHeight: '90dvh',
+          overflowY: 'auto',
+          fontFamily: 'var(--font-inter)',
+        }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
           <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--color-foreground)' }}>
             Create Work
@@ -1564,6 +1589,8 @@ function CreateWorkModal({
         </div>
       </div>
     </div>
+    </div>,
+    document.body
   )
 }
 
@@ -1777,9 +1804,13 @@ export default function WorkBoardPage() {
   const [staff, setStaff]                           = useState<StaffMember[]>([])
   const [freelancers, setFreelancers]               = useState<Freelancer[]>([])
   const [assignments, setAssignments]               = useState<StaffAssignment[]>([])
-  const [showCreate, setShowCreate]                 = useState(false)
+  const [showCreate, setShowCreate]                 = useState(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('action') === 'new'
+  })
   const [createAssignee, setCreateAssignee]         = useState<{ id: string; isFreelancer: boolean } | undefined>()
   const [selectedPanelItem, setSelectedPanelItem]   = useState<WorkItem | null>(null)
+
 
   const effectiveStaff = useMemo<StaffMember[]>(() => {
     if (isStaff && appUser) {
@@ -1804,6 +1835,8 @@ export default function WorkBoardPage() {
   const [hideCompleted,      setHideCompleted]      = useState(false)
   const [showAllCompleted,   setShowAllCompleted]   = useState(false)
   const [collapsedShootIds,  setCollapsedShootIds]  = useState<Set<string>>(new Set())
+  const [mobileBucket,       setMobileBucket]       = useState<BoardBucket>('ongoing')
+  const { backSwipeHandlers } = useBackSwipe()
 
   // Real-time subscriptions
   useEffect(() => {
@@ -2946,11 +2979,13 @@ export default function WorkBoardPage() {
 
   return (
     <div style={{ fontFamily: 'var(--font-inter)' }}>
-      {/* Page Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: '24px', flexWrap: 'wrap', gap: '12px',
-      }}>
+      {/* ── DESKTOP VIEW (≥768px): 100% Invariant ── */}
+      <div className="hidden md:block">
+        {/* Page Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: '24px', flexWrap: 'wrap', gap: '12px',
+        }}>
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           {TAB_CONFIG.filter(tc => !isStaff || tc.key === 'board' || tc.key === 'events').map(tc => {
@@ -3885,6 +3920,545 @@ export default function WorkBoardPage() {
           )}
         </div>
       )}
+      </div>
+      {/* ── END DESKTOP VIEW ── */}
+
+      {/* ── MOBILE VIEW (<768px): Stage Swiper + Compact Task Cards ── */}
+      <div
+        className="block md:hidden"
+        {...backSwipeHandlers}
+        style={{
+          padding: '14px 14px 90px 14px',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* Mobile Header: Title & Action */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '14px',
+          }}
+        >
+          <div>
+            <h1
+              style={{
+                fontSize: 'var(--text-xl)',
+                fontWeight: 700,
+                color: 'var(--color-foreground)',
+                margin: 0,
+                letterSpacing: '-0.02em',
+              }}
+            >
+              Work Board
+            </h1>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', margin: '2px 0 0 0' }}>
+              {filtered.length} active tasks across stages
+            </p>
+          </div>
+
+          {!isStaff && (
+            <button
+              onClick={() => {
+                setCreateAssignee(undefined)
+                setShowCreate(true)
+              }}
+              style={{
+                height: '40px',
+                padding: '0 14px',
+                borderRadius: '8px',
+                background: 'var(--color-primary)',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: 'var(--text-xs)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              <i className="ti ti-plus" style={{ fontSize: '14px' }} />
+              New Task
+            </button>
+          )}
+        </div>
+
+        {/* Search Bar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '10px',
+            padding: '0 12px',
+            marginBottom: '12px',
+            height: '42px',
+          }}
+        >
+          <i className="ti ti-search" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)', marginRight: '8px' }} />
+          <input
+            type="text"
+            placeholder="Search tasks, shoots, staff..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--color-foreground)',
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{ background: 'none', border: 'none', color: 'var(--color-foreground-muted)', cursor: 'pointer' }}
+            >
+              <i className="ti ti-x" />
+            </button>
+          )}
+        </div>
+
+        {/* 15.6 Horizontal Scrolling Tabs */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
+            overflowX: 'auto',
+            paddingBottom: '8px',
+            marginBottom: '12px',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {TAB_CONFIG.filter(tc => !isStaff || tc.key === 'board' || tc.key === 'events').map(tc => {
+            const active = activeTab === tc.key
+            return (
+              <button
+                key={tc.key}
+                onClick={() => setTab(tc.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '20px',
+                  border: active ? '0.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                  background: active ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: active ? '#ffffff' : 'var(--color-foreground-muted)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <i className={`ti ${tc.icon}`} style={{ fontSize: '13px' }} />
+                {tc.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Quick Filter Chips */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '6px',
+            overflowX: 'auto',
+            paddingBottom: '8px',
+            marginBottom: '14px',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'my', label: 'My Tasks' },
+            { id: 'high', label: 'High Priority' },
+            { id: 'overdue', label: 'Overdue' },
+          ].map(qf => {
+            const active = quickFilter === qf.id
+            return (
+              <button
+                key={qf.id}
+                onClick={() => setQuickFilter(qf.id as typeof quickFilter)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  background: active ? 'var(--color-surface-overlay)' : 'var(--color-surface-raised)',
+                  border: active ? '0.5px solid var(--color-border-strong)' : '0.5px solid var(--color-border)',
+                  color: active ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                {qf.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── TAB: BOARD (Stage Buckets & Cards) ── */}
+        {activeTab === 'board' && (
+          <div>
+            {/* Stage Bucket Selector Pills */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '6px',
+                overflowX: 'auto',
+                paddingBottom: '10px',
+                marginBottom: '14px',
+                scrollbarWidth: 'none',
+              }}
+            >
+              {(['ongoing', 'pending', 'upcoming', 'overdue', 'completed'] as BoardBucket[]).map(b => {
+                const active = mobileBucket === b
+                const count = buckets[b]?.length || 0
+                return (
+                  <button
+                    key={b}
+                    onClick={() => setMobileBucket(b)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      background: active ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+                      border: active ? '0.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                      color: active ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      textTransform: 'capitalize',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span>{b}</span>
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        fontSize: '10px',
+                        background: active ? 'var(--color-primary)' : 'var(--color-surface-raised)',
+                        color: active ? '#ffffff' : 'var(--color-foreground-subtle)',
+                      }}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Bucket Task Cards */}
+            {buckets[mobileBucket]?.length === 0 ? (
+              <div
+                style={{
+                  padding: '32px 20px',
+                  borderRadius: '12px',
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  textAlign: 'center',
+                }}
+              >
+                <i className="ti ti-checkbox" style={{ fontSize: '28px', color: 'var(--color-foreground-subtle)', marginBottom: '8px' }} />
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
+                  No {mobileBucket} tasks found.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {buckets[mobileBucket].map(item => {
+                  const typeMeta = WORK_TYPE_META[item.type] || { label: item.type, icon: 'ti-checklist' }
+                  const priorityMeta = (item.priority && PRIORITY_COLORS[item.priority]) || PRIORITY_COLORS.medium
+                  const isItemOverdue = isOverdue(item)
+
+                  return (
+                    <div
+                      key={item.workItemId}
+                      onClick={() => setSelectedPanelItem(item)}
+                      style={{
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '12px',
+                        padding: '14px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                      }}
+                    >
+                      {/* Card Top Row: Type, Priority, Status */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className={`ti ${typeMeta.icon}`} style={{ fontSize: '14px', color: 'var(--color-primary)' }} />
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                            {typeMeta.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: priorityMeta.bg,
+                              color: priorityMeta.text,
+                            }}
+                          >
+                            {priorityMeta.label}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: item.status === 'done' ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                              color: item.status === 'done' ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Card Title */}
+                      <div
+                        style={{
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        {item.notes || typeMeta.label}
+                      </div>
+
+                      {/* Project Name & Event Date */}
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginBottom: '10px' }}>
+                        {item.eventName || item.clientName || 'Standalone Task'}
+                        {item.eventDate && ` • ${formatDate(item.eventDate)}`}
+                      </div>
+
+                      {/* Card Footer: Assignee & Due Date */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingTop: '10px',
+                          borderTop: '0.5px solid var(--color-border)',
+                          fontSize: 'var(--text-xs)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div
+                            style={{
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '50%',
+                              background: 'var(--color-primary-muted)',
+                              color: 'var(--color-primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '9px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {getInitials(item.assignedToName || '')}
+                          </div>
+                          <span style={{ color: 'var(--color-foreground)' }}>
+                            {item.assignedToName || 'Unassigned'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: isItemOverdue ? 'var(--color-danger)' : 'var(--color-foreground-subtle)' }}>
+                          <i className="ti ti-calendar" />
+                          <span>{item.dueDate ? formatDate(item.dueDate) : 'No date'}</span>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      {typeof item.progressPercent === 'number' && item.progressPercent > 0 && (
+                        <div style={{ marginTop: '10px' }}>
+                          <div
+                            style={{
+                              width: '100%',
+                              height: '4px',
+                              background: 'var(--color-surface-raised)',
+                              borderRadius: '2px',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${item.progressPercent}%`,
+                                height: '100%',
+                                background: item.progressPercent === 100 ? 'var(--color-success)' : 'var(--color-primary)',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: SHOOT VIEW ── */}
+        {activeTab === 'events' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {shootGroups.length === 0 ? (
+              <div
+                style={{
+                  padding: '32px 20px',
+                  borderRadius: '12px',
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  textAlign: 'center',
+                }}
+              >
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
+                  No shoots found.
+                </p>
+              </div>
+            ) : (
+              shootGroups.map(sg => (
+                <div
+                  key={sg.projectId}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                        {sg.eventName}
+                      </div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                        {sg.project?.clientName || 'Client'} {sg.project?.eventDate ? `• ${formatDate(sg.project.eventDate)}` : ''}
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'var(--color-primary-muted)',
+                        color: 'var(--color-primary)',
+                      }}
+                    >
+                      {sg.items.length} tasks
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
+                    {sg.items.map(item => (
+                      <div
+                        key={item.workItemId}
+                        onClick={() => setSelectedPanelItem(item)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: '8px',
+                          background: 'var(--color-surface-raised)',
+                          cursor: 'pointer',
+                          fontSize: 'var(--text-xs)',
+                        }}
+                      >
+                        <span style={{ color: 'var(--color-foreground)', fontWeight: 500 }}>
+                          {WORK_TYPE_META[item.type]?.label || item.type}
+                        </span>
+                        <span style={{ color: 'var(--color-foreground-muted)' }}>
+                          {item.assignedToName || 'Unassigned'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: STAFF WORKLOAD ── */}
+        {activeTab === 'staff' && !isStaff && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {effectiveStaff.map(s => {
+              const staffItems = allWorkItems.filter(w => w.assignedToUid === s.uid && w.status !== 'done')
+              const completedCount = allWorkItems.filter(w => w.assignedToUid === s.uid && w.status === 'done').length
+
+              return (
+                <div
+                  key={s.uid}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary-muted)',
+                          color: 'var(--color-primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {getInitials(s.name)}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                          {s.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)' }}>
+                          {s.role}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: staffItems.length > 3 ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                        {staffItems.length} active
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                        {completedCount} done
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ── SIDE PANEL (Details & Modifications) ── */}
       <WorkItemSidePanel
