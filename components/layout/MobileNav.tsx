@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
@@ -50,21 +50,27 @@ export function MobileNav() {
   const pathname = usePathname()
   const router   = useRouter()
   const appUser  = useAuthStore(s => s.appUser)
-  const { theme, toggleTheme } = useUIStore()
+  const {
+    theme,
+    toggleTheme,
+    mobileSection,
+    setMobileSection,
+    isMobileNewOpen,
+    setIsMobileNewOpen,
+  } = useUIStore()
   const role     = appUser?.role ?? 'staff'
 
-  // activeSection: 'crm' | 'hrms' | 'erp' | 'profile' -> full-screen section overlay
-  // isNewOpen: true -> bottom action sheet
-  const [activeSection, setActiveSection] = useState<'crm' | 'hrms' | 'erp' | 'profile' | null>(null)
-  const [isNewOpen, setIsNewOpen]         = useState(false)
+  // activeSection alias to mobileSection in store
+  const activeSection = mobileSection
+  const setActiveSection = setMobileSection
+  const isNewOpen = isMobileNewOpen
+  const setIsNewOpen = setIsMobileNewOpen
 
   // Automatically close overlays when route changes
-  const [prevPathname, setPrevPathname] = useState(pathname)
-  if (prevPathname !== pathname) {
-    setPrevPathname(pathname)
-    setActiveSection(null)
-    setIsNewOpen(false)
-  }
+  useEffect(() => {
+    setMobileSection(null)
+    setIsMobileNewOpen(false)
+  }, [pathname, setMobileSection, setIsMobileNewOpen])
 
   // Do not render bottom nav on /events (Events Board screens use dedicated full-screen layouts)
   if (pathname === '/events') {
@@ -72,26 +78,26 @@ export function MobileNav() {
   }
 
   const handleSignOut = async () => {
-    setActiveSection(null)
-    setIsNewOpen(false)
+    setMobileSection(null)
+    setIsMobileNewOpen(false)
     await signOut()
     router.replace('/login')
   }
 
   const navigateTo = (href: string) => {
-    setActiveSection(null)
-    setIsNewOpen(false)
+    setMobileSection(null)
+    setIsMobileNewOpen(false)
     router.push(href)
   }
 
   const toggleSection = (section: 'crm' | 'hrms' | 'erp' | 'profile') => {
-    setIsNewOpen(false)
-    setActiveSection(curr => (curr === section ? null : section))
+    setIsMobileNewOpen(false)
+    setMobileSection(mobileSection === section ? null : section)
   }
 
   const toggleNew = () => {
-    setActiveSection(null)
-    setIsNewOpen(curr => !curr)
+    setMobileSection(null)
+    setIsMobileNewOpen(!isMobileNewOpen)
   }
 
   // ─── ADMIN & MANAGER MOBILE NAVIGATION ─────────────────────────────────────
@@ -136,6 +142,9 @@ export function MobileNav() {
               display: 'flex',
               flexDirection: 'column',
               overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-y',
               animation: 'sectionMenuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
@@ -367,6 +376,9 @@ export function MobileNav() {
               animation: 'dockedDrawerSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
               maxHeight: '80vh',
               overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-y',
             }}
           >
             {/* Sheet Handle */}
@@ -1044,6 +1056,9 @@ export function MobileNav() {
             display: 'flex',
             flexDirection: 'column',
             overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y',
             animation: 'sectionMenuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >

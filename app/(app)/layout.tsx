@@ -9,12 +9,24 @@ import { MobileNav } from '@/components/layout/MobileNav'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { appUser, loading } = useAuthStore()
-  const { theme }            = useUIStore()
+  const { theme, mobileSection, isMobileNewOpen } = useUIStore()
   const router               = useRouter()
   const pathname             = usePathname()
   const [authTimedOut, setAuthTimedOut] = useState(false)
 
   const isFullBleed = pathname === '/events'
+  const isMobileOverlayOpen = Boolean(mobileSection || isMobileNewOpen)
+
+  // Lock body scroll on mobile when full-screen section overlay or quick actions sheet is open
+  useEffect(() => {
+    if (isMobileOverlayOpen && typeof window !== 'undefined' && window.innerWidth < 768) {
+      const prevBodyOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prevBodyOverflow
+      }
+    }
+  }, [isMobileOverlayOpen])
 
   // Safety fallback: if auth takes longer than 1.5s, drop out of loading state
   useEffect(() => {
@@ -93,7 +105,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         ) : (
           <main style={{
-            flex: 1, overflowY: 'auto', overflowX: 'hidden',
+            flex: 1,
+            overflowY: isMobileOverlayOpen ? 'hidden' : 'auto',
+            overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
             background: 'var(--color-background)',
             // Extra bottom padding on mobile for the bottom nav bar

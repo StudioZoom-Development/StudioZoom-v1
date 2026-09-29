@@ -38,26 +38,90 @@ function getInitials(name: string) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function getParentRoute(pathname: string): string | null {
+  // 1. Explicit subpage mappings
+  if (pathname === '/clients/new' || pathname === '/clients/drafts') return '/clients'
+  if (pathname === '/leads/new') return '/leads'
+  if (pathname === '/erp/expenses/new') return '/erp/expenses'
+  if (pathname === '/erp/quotations/new') return '/erp/quotations'
+  if (pathname === '/erp/equipment/checkout' || pathname === '/erp/equipment/held') return '/erp/equipment'
+  if (pathname === '/settings/users/new') return '/settings'
+  if (pathname === '/hrms/timelogs') return '/hrms/attendance'
+
+  // 2. Edit subpages
+  if (pathname.startsWith('/clients/') && pathname.endsWith('/edit')) {
+    return pathname.replace(/\/edit$/, '')
+  }
+  if (pathname.startsWith('/erp/expenses/edit/')) {
+    return '/erp/expenses'
+  }
+
+  // 3. Dynamic ID detail pages
+  if (pathname.startsWith('/clients/')) return '/clients'
+  if (pathname.startsWith('/leads/')) return '/leads'
+  if (pathname.startsWith('/erp/equipment/')) return '/erp/equipment'
+  if (pathname.startsWith('/hrms/staff/')) return '/hrms/staff'
+  if (pathname.startsWith('/hrms/freelancers/')) return '/hrms/freelancers'
+  if (pathname.startsWith('/hrms/salary/')) return '/hrms/salary'
+  if (pathname.startsWith('/hrms/payslips/')) return '/hrms/payslips'
+
+  return null
+}
+
+function getSectionForPath(pathname: string): 'crm' | 'hrms' | 'erp' | null {
+  if (pathname === '/dashboard' || pathname === '/' || pathname === '/events') return null
+  if (pathname.startsWith('/events') || pathname.startsWith('/clients') || pathname.startsWith('/leads')) {
+    return 'crm'
+  }
+  if (pathname.startsWith('/hrms')) {
+    return 'hrms'
+  }
+  if (pathname.startsWith('/erp')) {
+    return 'erp'
+  }
+  return null
+}
+
+const SECTION_TITLES: Record<string, string> = {
+  crm: 'CRM & Events',
+  hrms: 'HRMS & Workforce',
+  erp: 'ERP & Operations',
+  profile: 'Staff Profile',
+}
+
 export function TopBar() {
   const pathname = usePathname()
   const router   = useRouter()
   const appUser  = useAuthStore(s => s.appUser)
-  const { theme, toggleTheme, sidebarCollapsed, toggleSidebarCollapsed } = useUIStore()
+  const {
+    theme,
+    toggleTheme,
+    sidebarCollapsed,
+    toggleSidebarCollapsed,
+    mobileSection,
+    setMobileSection,
+  } = useUIStore()
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false)
 
   const role = appUser?.role ?? 'staff'
   const isAdminOrManager = role === 'admin' || role === 'manager'
 
+  // When a mobile section overlay is active, TopBar acts as the header for that section (with back button)
   const isHomePage =
-    pathname === '/dashboard' ||
-    pathname === '/' ||
-    (!isAdminOrManager && pathname === '/hrms/timeclock')
+    !mobileSection && (
+      pathname === '/dashboard' ||
+      pathname === '/' ||
+      (!isAdminOrManager && pathname === '/hrms/timeclock')
+    )
 
-  const title = PAGE_TITLES[pathname]
-    ?? Object.entries(PAGE_TITLES).find(([k]) => pathname.startsWith(k + '/'))?.[1]
-    ?? 'Studio Zoom'
+  const title = mobileSection
+    ? (SECTION_TITLES[mobileSection] ?? 'Studio Zoom')
+    : (PAGE_TITLES[pathname]
+        ?? Object.entries(PAGE_TITLES).find(([k]) => pathname.startsWith(k + '/'))?.[1]
+        ?? 'Studio Zoom')
 
   const handleBack = () => {
+    // 1. Settings drawer/tab back handling
     if (pathname === '/settings') {
       if (typeof window !== 'undefined' && window.location.search.includes('tab=')) {
         router.push('/settings')
@@ -68,10 +132,40 @@ export function TopBar() {
         return
       }
     }
+
+    // 2. If a mobile section overlay is open, back button closes it
+    if (mobileSection) {
+      setMobileSection(null)
+      return
+    }
+
+    // 3. Child/Detail page hierarchy — always return to the parent module
+    const parentRoute = getParentRoute(pathname)
+    if (parentRoute) {
+      router.push(parentRoute)
+      return
+    }
+
+    // 4. Module page hierarchy for Admin/Manager — return to section menu
+    if (isAdminOrManager) {
+      const section = getSectionForPath(pathname)
+      if (section) {
+        setMobileSection(section)
+        return
+      }
+    }
+
+    // 5. Staff users returning from inner staff modules
+    if (!isAdminOrManager) {
+      router.push('/hrms/timeclock')
+      return
+    }
+
+    // 6. Fallback to browser back or dashboard
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back()
     } else {
-      router.push(appUser?.role === 'staff' ? '/hrms/timeclock' : '/dashboard')
+      router.push('/dashboard')
     }
   }
 
