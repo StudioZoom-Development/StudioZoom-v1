@@ -1,6 +1,12 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+
+const emptySubscribe = () => () => {}
+function useMounted(): boolean {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false)
+}
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
@@ -333,10 +339,8 @@ function WorkItemSidePanel({
   isStaff = false,
 }: SidePanelProps) {
   const theme = useUIStore(s => s.theme)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useMounted()
+
 
   const [showReassign, setShowReassign] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -1206,10 +1210,8 @@ function CreateWorkModal({
   onWorkIdResolved,
 }: CreateModalProps) {
   const theme = useUIStore(s => s.theme)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useMounted()
+
 
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
@@ -1802,18 +1804,13 @@ export default function WorkBoardPage() {
   const [staff, setStaff]                           = useState<StaffMember[]>([])
   const [freelancers, setFreelancers]               = useState<Freelancer[]>([])
   const [assignments, setAssignments]               = useState<StaffAssignment[]>([])
-  const [showCreate, setShowCreate]                 = useState(false)
+  const [showCreate, setShowCreate]                 = useState(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('action') === 'new'
+  })
   const [createAssignee, setCreateAssignee]         = useState<{ id: string; isFreelancer: boolean } | undefined>()
   const [selectedPanelItem, setSelectedPanelItem]   = useState<WorkItem | null>(null)
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('action') === 'new') {
-        setShowCreate(true)
-      }
-    }
-  }, [])
 
   const effectiveStaff = useMemo<StaffMember[]>(() => {
     if (isStaff && appUser) {
@@ -4087,7 +4084,7 @@ export default function WorkBoardPage() {
             return (
               <button
                 key={qf.id}
-                onClick={() => setQuickFilter(qf.id as any)}
+                onClick={() => setQuickFilter(qf.id as typeof quickFilter)}
                 style={{
                   padding: '5px 12px',
                   borderRadius: '6px',

@@ -898,7 +898,7 @@ function TeamAttendanceView() {
             return (
               <button
                 key={f.id}
-                onClick={() => setStatusFilter(f.id as any)}
+                onClick={() => setStatusFilter(f.id as typeof statusFilter)}
                 style={{
                   flexShrink: 0,
                   padding: '6px 12px',

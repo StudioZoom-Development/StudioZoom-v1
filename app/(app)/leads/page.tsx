@@ -658,7 +658,7 @@ export default function LeadsPage() {
                       {lead.name}
                     </span>
                   </div>
-                  <Badge variant={lead.status as any} />
+                  <Badge variant={lead.status} />
                 </div>
 
                 {/* Metadata Row: Date, Type, Source */}
@@ -819,7 +819,7 @@ export default function LeadsPage() {
                 }}
               >
                 <i className="ti ti-check" style={{ fontSize: '14px', color: 'var(--color-success)' }} />
-                <span>You've viewed all {filteredLeads.length} leads</span>
+                <span>You&apos;ve viewed all {filteredLeads.length} leads</span>
               </div>
             )}
           </div>

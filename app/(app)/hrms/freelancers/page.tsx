@@ -52,7 +52,10 @@ export default function FreelancersListPage() {
   const [skillFilter, setSkillFilter] = useState('all')
 
   // Modal State
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('action') === 'new'
+  })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [formData, setFormData] = useState<{
@@ -77,16 +80,6 @@ export default function FreelancersListPage() {
     })
     return () => unsub()
   }, [testDatasetMode, testModeCutoff])
-
-  // Support ?action=new query param from quick create actions
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('action') === 'new') {
-        setShowAddModal(true)
-      }
-    }
-  }, [])
 
   // Load payouts to derive lastEngaged dates
   useEffect(() => {

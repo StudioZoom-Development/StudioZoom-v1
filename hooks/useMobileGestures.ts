@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, type TouchEvent } from 'react'
+import { useState, useRef, useCallback, type TouchEvent } from 'react'
 import { useRouter } from 'next/navigation'
 
 /**
@@ -87,19 +87,11 @@ export function useBackSwipe(onBack?: () => void) {
     onTouchEnd: handleTouchEnd,
   }
 
-  // Expose handlers at top-level AND nested under backSwipeHandlers as non-enumerable so spreading result never passes backSwipeHandlers to DOM
-  const result = {
+  return {
     ...handlers,
-  }
-
-  Object.defineProperty(result, 'backSwipeHandlers', { value: handlers, enumerable: false, configurable: true })
-  Object.defineProperty(result, 'isSwiping', { value: isSwiping, enumerable: false, configurable: true })
-  Object.defineProperty(result, 'dragProgress', { value: dragProgress, enumerable: false, configurable: true })
-
-  return result as typeof handlers & {
-    backSwipeHandlers: typeof handlers
-    isSwiping: boolean
-    dragProgress: number
+    backSwipeHandlers: handlers,
+    isSwiping,
+    dragProgress,
   }
 }
 

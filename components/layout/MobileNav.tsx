@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
@@ -53,21 +53,23 @@ export function MobileNav() {
   const { theme, toggleTheme } = useUIStore()
   const role     = appUser?.role ?? 'staff'
 
-  // Do not render bottom nav on /events (Events Board screens use dedicated full-screen layouts)
-  if (pathname === '/events') {
-    return null
-  }
-
   // activeSection: 'crm' | 'hrms' | 'erp' | 'profile' -> full-screen section overlay
   // isNewOpen: true -> bottom action sheet
   const [activeSection, setActiveSection] = useState<'crm' | 'hrms' | 'erp' | 'profile' | null>(null)
   const [isNewOpen, setIsNewOpen]         = useState(false)
 
   // Automatically close overlays when route changes
-  useEffect(() => {
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
     setActiveSection(null)
     setIsNewOpen(false)
-  }, [pathname])
+  }
+
+  // Do not render bottom nav on /events (Events Board screens use dedicated full-screen layouts)
+  if (pathname === '/events') {
+    return null
+  }
 
   const handleSignOut = async () => {
     setActiveSection(null)
