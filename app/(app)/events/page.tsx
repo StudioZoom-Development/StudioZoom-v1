@@ -8073,6 +8073,7 @@ function EventsBoardContent() {
                         ) : (
                           sec.items.map(group => {
                             const primary = group.primaryProject
+                            const isContractExpanded = Boolean(expandedContracts[group.id])
                             return (
                               <div
                                 key={group.id}
@@ -8167,8 +8168,99 @@ function EventsBoardContent() {
                                       </span>
                                     )}
                                   </div>
-                                  <i className="ti ti-chevron-right" style={{ fontSize: '14px', color: 'var(--color-foreground-subtle)' }} />
+
+                                  {/* Recurring Sessions Dropdown Accordion Toggle Button */}
+                                  {group.isRecurring && group.sessions.length > 1 ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setExpandedContracts(prev => ({
+                                          ...prev,
+                                          [group.id]: !prev[group.id],
+                                        }))
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        padding: '4px 6px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        color: 'var(--color-purple)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        touchAction: 'manipulation',
+                                      }}
+                                    >
+                                      <i className={`ti ti-chevron-${isContractExpanded ? 'down' : 'right'}`} style={{ fontSize: '11px' }} />
+                                      <span>{group.sessions.length} Sessions</span>
+                                    </button>
+                                  ) : (
+                                    <i className="ti ti-chevron-right" style={{ fontSize: '14px', color: 'var(--color-foreground-subtle)' }} />
+                                  )}
                                 </div>
+
+                                {/* Expanded Child Sessions */}
+                                {group.isRecurring && isContractExpanded && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      marginTop: '4px',
+                                      paddingTop: '8px',
+                                      borderTop: '0.5px solid var(--color-border)',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '5px',
+                                    }}
+                                  >
+                                    {group.sessions.map(s => {
+                                      const isThisSessSelected = s.projectId === selectedProject?.projectId
+                                      const sessOverdue = isProjectOverdue(s, now)
+
+                                      return (
+                                        <div
+                                          key={s.projectId}
+                                          onClick={() => handleSelectProject(s.projectId)}
+                                          style={{
+                                            padding: '8px 10px',
+                                            borderRadius: '8px',
+                                            background: isThisSessSelected ? 'var(--color-purple-muted)' : 'var(--color-surface-raised)',
+                                            border: `0.5px solid ${isThisSessSelected ? 'var(--color-purple)' : 'var(--color-border)'}`,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            cursor: 'pointer',
+                                            gap: '8px',
+                                            transition: 'all 0.1s ease',
+                                          }}
+                                        >
+                                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                              <span style={{
+                                                fontSize: '12px',
+                                                fontWeight: isThisSessSelected ? 700 : 500,
+                                                color: isThisSessSelected ? 'var(--color-purple)' : 'var(--color-foreground)',
+                                                whiteSpace: 'nowrap',
+                                              }}>
+                                                Session {s.sessionIndex || 1}
+                                              </span>
+                                              {sessOverdue && (
+                                                <i className="ti ti-alert-triangle" style={{ fontSize: '11px', color: 'var(--color-danger)' }} />
+                                              )}
+                                            </div>
+                                            <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                                              {formatShortDate(s.eventDate)} {s.startTime ? `· ${s.startTime}` : ''}
+                                            </span>
+                                          </div>
+                                          <Badge variant={s.stage} />
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             )
                           })
