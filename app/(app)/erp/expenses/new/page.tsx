@@ -20,6 +20,7 @@ const CATEGORY_OPTIONS: Array<{ label: string; value: ExpenseCategory }> = [
   { label: 'Utilities',     value: 'utilities' },
   { label: 'Props & sets',  value: 'propsSets' },
   { label: 'Marketing',     value: 'marketing' },
+  { label: 'Salaries',      value: 'salaries' },
   { label: 'Misc',          value: 'misc' },
 ]
 
@@ -43,7 +44,9 @@ export default function AddExpensePage() {
   const [method, setMethod] = useState<string>('GPay')
   const [vendor, setVendor] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [description, setDescription] = useState<string>('')
   const [note, setNote] = useState<string>('')
+  const [generatedCode] = useState<string>(() => `EXP-${Math.floor(1000 + Math.random() * 9000)}`)
 
   const [clients, setClients] = useState<Client[]>([])
   const [saving, setSaving] = useState(false)
@@ -135,14 +138,17 @@ export default function AddExpensePage() {
       const parsedDate = dateStr ? new Date(`${dateStr}T12:00:00`) : new Date()
 
       await createExpense({
+        code: generatedCode,
         date: parsedDate,
         category,
         amount: numAmount,
         method,
         vendor: vendor.trim(),
+        description: description.trim() || note.trim(),
         note: note.trim(),
         projectId: selectedProjectId || undefined,
         projectName: chosenProjectName || undefined,
+        source: category === 'salaries' ? 'salary' : category === 'freelancer' ? 'freelancerPayout' : 'manual',
         createdBy: 'admin',
       })
 
@@ -157,7 +163,7 @@ export default function AddExpensePage() {
   return (
     <div
       style={{
-        maxWidth: '560px',
+        maxWidth: '580px',
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
@@ -165,29 +171,47 @@ export default function AddExpensePage() {
         padding: '8px 0 32px',
       }}
     >
-      {/* Header with Back Arrow */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button
-          type="button"
-          onClick={() => router.push('/erp/expenses')}
+      {/* Header with Back Arrow & Serial Badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => router.push('/erp/expenses')}
+            style={{
+              cursor: 'pointer',
+              color: 'var(--color-foreground-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              background: 'none',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '6px',
+              transition: 'color 0.15s ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-foreground)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-muted)')}
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
+          </button>
+          <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em' }}>
+            Add expense
+          </div>
+        </div>
+
+        {/* Assigned Serial Number Preview */}
+        <div
           style={{
-            cursor: 'pointer',
-            color: 'var(--color-foreground-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            background: 'none',
-            border: 'none',
-            padding: '4px',
+            fontFamily: 'monospace',
+            fontWeight: 700,
+            fontSize: 'var(--text-xs)',
+            background: 'var(--color-surface-raised)',
+            border: '0.5px solid var(--color-border)',
+            padding: '4px 10px',
             borderRadius: '6px',
-            transition: 'color 0.15s ease',
+            color: 'var(--color-foreground)',
           }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-foreground)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-muted)')}
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
-        </button>
-        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em' }}>
-          Add expense
+          Serial: #{generatedCode}
         </div>
       </div>
 
@@ -222,7 +246,8 @@ export default function AddExpensePage() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        {/* Responsive Grid: 1 col on mobile (<768px), 2 cols on desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Date */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
@@ -311,7 +336,7 @@ export default function AddExpensePage() {
             </label>
             <Input
               type="text"
-              placeholder="Vendor name"
+              placeholder="Vendor or payee name"
               value={vendor}
               onChange={e => setVendor(e.target.value)}
             />
@@ -351,14 +376,27 @@ export default function AddExpensePage() {
           </div>
         </div>
 
+        {/* Description */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
+            Description
+          </label>
+          <Input
+            type="text"
+            placeholder="Expense title or description"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
+        </div>
+
         {/* Note */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
-            Note
+            Notes & Details
           </label>
           <textarea
             rows={2}
-            placeholder="What was this for?"
+            placeholder="Additional notes or payment breakdown..."
             value={note}
             onChange={e => setNote(e.target.value)}
             style={{
@@ -374,6 +412,27 @@ export default function AddExpensePage() {
             }}
           />
         </div>
+
+        {/* Notice for salaries and payouts */}
+        {(category === 'salaries' || category === 'freelancer') && (
+          <div
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-purple)',
+              background: 'var(--color-purple-muted)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <i className="ti ti-bolt" />
+            <span>
+              This payout will be permanently linked and recorded with serial number <b>#{generatedCode}</b> in all reports.
+            </span>
+          </div>
+        )}
 
         {/* Buttons */}
         <div

@@ -21,6 +21,7 @@ const CATEGORY_OPTIONS: Array<{ label: string; value: ExpenseCategory }> = [
   { label: 'Utilities',     value: 'utilities' },
   { label: 'Props & sets',  value: 'propsSets' },
   { label: 'Marketing',     value: 'marketing' },
+  { label: 'Salaries',      value: 'salaries' },
   { label: 'Misc',          value: 'misc' },
 ]
 
@@ -44,12 +45,14 @@ export default function EditExpensePage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
+  const [code, setCode] = useState<string>('')
   const [dateStr, setDateStr] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'))
   const [category, setCategory] = useState<ExpenseCategory>('equipment')
   const [amountStr, setAmountStr] = useState<string>('')
   const [method, setMethod] = useState<string>('GPay')
   const [vendor, setVendor] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [description, setDescription] = useState<string>('')
   const [note, setNote] = useState<string>('')
 
   const [clients, setClients] = useState<Client[]>([])
@@ -99,13 +102,15 @@ export default function EditExpensePage() {
         if (!exp) {
           setNotFound(true)
         } else {
+          setCode(exp.code || `EXP-${exp.expenseId.slice(-4).toUpperCase()}`)
           setDateStr(format(exp.date, 'yyyy-MM-dd'))
           setCategory(exp.category || 'misc')
           setAmountStr(String(exp.amount || ''))
           setMethod(exp.method || 'GPay')
           setVendor(exp.vendor || '')
           setSelectedProjectId(exp.projectId || '')
-          setNote(exp.description || exp.note || '')
+          setDescription(exp.description || '')
+          setNote(exp.note || '')
         }
       })
       .catch(err => {
@@ -221,6 +226,7 @@ export default function EditExpensePage() {
         amount: numAmount,
         method,
         vendor: vendor.trim(),
+        description: description.trim() || note.trim(),
         note: note.trim(),
         projectId: selectedProjectId || '',
         projectName: chosenProjectName || '',
@@ -237,7 +243,7 @@ export default function EditExpensePage() {
   return (
     <div
       style={{
-        maxWidth: '560px',
+        maxWidth: '580px',
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
@@ -245,30 +251,50 @@ export default function EditExpensePage() {
         padding: '8px 0 32px',
       }}
     >
-      {/* Header with Back Arrow */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button
-          type="button"
-          onClick={() => router.push('/erp/expenses')}
-          style={{
-            cursor: 'pointer',
-            color: 'var(--color-foreground-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            background: 'none',
-            border: 'none',
-            padding: '4px',
-            borderRadius: '6px',
-            transition: 'color 0.15s ease',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-foreground)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-muted)')}
-        >
-          <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
-        </button>
-        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em' }}>
-          Edit expense
+      {/* Header with Back Arrow & Serial Badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => router.push('/erp/expenses')}
+            style={{
+              cursor: 'pointer',
+              color: 'var(--color-foreground-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              background: 'none',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '6px',
+              transition: 'color 0.15s ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-foreground)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-foreground-muted)')}
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
+          </button>
+          <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, letterSpacing: '-0.02em' }}>
+            Edit expense
+          </div>
         </div>
+
+        {/* Expense Serial Number Badge */}
+        {code && (
+          <div
+            style={{
+              fontFamily: 'monospace',
+              fontWeight: 700,
+              fontSize: 'var(--text-xs)',
+              background: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border)',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Serial: #{code}
+          </div>
+        )}
       </div>
 
       {/* Form Card */}
@@ -302,7 +328,8 @@ export default function EditExpensePage() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        {/* Responsive Grid: 1 col on mobile (<768px), 2 cols on desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Date */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
@@ -391,7 +418,7 @@ export default function EditExpensePage() {
             </label>
             <Input
               type="text"
-              placeholder="Vendor name"
+              placeholder="Vendor or payee name"
               value={vendor}
               onChange={e => setVendor(e.target.value)}
             />
@@ -431,14 +458,27 @@ export default function EditExpensePage() {
           </div>
         </div>
 
+        {/* Description */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
+            Description
+          </label>
+          <Input
+            type="text"
+            placeholder="Expense title or description"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
+        </div>
+
         {/* Note */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
-            Note
+            Notes & Details
           </label>
           <textarea
             rows={2}
-            placeholder="What was this for?"
+            placeholder="Additional notes or payment breakdown..."
             value={note}
             onChange={e => setNote(e.target.value)}
             style={{
@@ -454,6 +494,27 @@ export default function EditExpensePage() {
             }}
           />
         </div>
+
+        {/* Notice for salaries and payouts */}
+        {(category === 'salaries' || category === 'freelancer') && (
+          <div
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-purple)',
+              background: 'var(--color-purple-muted)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <i className="ti ti-bolt" />
+            <span>
+              This payout is tracked under serial number <b>#{code || 'EXP-AUTO'}</b> in all reports.
+            </span>
+          </div>
+        )}
 
         {/* Buttons */}
         <div

@@ -130,6 +130,7 @@ export async function getStaffSalaryRecord(
  */
 export async function saveSalaryAdvances(params: {
   staffUid: string
+  staffName?: string
   year: number
   month: number
   baseSalary?: number
@@ -137,7 +138,7 @@ export async function saveSalaryAdvances(params: {
   advance2?: SalaryAdvanceEntry
   advance3?: SalaryAdvanceEntry
 }): Promise<void> {
-  const { staffUid, year, month, baseSalary, advance1, advance2, advance3 } =
+  const { staffUid, staffName, year, month, baseSalary, advance1, advance2, advance3 } =
     params
   const docId = `${staffUid}_${year}_${month}`
   const docRef = doc(db, 'salaries', docId)
@@ -193,4 +194,88 @@ export async function saveSalaryAdvances(params: {
   }
 
   await setDoc(docRef, payload, { merge: true })
+
+  // Auto-sync advances to /expenses collection with unique EXP serial numbers
+  const monthNames = [
+    '',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ]
+
+  const advances = [
+    { entry: advance1, idx: 1 },
+    { entry: advance2, idx: 2 },
+    { entry: advance3, idx: 3 },
+  ]
+
+  const displayName = staffName?.trim() || 'Staff Member'
+  const monthLabel = monthNames[month] || `Month ${month}`
+
+  for (const { entry, idx } of advances) {
+    const expId = `exp_salary_adv_${staffUid}_${year}_${month}_${idx}`
+    const expRef = doc(db, 'expenses', expId)
+
+    if (entry && entry.amount > 0) {
+      const advDateStr = entry.date || fallbackDate
+      const parsedDate = new Date(`${advDateStr}T12:00:00`)
+
+      const existingSnap = await getDoc(expRef)
+      let code = `EXP-${Math.floor(1000 + Math.random() * 9000)}`
+      let existingCreatedAt = serverTimestamp()
+
+      if (existingSnap.exists()) {
+        const d = existingSnap.data()
+        if (typeof d.code === 'string' && d.code.trim()) {
+          code = d.code.trim()
+        }
+        if (d.createdAt) {
+          existingCreatedAt = d.createdAt
+        }
+      }
+
+      await setDoc(
+        expRef,
+        {
+          expenseId: expId,
+          code,
+          date: Timestamp.fromDate(parsedDate),
+          category: 'salaries',
+          amount: Number(entry.amount),
+          method: 'Bank Transfer',
+          vendor: displayName,
+          source: 'salary',
+          note: `Salary advance: ${displayName} · ${monthLabel} ${year} (Advance ${idx})`,
+          description: `[${code}] Salary advance: ${displayName} · Advance ${idx}`,
+          createdBy: 'admin',
+          createdAt: existingCreatedAt,
+          updatedAt: serverTimestamp(),
+          isDeleted: false,
+        },
+        { merge: true }
+      )
+    } else {
+      // If advance was cleared/removed, soft-delete the expense document
+      const existingSnap = await getDoc(expRef)
+      if (existingSnap.exists() && !existingSnap.data().isDeleted) {
+        await setDoc(
+          expRef,
+          {
+            isDeleted: true,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+      }
+    }
+  }
 }

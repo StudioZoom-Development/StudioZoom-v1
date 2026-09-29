@@ -17,10 +17,13 @@ export interface CreateExpenseInput {
   category: ExpenseCategory
   amount: number
   method: string
+  code?: string
   vendor?: string
   note?: string
+  description?: string
   projectId?: string
   projectName?: string
+  source?: string
   createdBy?: string
 }
 
@@ -45,11 +48,24 @@ function parseDate(val: unknown, fallback: Date = new Date()): Date {
   return !isNaN(parsed.getTime()) ? parsed : fallback
 }
 
-function mapDocToExpense(id: string, data: Record<string, unknown>): Expense {
+function mapDocToExpense(
+  id: string,
+  data: Record<string, unknown>,
+  hasPendingWrites: boolean = false
+): Expense {
+  const codeVal = typeof data.code === 'string' && data.code.trim()
+    ? data.code.trim()
+    : `EXP-${id.slice(-4).toUpperCase()}`
+
+  const expDate = parseDate(data.date)
+  // If pending local write, fallback is current time (just created).
+  // Otherwise for existing records without createdAt, fallback to expDate.
+  const fallbackCreated = hasPendingWrites ? new Date() : expDate
+
   return {
     expenseId:   id,
-    code:        typeof data.code === 'string' ? data.code : undefined,
-    date:        parseDate(data.date),
+    code:        codeVal,
+    date:        expDate,
     category:    (data.category as ExpenseCategory) || 'misc',
     amount:      Number(data.amount) || 0,
     method:      String(data.method || 'GPay'),
@@ -60,7 +76,7 @@ function mapDocToExpense(id: string, data: Record<string, unknown>): Expense {
     projectName: typeof data.projectName === 'string' ? data.projectName : undefined,
     source:      typeof data.source === 'string' ? data.source : 'manual',
     createdBy:   typeof data.createdBy === 'string' ? data.createdBy : 'admin',
-    createdAt:   parseDate(data.createdAt),
+    createdAt:   parseDate(data.createdAt, fallbackCreated),
     isDeleted:   Boolean(data.isDeleted),
   }
 }
@@ -77,12 +93,18 @@ export function subscribeToExpenses(
 
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     snap => {
       const list: Expense[] = snap.docs
-        .map(d => mapDocToExpense(d.id, d.data() as Record<string, unknown>))
+        .map(d => mapDocToExpense(d.id, d.data() as Record<string, unknown>, d.metadata.hasPendingWrites))
         .filter(e => !e.isDeleted)
-        // Sort descending by date
-        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        // Sort descending: newest created first (createdAt descending), tie-breaking by transaction date
+        .sort((a, b) => {
+          const timeA = a.createdAt instanceof Date && !isNaN(a.createdAt.getTime()) ? a.createdAt.getTime() : a.date.getTime()
+          const timeB = b.createdAt instanceof Date && !isNaN(b.createdAt.getTime()) ? b.createdAt.getTime() : b.date.getTime()
+          if (timeB !== timeA) return timeB - timeA
+          return b.date.getTime() - a.date.getTime()
+        })
 
       callback(list)
     },
@@ -99,7 +121,7 @@ export function subscribeToExpenses(
 export async function createExpense(data: CreateExpenseInput): Promise<string> {
   const expenseDocRef = doc(collection(db, 'expenses'))
   const expenseId = expenseDocRef.id
-  const readableExpCode = `EXP-${Math.floor(1000 + Math.random() * 9000)}`
+  const readableExpCode = data.code?.trim() || `EXP-${Math.floor(1000 + Math.random() * 9000)}`
 
   await setDoc(expenseDocRef, {
     expenseId,
@@ -110,10 +132,10 @@ export async function createExpense(data: CreateExpenseInput): Promise<string> {
     method: data.method,
     vendor: data.vendor || '',
     note: data.note || '',
-    description: data.note || '',
+    description: data.description || data.note || '',
     projectId: data.projectId || '',
     projectName: data.projectName || '',
-    source: 'manual',
+    source: data.source || 'manual',
     createdBy: data.createdBy || 'admin',
     createdAt: serverTimestamp(),
     isDeleted: false,
@@ -161,9 +183,14 @@ export async function updateExpense(
   if (data.amount !== undefined) payload.amount = Number(data.amount) || 0
   if (data.method !== undefined) payload.method = data.method
   if (data.vendor !== undefined) payload.vendor = data.vendor
+  if (data.code !== undefined) payload.code = data.code
+  if (data.source !== undefined) payload.source = data.source
+  if (data.description !== undefined) payload.description = data.description
   if (data.note !== undefined) {
     payload.note = data.note
-    payload.description = data.note
+    if (data.description === undefined) {
+      payload.description = data.note
+    }
   }
   if (data.projectId !== undefined) payload.projectId = data.projectId
   if (data.projectName !== undefined) payload.projectName = data.projectName

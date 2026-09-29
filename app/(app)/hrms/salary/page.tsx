@@ -334,6 +334,7 @@ export default function SalaryPage() {
 
       await saveSalaryAdvances({
         staffUid: activeStaffRow.staffUid,
+        staffName: activeStaffRow.staffName,
         year,
         month,
         baseSalary: activeBaseSalary,
