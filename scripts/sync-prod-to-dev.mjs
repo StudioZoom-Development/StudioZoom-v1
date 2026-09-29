@@ -92,20 +92,16 @@ async function sync() {
   console.log('Mode: studioSettings → Clean Overwrite (Option A)')
   console.log('Mode: users & all other collections → Merge / Upsert (Option B)\n')
 
-  // 1. Sync studioSettings (Option A: Clean Overwrite)
-  console.log('📦 Syncing [studioSettings] (Option A - Overwrite)...')
+  // 1. Sync studioSettings (Safe Merge)
+  console.log('📦 Syncing [studioSettings] (Safe Merge)...')
   try {
-    const devSettingsSnap = await getDocs(collection(devDb, 'studioSettings'))
-    for (const d of devSettingsSnap.docs) {
-      await deleteDoc(doc(devDb, 'studioSettings', d.id))
-    }
     const prodSettingsSnap = await getDocs(collection(prodDb, 'studioSettings'))
     let settingsCount = 0
     for (const d of prodSettingsSnap.docs) {
-      await setDoc(doc(devDb, 'studioSettings', d.id), d.data())
+      await setDoc(doc(devDb, 'studioSettings', d.id), d.data(), { merge: true })
       settingsCount++
     }
-    console.log(`✓ studioSettings synced (${settingsCount} documents copied).`)
+    console.log(`✓ studioSettings synced (${settingsCount} documents merged).`)
   } catch (err) {
     console.warn(`⚠️ Warning syncing studioSettings: ${err.message}`)
   }

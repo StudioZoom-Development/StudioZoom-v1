@@ -34,7 +34,7 @@ const HRMS_SECTIONS: NavSectionOption[] = [
 ]
 
 const ERP_SECTIONS: NavSectionOption[] = [
-  { href: '/erp/equipment',  icon: 'ti-camera',    label: 'Equipment Inventory', description: 'Cameras, lenses, lighting & gear custody', roles: ['admin', 'manager'] },
+  { href: '/erp/equipment',  icon: 'ti-camera',    label: 'Equipment Inventory', description: 'Cameras, lenses, lighting & gear custody', roles: ['admin', 'manager', 'staff'] },
   { href: '/erp/quotations', icon: 'ti-file-text', label: 'Quotations',          description: 'Estimates, package pricing & client proposals', roles: ['admin', 'manager'] },
   { href: '/erp/invoices',   icon: 'ti-receipt',   label: 'Invoices',            description: 'GST tax invoices, billing & payments', roles: ['admin'] },
   { href: '/erp/expenses',   icon: 'ti-wallet',    label: 'Expenses',            description: 'Production costs, petty cash & travel', roles: ['admin'] },
@@ -87,6 +87,9 @@ export function MobileNav() {
   const navigateTo = (href: string) => {
     setMobileSection(null)
     setIsMobileNewOpen(false)
+    if (href === '/erp/equipment?action=new') {
+      window.dispatchEvent(new CustomEvent('studio-open-equipment-add'))
+    }
     router.push(href)
   }
 
@@ -848,6 +851,114 @@ export function MobileNav() {
                   </div>
                 </div>
               </button>
+
+              {/* 5. New Equipment */}
+              <button
+                id="mobile-new-equipment"
+                type="button"
+                onClick={() => navigateTo('/erp/equipment?action=new')}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  padding: '12px 14px',
+                  borderRadius: '14px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'var(--color-primary-muted)',
+                      color: 'var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <i className="ti ti-camera" style={{ fontSize: '18px' }} />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: 'var(--color-primary)',
+                    }}
+                  >
+                    GEAR
+                  </span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                    New Equipment
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                    Add camera, lens or gear
+                  </div>
+                </div>
+              </button>
+
+              {/* 6. New Expense */}
+              <button
+                id="mobile-new-expense"
+                type="button"
+                onClick={() => navigateTo('/erp/expenses/new')}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  padding: '12px 14px',
+                  borderRadius: '14px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'var(--color-danger-muted)',
+                      color: 'var(--color-danger)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <i className="ti ti-wallet" style={{ fontSize: '18px' }} />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: 'var(--color-danger)',
+                    }}
+                  >
+                    EXPENSE
+                  </span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                    New Expense
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                    Log studio or shoot cost
+                  </div>
+                </div>
+              </button>
             </div>
 
             {/* Footer Hint */}
@@ -1038,6 +1149,7 @@ export function MobileNav() {
   const isClockActive      = pathname === '/hrms/timeclock'
   const isAttendanceActive = pathname === '/hrms/attendance'
   const isWorkActive       = pathname === '/events/work-board'
+  const isEquipmentActive  = pathname.startsWith('/erp/equipment')
   const isPayslipsActive   = pathname === '/hrms/payslips'
 
   return (
@@ -1100,7 +1212,7 @@ export function MobileNav() {
                   marginTop: '2px',
                 }}
               >
-                Staff Profile
+                Staff Account
               </div>
             </div>
             <button
@@ -1204,6 +1316,90 @@ export function MobileNav() {
                 Staff
               </span>
             </div>
+
+            {/* My Payslips link in drawer */}
+            <button
+              type="button"
+              onClick={() => navigateTo('/hrms/payslips')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '14px',
+                background: isPayslipsActive ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                border: `0.5px solid ${isPayslipsActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                color: isPayslipsActive ? 'var(--color-primary)' : 'var(--color-foreground)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'var(--color-surface)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  border: '0.5px solid var(--color-border)',
+                }}
+              >
+                <i className="ti ti-file-invoice" style={{ fontSize: '18px' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>My Payslips</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  View salary slips & monthly payouts
+                </div>
+              </div>
+              <i className="ti ti-chevron-right" style={{ fontSize: '16px', color: 'var(--color-foreground-muted)' }} />
+            </button>
+
+            {/* Equipment Inventory link in drawer */}
+            <button
+              type="button"
+              onClick={() => navigateTo('/erp/equipment')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '14px',
+                background: isEquipmentActive ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                border: `0.5px solid ${isEquipmentActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                color: isEquipmentActive ? 'var(--color-primary)' : 'var(--color-foreground)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'var(--color-surface)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  border: '0.5px solid var(--color-border)',
+                }}
+              >
+                <i className="ti ti-camera" style={{ fontSize: '18px' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Equipment Inventory</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  Check in & check out studio gear
+                </div>
+              </div>
+              <i className="ti ti-chevron-right" style={{ fontSize: '16px', color: 'var(--color-foreground-muted)' }} />
+            </button>
 
             {/* Theme Switcher */}
             <button
@@ -1344,7 +1540,57 @@ export function MobileNav() {
           <span style={{ fontSize: '0.62rem', fontWeight: isClockActive && !activeSection ? 700 : 600 }}>Clock</span>
         </Link>
 
-        {/* 2. My Attendance */}
+        {/* 2. Work Board */}
+        <Link
+          id="mobile-staff-work"
+          href="/events/work-board"
+          onClick={() => setActiveSection(null)}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '2px',
+            height: '100%',
+            textDecoration: 'none',
+            cursor: 'pointer',
+            color: isWorkActive && !activeSection ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+            transition: 'color 0.15s ease',
+          }}
+        >
+          <i className="ti ti-layout-kanban" style={{ fontSize: '20px' }} />
+          <span style={{ fontSize: '0.62rem', fontWeight: isWorkActive && !activeSection ? 700 : 600 }}>
+            Work
+          </span>
+        </Link>
+
+        {/* 3. Equipment Inventory & Custody */}
+        <Link
+          id="mobile-staff-equipment"
+          href="/erp/equipment"
+          onClick={() => setActiveSection(null)}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '2px',
+            height: '100%',
+            textDecoration: 'none',
+            cursor: 'pointer',
+            color: isEquipmentActive && !activeSection ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+            transition: 'color 0.15s ease',
+          }}
+        >
+          <i className="ti ti-camera" style={{ fontSize: '20px' }} />
+          <span style={{ fontSize: '0.62rem', fontWeight: isEquipmentActive && !activeSection ? 700 : 600 }}>
+            Gear
+          </span>
+        </Link>
+
+        {/* 4. My Attendance */}
         <Link
           id="mobile-staff-attendance"
           href="/hrms/attendance"
@@ -1366,56 +1612,6 @@ export function MobileNav() {
           <i className="ti ti-checklist" style={{ fontSize: '20px' }} />
           <span style={{ fontSize: '0.62rem', fontWeight: isAttendanceActive && !activeSection ? 700 : 600 }}>
             Attendance
-          </span>
-        </Link>
-
-        {/* 3. Work Board */}
-        <Link
-          id="mobile-staff-work"
-          href="/events/work-board"
-          onClick={() => setActiveSection(null)}
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '2px',
-            height: '100%',
-            textDecoration: 'none',
-            cursor: 'pointer',
-            color: isWorkActive && !activeSection ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
-            transition: 'color 0.15s ease',
-          }}
-        >
-          <i className="ti ti-layout-kanban" style={{ fontSize: '20px' }} />
-          <span style={{ fontSize: '0.62rem', fontWeight: isWorkActive && !activeSection ? 700 : 600 }}>
-            Work Board
-          </span>
-        </Link>
-
-        {/* 4. Payslips */}
-        <Link
-          id="mobile-staff-payslips"
-          href="/hrms/payslips"
-          onClick={() => setActiveSection(null)}
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '2px',
-            height: '100%',
-            textDecoration: 'none',
-            cursor: 'pointer',
-            color: isPayslipsActive && !activeSection ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
-            transition: 'color 0.15s ease',
-          }}
-        >
-          <i className="ti ti-file-invoice" style={{ fontSize: '20px' }} />
-          <span style={{ fontSize: '0.62rem', fontWeight: isPayslipsActive && !activeSection ? 700 : 600 }}>
-            Payslips
           </span>
         </Link>
 
