@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import type { Equipment, EquipmentCondition, Checkout, Project } from '@/types'
 import {
@@ -22,16 +22,15 @@ export default function EquipmentCheckoutPage() {
   const isStaff = appUser?.role === 'staff'
 
   // Mode: 'checkout' | 'checkin'
-  const [activeTab, setActiveTab] = useState<'checkout' | 'checkin'>('checkout')
-
-  useEffect(() => {
+  const [activeTab, setActiveTab] = useState<'checkout' | 'checkin'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('tab') === 'checkin') {
-        setActiveTab('checkin')
+        return 'checkin'
       }
     }
-  }, [])
+    return 'checkout'
+  })
 
   // Real-time data
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
@@ -74,16 +73,8 @@ export default function EquipmentCheckoutPage() {
   // ─── CHECKOUT FORM STATE ────────────────────────────────────────────────
   const [selectedGearIds, setSelectedGearIds] = useState<string[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
-  const [selectedStaffUid, setSelectedStaffUid] = useState<string>(() => {
-    return isStaff && appUser?.uid ? appUser.uid : ''
-  })
-
-  // Auto-lock selected staff member to current staff user
-  useEffect(() => {
-    if (isStaff && appUser?.uid && selectedStaffUid !== appUser.uid) {
-      setSelectedStaffUid(appUser.uid)
-    }
-  }, [isStaff, appUser?.uid, selectedStaffUid])
+  const [selectedStaffUid, setSelectedStaffUid] = useState<string>('')
+  const effectiveStaffUid = isStaff ? (appUser?.uid || '') : selectedStaffUid
 
   const [dueBackDateStr, setDueBackDateStr] = useState<string>(() => {
     const tomorrow = new Date()
@@ -127,10 +118,6 @@ export default function EquipmentCheckoutPage() {
   const [gearPage, setGearPage] = useState<number>(1)
   const [gearPageSize, setGearPageSize] = useState<number>(15)
 
-  useEffect(() => {
-    setGearPage(1)
-  }, [gearSearch, gearCategory])
-
   const totalGearPages = Math.max(1, Math.ceil(filteredAvailableGear.length / gearPageSize))
   const safeGearPage = Math.min(Math.max(1, gearPage), totalGearPages)
   const paginatedAvailableGear = useMemo(() => {
@@ -162,7 +149,7 @@ export default function EquipmentCheckoutPage() {
       setCheckoutError('Please assign an event / shoot')
       return
     }
-    if (!selectedStaffUid) {
+    if (!effectiveStaffUid) {
       setCheckoutError('Please assign a staff member / photographer')
       return
     }
@@ -172,9 +159,9 @@ export default function EquipmentCheckoutPage() {
     }
 
     const proj = projects.find((p) => p.projectId === selectedProjectId)
-    const staff = staffList.find((s) => s.uid === selectedStaffUid)
+    const staff = staffList.find((s) => s.uid === effectiveStaffUid)
     const targetStaffName = isStaff ? (appUser?.name || staff?.name || 'Staff Member') : (staff?.name || 'Staff Member')
-    const targetStaffUid = isStaff ? (appUser?.uid || selectedStaffUid) : selectedStaffUid
+    const targetStaffUid = effectiveStaffUid
 
     try {
       setCheckoutSubmitting(true)
@@ -219,22 +206,25 @@ export default function EquipmentCheckoutPage() {
   const [checkinSearch, setCheckinSearch] = useState('')
 
   // Helper: check if a checkout record belongs to current staff user
-  const isCheckoutForUser = (c: Checkout) => {
-    if (!isStaff || !appUser) return true
-    const matchesUid = Boolean(appUser.uid && c.staffUid === appUser.uid)
-    const matchesName = Boolean(
-      appUser.name &&
-      c.staffName &&
-      c.staffName.trim().toLowerCase() === appUser.name.trim().toLowerCase()
-    )
-    return matchesUid || matchesName
-  }
+  const isCheckoutForUser = useCallback(
+    (c: Checkout) => {
+      if (!isStaff || !appUser) return true
+      const matchesUid = Boolean(appUser.uid && c.staffUid === appUser.uid)
+      const matchesName = Boolean(
+        appUser.name &&
+        c.staffName &&
+        c.staffName.trim().toLowerCase() === appUser.name.trim().toLowerCase()
+      )
+      return matchesUid || matchesName
+    },
+    [isStaff, appUser]
+  )
 
   // Active checkouts scoped to current user (staff only see their own items)
   const userCheckouts = useMemo(() => {
     if (!isStaff || !appUser) return activeCheckouts
     return activeCheckouts.filter(isCheckoutForUser)
-  }, [activeCheckouts, isStaff, appUser])
+  }, [activeCheckouts, isStaff, appUser, isCheckoutForUser])
 
   const filteredCheckouts = useMemo(() => {
     let list = userCheckouts
@@ -254,10 +244,6 @@ export default function EquipmentCheckoutPage() {
   // Pagination for Check-in Returns (Tab 2)
   const [checkinPage, setCheckinPage] = useState<number>(1)
   const [checkinPageSize, setCheckinPageSize] = useState<number>(15)
-
-  useEffect(() => {
-    setCheckinPage(1)
-  }, [checkinSearch])
 
   const totalCheckinPages = Math.max(1, Math.ceil(filteredCheckouts.length / checkinPageSize))
   const safeCheckinPage = Math.min(Math.max(1, checkinPage), totalCheckinPages)
@@ -575,7 +561,10 @@ export default function EquipmentCheckoutPage() {
                 <input
                   type="text"
                   value={gearSearch}
-                  onChange={(e) => setGearSearch(e.target.value)}
+                  onChange={(e) => {
+                    setGearSearch(e.target.value)
+                    setGearPage(1)
+                  }}
                   placeholder="Search available gear"
                   style={{
                     width: '100%',
@@ -596,7 +585,10 @@ export default function EquipmentCheckoutPage() {
               {/* Category */}
               <select
                 value={gearCategory}
-                onChange={(e) => setGearCategory(e.target.value)}
+                onChange={(e) => {
+                  setGearCategory(e.target.value)
+                  setGearPage(1)
+                }}
                 style={{
                   height: '36px',
                   borderRadius: '8px',
@@ -1207,7 +1199,10 @@ export default function EquipmentCheckoutPage() {
                 <input
                   type="text"
                   value={checkinSearch}
-                  onChange={(e) => setCheckinSearch(e.target.value)}
+                  onChange={(e) => {
+                    setCheckinSearch(e.target.value)
+                    setCheckinPage(1)
+                  }}
                   placeholder="Search by gear name, code, staff, or event..."
                   style={{
                     width: '100%',

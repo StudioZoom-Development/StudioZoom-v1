@@ -414,11 +414,6 @@ export default function EquipmentPage() {
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(15)
 
-  // Reset pagination to page 1 whenever search query, category, or status changes
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchQuery, selectedCategory, statusFilter, sortBy])
-
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -884,7 +879,10 @@ export default function EquipmentPage() {
         {/* Available */}
         <div
           className="p-3 sm:p-4"
-          onClick={() => setStatusFilter(statusFilter === 'available' ? 'all' : 'available')}
+          onClick={() => {
+            setStatusFilter(statusFilter === 'available' ? 'all' : 'available')
+            setCurrentPage(1)
+          }}
           style={{
             background: 'var(--color-surface)',
             border: `0.5px solid ${statusFilter === 'available' ? 'var(--color-success)' : 'var(--color-border)'}`,
@@ -918,7 +916,10 @@ export default function EquipmentPage() {
         {/* Checked Out */}
         <div
           className="p-3 sm:p-4"
-          onClick={() => setStatusFilter(statusFilter === 'out' ? 'all' : 'out')}
+          onClick={() => {
+            setStatusFilter(statusFilter === 'out' ? 'all' : 'out')
+            setCurrentPage(1)
+          }}
           style={{
             background: 'var(--color-surface)',
             border: `0.5px solid ${statusFilter === 'out' ? 'var(--color-secondary)' : 'var(--color-border)'}`,
@@ -952,7 +953,10 @@ export default function EquipmentPage() {
         {/* In Service */}
         <div
           className="p-3 sm:p-4"
-          onClick={() => setStatusFilter(statusFilter === 'service' ? 'all' : 'service')}
+          onClick={() => {
+            setStatusFilter(statusFilter === 'service' ? 'all' : 'service')
+            setCurrentPage(1)
+          }}
           style={{
             background: 'var(--color-surface)',
             border: `0.5px solid ${statusFilter === 'service' ? 'var(--color-purple)' : 'var(--color-border)'}`,
@@ -986,7 +990,10 @@ export default function EquipmentPage() {
         {/* Overdue Returns */}
         <div
           className="equipment-kpi-card-5 p-3 sm:p-4"
-          onClick={() => setStatusFilter(statusFilter === 'overdue' ? 'all' : 'overdue')}
+          onClick={() => {
+            setStatusFilter(statusFilter === 'overdue' ? 'all' : 'overdue')
+            setCurrentPage(1)
+          }}
           style={{
             background: kpis.overdue > 0 ? 'var(--color-danger-muted)' : 'var(--color-surface)',
             border: `0.5px solid ${kpis.overdue > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
@@ -1035,7 +1042,10 @@ export default function EquipmentPage() {
             <button
               key={c.key}
               type="button"
-              onClick={() => setSelectedCategory(c.key)}
+              onClick={() => {
+                setSelectedCategory(c.key)
+                setCurrentPage(1)
+              }}
               style={{
                 height: '32px',
                 padding: '0 12px',
@@ -1090,7 +1100,10 @@ export default function EquipmentPage() {
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setCurrentPage(1)
+            }}
             placeholder="Search gear, brand, model, S/N, code, holder..."
             style={{
               width: '100%',
@@ -1109,7 +1122,10 @@ export default function EquipmentPage() {
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('')
+                setCurrentPage(1)
+              }}
               style={{
                 position: 'absolute',
                 right: '10px',
@@ -1132,7 +1148,10 @@ export default function EquipmentPage() {
             <span className="hidden sm:inline" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Status:</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setCurrentPage(1)
+              }}
               className="w-full sm:w-auto"
               style={{
                 height: '36px',
@@ -1161,7 +1180,10 @@ export default function EquipmentPage() {
             <span className="hidden sm:inline" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Sort:</span>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'code' | 'name' | 'price' | 'due')}
+              onChange={(e) => {
+                setSortBy(e.target.value as 'code' | 'name' | 'price' | 'due')
+                setCurrentPage(1)
+              }}
               className="w-full sm:w-auto"
               style={{
                 height: '36px',
