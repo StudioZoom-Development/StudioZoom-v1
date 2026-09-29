@@ -9,6 +9,7 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { getLeadById, createLead, updateLead, softDeleteLead } from '@/lib/firebase/queries/leads'
 import { useAuthStore } from '@/store/authStore'
 import { Lead } from '@/types'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { PhoneNumberInput, parsePhoneNumber } from './PhoneNumberInput'
 import { DateField } from './DateField'
 import { PackageSelector, parsePackageName, getDefaultPrice } from './PackageSelector'
@@ -35,6 +36,7 @@ interface LeadFormProps {
 export function LeadForm({ mode, leadId }: LeadFormProps) {
   const router = useRouter()
   const appUser = useAuthStore(s => s.appUser)
+  const { backSwipeHandlers } = useBackSwipe()
 
   const [loading, setLoading] = useState(mode === 'edit')
   const [saving, setSaving] = useState(false)
@@ -209,12 +211,23 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
   }
 
   return (
-    <div style={{ maxWidth: '640px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'var(--font-inter)' }}>
+    <div
+      {...backSwipeHandlers}
+      style={{
+        maxWidth: '640px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        fontFamily: 'var(--font-inter)',
+        padding: '0 12px 90px 12px',
+      }}
+    >
       {/* ── Page Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <span
           onClick={() => router.push('/leads')}
-          style={{ cursor: 'pointer', color: 'var(--color-foreground-muted)', display: 'flex' }}
+          className="hidden md:flex items-center cursor-pointer text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] transition-colors"
         >
           <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
         </span>
@@ -245,7 +258,7 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
           gap: '14px',
         }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: '12px' }}>
           {/* Full name */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Full name</label>

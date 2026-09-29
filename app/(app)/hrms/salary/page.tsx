@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, addMonths, subMonths, isValid, parseISO } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { DateField } from '@/components/shared/DateField'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -91,6 +92,7 @@ const TD_STYLE: React.CSSProperties = {
 
 export default function SalaryPage() {
   const router = useRouter()
+  const { backSwipeHandlers } = useBackSwipe()
   const appUser = useAuthStore(s => s.appUser)
   const role = appUser?.role ?? 'staff'
   const isAuthorized = role === 'admin' || role === 'manager'
@@ -1025,14 +1027,17 @@ export default function SalaryPage() {
         </div>
       </div>
 
-      {/* ── Salary Table ─────────────────────────────────────────────────── */}
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '0.5px solid var(--color-border)',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      }}>
+      {/* ── Salary Table (Desktop Invariance) ─────────────────────────────────── */}
+      <div
+        className="hidden md:block"
+        style={{
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -1255,6 +1260,230 @@ export default function SalaryPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ── Mobile View (Compact Salary Cards & Touch Gestures) ── */}
+      <div className="flex flex-col md:hidden gap-3 pb-24" {...backSwipeHandlers}>
+        {/* Mobile Summary Metric Banner */}
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          padding: '14px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '8px',
+          textAlign: 'center',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        }}>
+          <div>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', display: 'block', textTransform: 'uppercase' }}>Base</span>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+              {formatRupees(totals.totalBase)}
+            </span>
+          </div>
+          <div>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', display: 'block', textTransform: 'uppercase' }}>Advances</span>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+              {formatRupees(totals.totalAdvances)}
+            </span>
+          </div>
+          <div>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', display: 'block', textTransform: 'uppercase' }}>Net Pending</span>
+            <span style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 700,
+              color: totals.totalPending >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+            }}>
+              {formatRupees(totals.totalPending)}
+            </span>
+          </div>
+        </div>
+
+        {/* Mobile Employee Salary Cards */}
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[1, 2, 3, 4].map(i => (
+              <div
+                key={i}
+                style={{
+                  height: '120px',
+                  background: 'var(--color-surface)',
+                  borderRadius: '12px',
+                  border: '0.5px solid var(--color-border)',
+                }}
+              />
+            ))}
+          </div>
+        ) : processedRows.length === 0 ? (
+          <div style={{
+            background: 'var(--color-surface)',
+            borderRadius: '12px',
+            border: '0.5px solid var(--color-border)',
+            padding: '32px 16px',
+          }}>
+            <EmptyState
+              icon="ti-cash"
+              title="No salary records"
+              description="No active staff members found for this month."
+            />
+          </div>
+        ) : (
+          processedRows.map(row => {
+            const isOverdraft = row.pending < 0
+
+            return (
+              <div
+                key={row.staffUid}
+                onClick={() => setActiveStaffUid(row.staffUid)}
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                }}
+              >
+                {/* Header: Staff Name, Job Title, Pending Pill */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-foreground)' }}>
+                      {row.staffName}
+                    </div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                      {row.jobTitle}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '4px 10px',
+                    borderRadius: '12px',
+                    background: isOverdraft ? 'var(--color-danger-muted)' : 'var(--color-success-muted)',
+                    border: `0.5px solid ${isOverdraft ? 'var(--color-danger)' : 'var(--color-success)'}`,
+                    color: isOverdraft ? 'var(--color-danger)' : 'var(--color-success)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 700,
+                  }}>
+                    {formatRupees(row.pending)} pending
+                  </div>
+                </div>
+
+                {/* Metrics Breakdown Box */}
+                <div style={{
+                  background: 'var(--color-surface-raised)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '8px',
+                  fontSize: 'var(--text-xs)',
+                }}>
+                  <div>
+                    <span style={{ color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Base Salary</span>
+                    <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{formatRupees(row.baseSalary)}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Advances</span>
+                    <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{formatRupees(row.totalAdvance)}</span>
+                  </div>
+                </div>
+
+                {/* Advances Breakdown Chips (if any recorded) */}
+                {(row.adv1Amount > 0 || row.adv2Amount > 0 || row.adv3Amount > 0) && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {row.adv1Amount > 0 && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: 'var(--color-surface-overlay)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Adv 1: {formatRupees(row.adv1Amount)}
+                      </span>
+                    )}
+                    {row.adv2Amount > 0 && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: 'var(--color-surface-overlay)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Adv 2: {formatRupees(row.adv2Amount)}
+                      </span>
+                    )}
+                    {row.adv3Amount > 0 && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: 'var(--color-surface-overlay)',
+                        color: 'var(--color-foreground-muted)',
+                      }}>
+                        Adv 3: {formatRupees(row.adv3Amount)}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Footer */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '0.5px solid var(--color-border)',
+                    paddingTop: '8px',
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => setActiveStaffUid(row.staffUid)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--color-primary)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 0',
+                    }}
+                  >
+                    <i className="ti ti-pencil" style={{ fontSize: '13px' }} />
+                    <span>Edit Advances</span>
+                  </button>
+
+                  <button
+                    onClick={() => router.push('/hrms/payslips')}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--color-accent)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 0',
+                    }}
+                  >
+                    <span>Payslip</span>
+                    <i className="ti ti-chevron-right" style={{ fontSize: '12px' }} />
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
     </div>

@@ -11,26 +11,51 @@ export function useAuthListener() {
   const { setFirebaseUser, setAppUser, setLoading } = useAuthStore()
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async fbUser => {
-      setLoading(true)
-      setFirebaseUser(fbUser)
-      if (fbUser) {
-        try {
-          const snap = await getDoc(doc(db, 'users', fbUser.uid))
-          setAppUser(snap.exists()
-            ? { uid: fbUser.uid, ...snap.data() } as AppUser
-            : null
-          )
-        } catch (err) {
-          console.error('Error fetching user document:', err)
+    // Safety fallback: ensure loading never hangs indefinitely if auth state response is delayed
+    const timer = setTimeout(() => {
+      setLoading(false)
+    }, 2500)
+
+    const unsub = onAuthStateChanged(
+      auth,
+      async fbUser => {
+        clearTimeout(timer)
+        setLoading(true)
+        setFirebaseUser(fbUser)
+        if (fbUser) {
+          try {
+            const docPromise = getDoc(doc(db, 'users', fbUser.uid))
+            const timeoutPromise = new Promise<null>(resolve =>
+              setTimeout(() => resolve(null), 2000)
+            )
+            const snap = await Promise.race([docPromise, timeoutPromise])
+            if (snap && snap.exists()) {
+              setAppUser({ uid: fbUser.uid, ...snap.data() } as AppUser)
+            } else {
+              setAppUser(null)
+            }
+          } catch (err) {
+            console.error('Error fetching user document:', err)
+            setAppUser(null)
+          }
+        } else {
           setAppUser(null)
         }
-      } else {
+        setLoading(false)
+      },
+      err => {
+        clearTimeout(timer)
+        console.error('onAuthStateChanged error:', err)
+        setFirebaseUser(null)
         setAppUser(null)
+        setLoading(false)
       }
-      setLoading(false)
-    })
-    return unsub
+    )
+
+    return () => {
+      clearTimeout(timer)
+      unsub()
+    }
   }, [setFirebaseUser, setAppUser, setLoading])
 }
 

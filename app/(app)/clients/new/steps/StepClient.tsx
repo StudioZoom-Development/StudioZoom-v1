@@ -435,7 +435,7 @@ export default function StepClient({ state, dispatch }: StepClientProps): React.
             </div>
 
             {/* Contact + Email */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{
                   fontSize: 'var(--text-sm)',

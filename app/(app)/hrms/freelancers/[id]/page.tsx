@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/shared/LoadingSkeleton'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { useAuthStore } from '@/store/authStore'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { Freelancer, FreelancerPayout, Project } from '@/types'
 import {
   getFreelancerById,
@@ -80,6 +81,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
   const freelancerId = resolvedParams.id
   const router = useRouter()
   const appUser = useAuthStore(s => s.appUser)
+  const { backSwipeHandlers } = useBackSwipe()
 
   const [freelancer, setFreelancer] = useState<Freelancer | null>(null)
   const [payouts, setPayouts] = useState<FreelancerPayout[]>([])
@@ -388,82 +390,138 @@ export default function FreelancerDetailPage({ params }: PageProps) {
   const skillDisplay = freelancer.skill ? freelancer.skill.charAt(0).toUpperCase() + freelancer.skill.slice(1) : 'Freelancer'
 
   return (
-    <div style={{
-      padding: '24px',
-      maxWidth: '1280px',
-      margin: '0 auto',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '16px',
-      fontFamily: 'var(--font-inter)',
-      paddingBottom: '40px',
-    }}>
-      {/* HEADER */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span
-          onClick={() => router.push('/hrms/freelancers')}
-          style={{
-            cursor: 'pointer',
-            color: 'var(--color-foreground-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            transition: 'color 0.15s ease',
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--color-foreground)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--color-foreground-muted)'}
-        >
-          <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
-        </span>
+    <div
+      {...backSwipeHandlers}
+      className="freelancer-detail-page"
+    >
+      <style>{`
+        .freelancer-detail-page {
+          padding: 14px;
+          padding-bottom: 80px;
+          max-width: 1280px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          font-family: var(--font-inter);
+          width: 100%;
+          box-sizing: border-box;
+        }
+        @media (min-width: 768px) {
+          .freelancer-detail-page {
+            padding: 24px !important;
+            padding-bottom: 40px !important;
+          }
+        }
+        .freelancer-detail-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          width: 100%;
+        }
+        @media (min-width: 768px) {
+          .freelancer-detail-grid {
+            display: grid !important;
+            grid-template-columns: 38fr 62fr !important;
+            gap: 16px !important;
+            align-items: start !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
 
-        {/* 44px Avatar (secondary-muted / secondary) */}
+      {/* HEADER */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        width: '100%',
+      }}>
         <div style={{
-          width: '44px',
-          height: '44px',
-          borderRadius: '50%',
-          background: 'var(--color-secondary-muted)',
-          color: 'var(--color-secondary)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 'var(--text-sm)',
-          fontWeight: 700,
-          flexShrink: 0,
+          gap: '12px',
+          minWidth: 0,
+          flex: 1,
         }}>
-          {getInitials(freelancer.name)}
-        </div>
+          <button
+            type="button"
+            onClick={() => router.push('/hrms/freelancers')}
+            className="hidden md:flex"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '6px',
+              margin: '-6px 0 -6px -6px',
+              cursor: 'pointer',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-foreground-muted)',
+              borderRadius: '8px',
+              flexShrink: 0,
+              transition: 'color 0.15s ease',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--color-foreground)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--color-foreground-muted)'}
+            aria-label="Back to Freelancers"
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
+          </button>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {/* 44px Avatar (secondary-muted / secondary) */}
           <div style={{
-            fontSize: 'var(--text-2xl)',
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: 'var(--color-secondary-muted)',
+            color: 'var(--color-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 'var(--text-sm)',
             fontWeight: 700,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.2,
-            color: 'var(--color-foreground)',
+            flexShrink: 0,
           }}>
-            {freelancer.name}
+            {getInitials(freelancer.name)}
           </div>
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
-            {skillDisplay} · ₹{(freelancer.dayRate || 0).toLocaleString('en-IN')}/day · Active since {activeSinceYear}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            <div style={{
+              fontSize: 'var(--text-2xl)',
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+              lineHeight: 1.2,
+              color: 'var(--color-foreground)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {freelancer.name}
+            </div>
+            <div style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--color-foreground-muted)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {skillDisplay} · ₹{(freelancer.dayRate || 0).toLocaleString('en-IN')}/day · Active since {activeSinceYear}
+            </div>
           </div>
         </div>
-
-        <div style={{ flex: 1 }} />
 
         <Button
-          className="h-9 font-medium"
+          className="h-9 font-medium w-full sm:w-auto shrink-0"
           onClick={handleOpenAssignModal}
         >
           Assign to project
         </Button>
       </div>
 
-      {/* 38 / 62 GRID */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '38fr 62fr',
-        gap: '16px',
-        alignItems: 'start',
-      }}>
+      {/* 38 / 62 GRID — Responsive 1 column on mobile, guaranteed 38fr 62fr on desktop */}
+      <div className="freelancer-detail-grid">
         {/* LEFT COLUMN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Card 1: Profile */}
@@ -750,6 +808,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                       padding: '12px 14px',
                       cursor: proj.clientId ? 'pointer' : 'default',
                       transition: 'border-color 0.15s ease',
+                      minWidth: 0,
                     }}
                     onMouseEnter={e => {
                       if (!isConflicted && proj.clientId) e.currentTarget.style.borderColor = 'var(--color-border-strong)'
@@ -772,11 +831,24 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                       <i className={`ti ${icon}`} style={{ fontSize: '17px' }} />
                     </div>
 
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0, overflow: 'hidden' }}>
+                      <span style={{
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
                         {proj.eventName}
                       </span>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                      <span style={{
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-foreground-subtle)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
                         {assignedRole} · {formattedDate} · ₹{assignedRate.toLocaleString('en-IN')}/day
                       </span>
                     </div>
@@ -789,6 +861,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
                       background: 'var(--color-secondary-muted)',
                       color: 'var(--color-secondary)',
                       whiteSpace: 'nowrap',
+                      flexShrink: 0,
                     }}>
                       {assignedDays} {assignedDays > 1 ? 'days' : 'day'}
                     </span>
@@ -844,18 +917,26 @@ export default function FreelancerDetailPage({ params }: PageProps) {
           }}>
             <div style={{
               display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '14px 20px 8px',
+              gap: '8px',
+              padding: '14px 20px',
+              borderBottom: '0.5px solid var(--color-border)',
             }}>
-              <div style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                color: 'var(--color-foreground-subtle)',
-              }}>
-                Payout history · auto-posts to Expenses under &quot;Freelancer&quot;
+              <div>
+                <div style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                }}>
+                  Payout history
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                  Auto-posts to Expenses under &quot;Freelancer&quot;
+                </div>
               </div>
 
               <Button
@@ -867,181 +948,233 @@ export default function FreelancerDetailPage({ params }: PageProps) {
               </Button>
             </div>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
-              <thead>
-                <tr>
-                  <th style={{
-                    textAlign: 'left',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    color: 'var(--color-foreground-subtle)',
-                    padding: '8px 20px',
-                    borderBottom: '0.5px solid var(--color-border-strong)',
-                  }}>
-                    Project
-                  </th>
-                  <th style={{
-                    textAlign: 'right',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    color: 'var(--color-foreground-subtle)',
-                    padding: '8px 12px',
-                    borderBottom: '0.5px solid var(--color-border-strong)',
-                  }}>
-                    Days × rate
-                  </th>
-                  <th style={{
-                    textAlign: 'right',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    color: 'var(--color-foreground-subtle)',
-                    padding: '8px 12px',
-                    borderBottom: '0.5px solid var(--color-border-strong)',
-                  }}>
-                    Amount
-                  </th>
-                  <th style={{
-                    textAlign: 'left',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    color: 'var(--color-foreground-subtle)',
-                    padding: '8px 12px',
-                    borderBottom: '0.5px solid var(--color-border-strong)',
-                  }}>
-                    Paid
-                  </th>
-                  <th style={{
-                    textAlign: 'right',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    color: 'var(--color-foreground-subtle)',
-                    padding: '8px 20px',
-                    borderBottom: '0.5px solid var(--color-border-strong)',
-                  }}>
-                    Expense
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {payouts.length === 0 ? (
+            {/* Desktop Table (hidden md:block) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+                <thead>
                   <tr>
-                    <td colSpan={5} style={{
-                      padding: '24px 20px',
-                      textAlign: 'center',
-                      color: 'var(--color-foreground-muted)',
-                      fontSize: 'var(--text-sm)',
+                    <th style={{
+                      textAlign: 'left',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: 'var(--color-foreground-subtle)',
+                      padding: '8px 20px',
+                      borderBottom: '0.5px solid var(--color-border-strong)',
                     }}>
-                      No payouts recorded yet.
-                    </td>
+                      Project
+                    </th>
+                    <th style={{
+                      textAlign: 'right',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: 'var(--color-foreground-subtle)',
+                      padding: '8px 12px',
+                      borderBottom: '0.5px solid var(--color-border-strong)',
+                    }}>
+                      Days × rate
+                    </th>
+                    <th style={{
+                      textAlign: 'right',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: 'var(--color-foreground-subtle)',
+                      padding: '8px 12px',
+                      borderBottom: '0.5px solid var(--color-border-strong)',
+                    }}>
+                      Amount
+                    </th>
+                    <th style={{
+                      textAlign: 'left',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: 'var(--color-foreground-subtle)',
+                      padding: '8px 12px',
+                      borderBottom: '0.5px solid var(--color-border-strong)',
+                    }}>
+                      Paid
+                    </th>
+                    <th style={{
+                      textAlign: 'right',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      color: 'var(--color-foreground-subtle)',
+                      padding: '8px 20px',
+                      borderBottom: '0.5px solid var(--color-border-strong)',
+                    }}>
+                      Expense
+                    </th>
                   </tr>
-                ) : (
-                  payouts.map(p => (
-                    <tr
-                      key={p.payoutId}
-                      style={{ transition: 'background 0.15s ease' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-raised)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <td style={{
-                        padding: '0 20px',
-                        height: '44px',
-                        borderBottom: '0.5px solid var(--color-border)',
-                        fontWeight: 600,
-                        color: 'var(--color-foreground)',
-                      }}>
-                        {p.eventName || 'Event Project'}
-                      </td>
-                      <td style={{
-                        padding: '0 12px',
-                        height: '44px',
-                        borderBottom: '0.5px solid var(--color-border)',
-                        textAlign: 'right',
+                </thead>
+                <tbody>
+                  {payouts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{
+                        padding: '24px 20px',
+                        textAlign: 'center',
                         color: 'var(--color-foreground-muted)',
+                        fontSize: 'var(--text-sm)',
                       }}>
-                        {p.days} × ₹{(p.dayRate || 0).toLocaleString('en-IN')}
-                      </td>
-                      <td style={{
-                        padding: '0 12px',
-                        height: '44px',
-                        borderBottom: '0.5px solid var(--color-border)',
-                        textAlign: 'right',
-                        fontWeight: 700,
-                        color: 'var(--color-foreground)',
-                      }}>
-                        ₹{(p.amount || 0).toLocaleString('en-IN')}
-                      </td>
-                      <td style={{
-                        padding: '0 12px',
-                        height: '44px',
-                        borderBottom: '0.5px solid var(--color-border)',
-                        color: 'var(--color-foreground-muted)',
-                      }}>
-                        {format(p.paidDate, 'd MMM yyyy')}
-                      </td>
-                      <td style={{
-                        padding: '0 20px',
-                        height: '44px',
-                        borderBottom: '0.5px solid var(--color-border)',
-                        textAlign: 'right',
-                      }}>
-                        <span
-                          onClick={() => router.push(`/erp/expenses?id=${p.postedExpenseId}`)}
-                          style={{
-                            fontSize: 'var(--text-xs)',
-                            fontWeight: 600,
-                            padding: '3px 8px',
-                            borderRadius: '8px',
-                            background: 'var(--color-accent-muted)',
-                            color: 'var(--color-accent)',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {p.postedExpenseId || 'EXP-0000'}
-                        </span>
+                        No payouts recorded yet.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    payouts.map(p => (
+                      <tr
+                        key={p.payoutId}
+                        style={{ transition: 'background 0.15s ease' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-raised)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <td style={{
+                          padding: '0 20px',
+                          height: '44px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                        }}>
+                          {p.eventName || 'Event Project'}
+                        </td>
+                        <td style={{
+                          padding: '0 12px',
+                          height: '44px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          textAlign: 'right',
+                          color: 'var(--color-foreground-muted)',
+                        }}>
+                          {p.days} × ₹{(p.dayRate || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td style={{
+                          padding: '0 12px',
+                          height: '44px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          textAlign: 'right',
+                          fontWeight: 700,
+                          color: 'var(--color-foreground)',
+                        }}>
+                          ₹{(p.amount || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td style={{
+                          padding: '0 12px',
+                          height: '44px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          color: 'var(--color-foreground-muted)',
+                        }}>
+                          {format(p.paidDate, 'd MMM yyyy')}
+                        </td>
+                        <td style={{
+                          padding: '0 20px',
+                          height: '44px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          textAlign: 'right',
+                        }}>
+                          <span
+                            onClick={() => router.push(`/erp/expenses?id=${p.postedExpenseId}`)}
+                            style={{
+                              fontSize: 'var(--text-xs)',
+                              fontWeight: 600,
+                              padding: '3px 8px',
+                              borderRadius: '8px',
+                              background: 'var(--color-accent-muted)',
+                              color: 'var(--color-accent)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {p.postedExpenseId || 'EXP-0000'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards (block md:hidden) */}
+            <div className="block md:hidden divide-y divide-[var(--color-border)]">
+              {payouts.length === 0 ? (
+                <div style={{
+                  padding: '24px 16px',
+                  textAlign: 'center',
+                  color: 'var(--color-foreground-muted)',
+                  fontSize: 'var(--text-sm)',
+                }}>
+                  No payouts recorded yet.
+                </div>
+              ) : (
+                payouts.map(p => (
+                  <div
+                    key={p.payoutId}
+                    className="p-3.5 flex flex-col gap-2 bg-[var(--color-surface)]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate text-[var(--color-foreground)]">
+                          {p.eventName || 'Event Project'}
+                        </div>
+                        <div className="text-xs text-[var(--color-foreground-subtle)] mt-0.5">
+                          {p.days} × ₹{(p.dayRate || 0).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                      <div className="text-right flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-sm font-bold text-[var(--color-foreground)]">
+                          ₹{(p.amount || 0).toLocaleString('en-IN')}
+                        </span>
+                        {p.postedExpenseId && (
+                          <span
+                            onClick={() => router.push(`/erp/expenses?id=${p.postedExpenseId}`)}
+                            className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--color-accent-muted)] text-[var(--color-accent)] cursor-pointer"
+                          >
+                            {p.postedExpenseId}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-[var(--color-foreground-muted)] pt-1 border-t border-[var(--color-border)]/50">
+                      <span>Paid Date</span>
+                      <span className="font-medium text-[var(--color-foreground)]">
+                        {format(p.paidDate, 'd MMM yyyy')}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ASSIGN TO PROJECT MODAL */}
       {showAssignModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
-        }}>
-          <div style={{
-            background: 'var(--color-surface-overlay)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '480px',
-            padding: '24px',
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowAssignModal(false) }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            zIndex: 50,
             display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-          }}>
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            className="max-h-[90vh] overflow-y-auto w-full max-w-[480px] p-4 sm:p-6 flex flex-col gap-4 rounded-xl shadow-2xl"
+            style={{
+              background: 'var(--color-surface-overlay)',
+              border: '0.5px solid var(--color-border)',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
                 Assign to Project
@@ -1137,7 +1270,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
               </div>
 
               {/* Days & Project Day Rate */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
                     Number of days *
@@ -1185,16 +1318,17 @@ export default function FreelancerDetailPage({ params }: PageProps) {
               </div>
 
               {/* Modal Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 mt-3">
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => setShowAssignModal(false)}
                   disabled={assigning}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={assigning}>
+                <Button type="submit" className="w-full sm:w-auto" disabled={assigning}>
                   {assigning ? 'Assigning...' : 'Assign to project'}
                 </Button>
               </div>
@@ -1205,28 +1339,26 @@ export default function FreelancerDetailPage({ params }: PageProps) {
 
       {/* RECORD PAYOUT MODAL */}
       {showPayoutModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
-        }}>
-          <div style={{
-            background: 'var(--color-surface-overlay)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '480px',
-            padding: '24px',
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowPayoutModal(false) }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            zIndex: 50,
             display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-          }}>
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            className="max-h-[90vh] overflow-y-auto w-full max-w-[480px] p-4 sm:p-6 flex flex-col gap-4 rounded-xl shadow-2xl"
+            style={{
+              background: 'var(--color-surface-overlay)',
+              border: '0.5px solid var(--color-border)',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
@@ -1296,7 +1428,7 @@ export default function FreelancerDetailPage({ params }: PageProps) {
               </div>
 
               {/* Days Worked & Rate Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
                     Days worked *
@@ -1383,16 +1515,17 @@ export default function FreelancerDetailPage({ params }: PageProps) {
               </div>
 
               {/* Modal Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 mt-3">
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => setShowPayoutModal(false)}
                   disabled={recordingPayout}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={recordingPayout}>
+                <Button type="submit" className="w-full sm:w-auto" disabled={recordingPayout}>
                   {recordingPayout ? 'Recording...' : 'Record payout'}
                 </Button>
               </div>

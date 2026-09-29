@@ -1,9 +1,16 @@
-import type { Metadata } from 'next'
-import Script from 'next/script'
+import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 import { Providers } from './providers'
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   title:       'Studio Zoom',
@@ -27,7 +34,6 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/favicon.png" />
         {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link rel="stylesheet" href="/_ds_bundle.css" />
-        <script dangerouslySetInnerHTML={{ __html: 'window.module = { exports: {} };' }} />
       </head>
       <body data-theme="dark" style={{ margin: 0 }}>
         <Providers>
@@ -35,11 +41,6 @@ export default function RootLayout({
         </Providers>
         <Analytics />
         <SpeedInsights />
-        {/* Load the Design System bundle using Next.js Script */}
-        <Script
-          src="/_ds/nova-design-system-8ef438d5-a323-412b-8d58-405071468e1d/_ds_bundle.js"
-          strategy="afterInteractive"
-        />
       </body>
     </html>
   )

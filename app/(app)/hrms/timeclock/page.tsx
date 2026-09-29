@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { Badge } from '@/components/shared/Badge'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useAuthStore } from '@/store/authStore'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import {
   subscribeToTodayTimeLogs,
   subscribeToAllTodayTimeLogs,
@@ -171,6 +172,22 @@ function TeamTimeClockView() {
     })
   }, [staffList, logsByStaff, now])
 
+  // Mobile Search and Status Filter States
+  const [mobileSearch, setMobileSearch] = useState('')
+  const [mobileStatusFilter, setMobileStatusFilter] = useState<'all' | 'in' | 'late' | 'notIn'>('all')
+  const { backSwipeHandlers } = useBackSwipe()
+
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      if (mobileStatusFilter !== 'all' && r.status !== mobileStatusFilter) return false
+      if (mobileSearch.trim()) {
+        const query = mobileSearch.trim().toLowerCase()
+        if (!r.staff.name.toLowerCase().includes(query)) return false
+      }
+      return true
+    })
+  }, [rows, mobileStatusFilter, mobileSearch])
+
   // Summary counts (only staff roles)
   const onTimeCount = useMemo(() => {
     return rows.filter(r => r.status === 'in').length
@@ -201,158 +218,504 @@ function TeamTimeClockView() {
 
   return (
     <div
+      className="p-3.5 sm:p-6 md:p-8 max-w-[1280px] mx-auto flex flex-col gap-4 sm:gap-6 w-full"
       style={{
         fontFamily: 'var(--font-inter)',
         color: 'var(--color-foreground)',
-        padding: '24px 32px',
-        maxWidth: '1280px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
       }}
     >
-      {/* ── Top Header Section ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px' }}>
-        <div>
-          <h1
-            style={{
-              fontSize: 'var(--text-2xl)',
-              fontWeight: 700,
-              letterSpacing: '-0.02em',
-              margin: 0,
-              color: 'var(--color-foreground)',
-            }}
-          >
-            Team time clock · today
-          </h1>
+      {/* ── DESKTOP VIEW (≥768px): 100% Invariant ── */}
+      <div className="hidden md:flex md:flex-col gap-6">
+        {/* Top Header Section */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px' }}>
+          <div>
+            <h1
+              style={{
+                fontSize: 'var(--text-2xl)',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                margin: 0,
+                color: 'var(--color-foreground)',
+              }}
+            >
+              Team time clock · today
+            </h1>
+            <div
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground-muted)',
+                marginTop: '4px',
+              }}
+            >
+              {formatDateLabel(now)} ·{' '}
+              <span style={{ color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
+                {onTimeCount} of {totalStaffCount} checked in
+              </span>
+            </div>
+          </div>
+
+          {/* Live Digital Clock */}
           <div
             style={{
-              fontSize: 'var(--text-sm)',
-              color: 'var(--color-foreground-muted)',
-              marginTop: '4px',
+              fontSize: '2.2rem',
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+              color: 'var(--color-foreground)',
+              fontFamily: 'var(--font-inter)',
+              lineHeight: 1,
+              paddingTop: '4px',
             }}
           >
-            {formatDateLabel(now)} ·{' '}
-            <span style={{ color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
-              {onTimeCount} of {totalStaffCount} checked in
-            </span>
+            {formatClock12h(now)}
           </div>
         </div>
 
-        {/* Live Digital Clock */}
+        {/* Data Grid Card */}
         <div
           style={{
-            fontSize: '2.2rem',
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
-            color: 'var(--color-foreground)',
-            fontFamily: 'var(--font-inter)',
-            lineHeight: 1,
-            paddingTop: '4px',
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '16px',
+            overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
           }}
         >
-          {formatClock12h(now)}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+              <thead>
+                <tr style={{ background: 'transparent' }}>
+                  <th style={{ ...TH, textAlign: 'left', width: '25%' }}>STAFF</th>
+                  <th style={{ ...TH, textAlign: 'left', width: '18%' }}>STATUS</th>
+                  <th style={{ ...TH, textAlign: 'left', width: '18%' }}>CHECK-IN</th>
+                  <th style={{ ...TH, textAlign: 'left', width: '18%' }}>CHECK-OUT</th>
+                  <th style={{ ...TH, textAlign: 'left', width: '21%' }}>HOURS SO FAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <TableRowSkeleton rows={5} cols={5} />
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      style={{
+                        ...TD,
+                        textAlign: 'center',
+                        color: 'var(--color-foreground-subtle)',
+                        padding: '32px',
+                      }}
+                    >
+                      No staff members found.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map(row => (
+                    <tr
+                      key={row.staff.uid}
+                      style={{
+                        transition: 'background 0.15s ease',
+                      }}
+                    >
+                      {/* STAFF */}
+                      <td style={{ ...TD, textAlign: 'left' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: 'var(--color-primary-muted)',
+                              color: 'var(--color-primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 'var(--text-xs)',
+                              fontWeight: 700,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {getInitials(row.staff.name)}
+                          </div>
+                          <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                            {row.staff.name}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* STATUS */}
+                      <td style={{ ...TD, textAlign: 'left' }}>
+                        <Badge variant={row.status} label={row.status === 'in' ? 'In' : row.status === 'late' ? 'Late' : 'Not in'} />
+                      </td>
+
+                      {/* CHECK-IN */}
+                      <td style={{ ...TD, textAlign: 'left', color: 'var(--color-foreground)' }}>
+                        {row.checkInDisplay}
+                      </td>
+
+                      {/* CHECK-OUT */}
+                      <td style={{ ...TD, textAlign: 'left', color: 'var(--color-foreground)' }}>
+                        {row.checkOutDisplay}
+                      </td>
+
+                      {/* HOURS SO FAR */}
+                      <td style={{ ...TD, textAlign: 'left', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                        {row.hoursSoFarDisplay}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* ── Data Grid Card ──────────────────────────────────────────────── */}
-      <div
-        style={{
-          background: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '16px',
-          overflow: 'hidden',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
-        }}
-      >
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
-            <thead>
-              <tr style={{ background: 'transparent' }}>
-                <th style={{ ...TH, textAlign: 'left', width: '25%' }}>STAFF</th>
-                <th style={{ ...TH, textAlign: 'left', width: '18%' }}>STATUS</th>
-                <th style={{ ...TH, textAlign: 'left', width: '18%' }}>CHECK-IN</th>
-                <th style={{ ...TH, textAlign: 'left', width: '18%' }}>CHECK-OUT</th>
-                <th style={{ ...TH, textAlign: 'left', width: '21%' }}>HOURS SO FAR</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <TableRowSkeleton rows={5} cols={5} />
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    style={{
-                      ...TD,
-                      textAlign: 'center',
-                      color: 'var(--color-foreground-subtle)',
-                      padding: '32px',
-                    }}
-                  >
-                    No staff members found.
-                  </td>
-                </tr>
-              ) : (
-                rows.map(row => (
-                  <tr
-                    key={row.staff.uid}
-                    style={{
-                      transition: 'background 0.15s ease',
-                    }}
-                  >
-                    {/* STAFF */}
-                    <td style={{ ...TD, textAlign: 'left' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* ── MOBILE VIEW (<768px): Responsive Cards & Live Clock Hero ── */}
+      <div className="flex md:hidden flex-col gap-3.5 pb-24" {...backSwipeHandlers}>
+        {/* Live Digital Clock Hero Card */}
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '16px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                }}
+              >
+                Team Time Clock
+              </span>
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-foreground-muted)',
+                  marginTop: '2px',
+                }}
+              >
+                {formatDateLabel(now)}
+              </span>
+            </div>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '12px',
+                background: 'var(--color-primary-muted)',
+                color: 'var(--color-primary)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+              }}
+            >
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)',
+                  display: 'inline-block',
+                }}
+              />
+              <span>{onTimeCount} / {totalStaffCount} Checked In</span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontSize: '2.2rem',
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+              color: 'var(--color-foreground)',
+              fontFamily: 'var(--font-inter)',
+              lineHeight: 1,
+              textAlign: 'center',
+              padding: '6px 0',
+            }}
+          >
+            {formatClock12h(now)}
+          </div>
+        </div>
+
+        {/* Search & Quick Filter Pills */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Search Input */}
+          <div style={{ position: 'relative' }}>
+            <i
+              className="ti ti-search"
+              style={{
+                fontSize: '15px',
+                color: 'var(--color-foreground-subtle)',
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              type="text"
+              value={mobileSearch}
+              onChange={e => setMobileSearch(e.target.value)}
+              placeholder="Search team member..."
+              style={{
+                fontFamily: 'var(--font-inter)',
+                width: '100%',
+                height: '38px',
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '10px',
+                padding: '0 12px 0 34px',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground)',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* Status Filter Chips */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              WebkitOverflowScrolling: 'touch',
+              padding: '2px 0',
+            }}
+          >
+            {[
+              { id: 'all', label: `All (${rows.length})` },
+              { id: 'in', label: `In (${rows.filter(r => r.status === 'in').length})` },
+              { id: 'late', label: `Late (${rows.filter(r => r.status === 'late').length})` },
+              { id: 'notIn', label: `Not In (${rows.filter(r => r.status === 'notIn').length})` },
+            ].map(tab => {
+              const active = mobileStatusFilter === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setMobileStatusFilter(tab.id as 'all' | 'in' | 'late' | 'notIn')}
+                  style={{
+                    height: '32px',
+                    padding: '0 12px',
+                    borderRadius: '16px',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    fontFamily: 'var(--font-inter)',
+                    whiteSpace: 'nowrap',
+                    border: active ? '0.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                    background: active ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0,
+                  }}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Staff Mobile Cards List */}
+        {isLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[1, 2, 3, 4].map(k => (
+              <div
+                key={k}
+                style={{
+                  height: '110px',
+                  background: 'var(--color-surface)',
+                  borderRadius: '12px',
+                  border: '0.5px solid var(--color-border)',
+                }}
+              />
+            ))}
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              borderRadius: '12px',
+              border: '0.5px solid var(--color-border)',
+              padding: '36px 16px',
+              textAlign: 'center',
+              color: 'var(--color-foreground-muted)',
+              fontSize: 'var(--text-sm)',
+            }}
+          >
+            No team members found matching your search.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {filteredRows.map(row => {
+              const borderLeftColor =
+                row.status === 'in'
+                  ? 'var(--color-success)'
+                  : row.status === 'late'
+                  ? 'var(--color-secondary)'
+                  : 'var(--color-border)'
+
+              return (
+                <div
+                  key={row.staff.uid}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderLeft: `3px solid ${borderLeftColor}`,
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  {/* Header: Avatar, Name & Status */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary-muted)',
+                          color: 'var(--color-primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {getInitials(row.staff.name)}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
                         <div
                           style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            background: 'var(--color-primary-muted)',
-                            color: 'var(--color-primary)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 'var(--text-xs)',
-                            fontWeight: 700,
-                            flexShrink: 0,
+                            fontWeight: 600,
+                            fontSize: 'var(--text-sm)',
+                            color: 'var(--color-foreground)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          {getInitials(row.staff.name)}
-                        </div>
-                        <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
                           {row.staff.name}
-                        </span>
+                        </div>
                       </div>
-                    </td>
+                    </div>
+                    <Badge variant={row.status} label={row.status === 'in' ? 'In' : row.status === 'late' ? 'Late' : 'Not in'} />
+                  </div>
 
-                    {/* STATUS */}
-                    <td style={{ ...TD, textAlign: 'left' }}>
-                      <Badge variant={row.status} label={row.status === 'in' ? 'In' : row.status === 'late' ? 'Late' : 'Not in'} />
-                    </td>
+                  {/* 3-Column Metrics Grid */}
+                  <div
+                    style={{
+                      background: 'var(--color-surface-raised)',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '4px',
+                      alignItems: 'center',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          color: 'var(--color-foreground-subtle)',
+                          display: 'block',
+                        }}
+                      >
+                        Check-In
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                        }}
+                      >
+                        {row.checkInDisplay}
+                      </span>
+                    </div>
 
-                    {/* CHECK-IN */}
-                    <td style={{ ...TD, textAlign: 'left', color: 'var(--color-foreground)' }}>
-                      {row.checkInDisplay}
-                    </td>
+                    <div style={{ borderLeft: '0.5px solid var(--color-border)', borderRight: '0.5px solid var(--color-border)' }}>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          color: 'var(--color-foreground-subtle)',
+                          display: 'block',
+                        }}
+                      >
+                        Check-Out
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                        }}
+                      >
+                        {row.checkOutDisplay}
+                      </span>
+                    </div>
 
-                    {/* CHECK-OUT */}
-                    <td style={{ ...TD, textAlign: 'left', color: 'var(--color-foreground)' }}>
-                      {row.checkOutDisplay}
-                    </td>
-
-                    {/* HOURS SO FAR */}
-                    <td style={{ ...TD, textAlign: 'left', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                      {row.hoursSoFarDisplay}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <div>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          color: 'var(--color-foreground-subtle)',
+                          display: 'block',
+                        }}
+                      >
+                        Hours
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 700,
+                          color: 'var(--color-primary)',
+                        }}
+                      >
+                        {row.hoursSoFarDisplay}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -361,6 +724,7 @@ function TeamTimeClockView() {
 // ─── Individual Time Clock View (Staff Role) ──────────────────────────────────
 
 function IndividualTimeClockView({ appUid }: { appUid: string }) {
+  const { backSwipeHandlers } = useBackSwipe()
   const [now, setNow] = useState<Date>(() => new Date())
   const [sessions, setSessions] = useState<TimeLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -426,33 +790,49 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
 
   return (
     <div
+      className="flex flex-col items-center gap-5 p-3.5 sm:p-6 md:p-8 w-full pb-28 md:pb-8"
       style={{
         fontFamily: 'var(--font-inter)',
         color: 'var(--color-foreground)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '20px',
-        padding: '32px 24px',
       }}
+      {...backSwipeHandlers}
     >
       <div
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          background: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '16px',
-          padding: '28px 24px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
-        }}
+        className="w-full max-w-[480px] p-5 sm:p-7 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] flex flex-col gap-5 shadow-sm"
       >
+        {/* Status header badge */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              background: isCheckedIn ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+              border: `0.5px solid ${isCheckedIn ? 'var(--color-success)' : 'var(--color-border)'}`,
+              color: isCheckedIn ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: isCheckedIn ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                display: 'inline-block',
+              }}
+            />
+            <span>{isCheckedIn ? 'Clocked In · Active Session' : 'Not Clocked In'}</span>
+          </div>
+        </div>
+
         <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              fontSize: '2.6rem',
+              fontSize: 'clamp(2.2rem, 7vw, 2.8rem)',
               fontWeight: 700,
               letterSpacing: '-0.03em',
               color: 'var(--color-foreground)',
@@ -465,7 +845,7 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
             style={{
               fontSize: 'var(--text-sm)',
               color: 'var(--color-foreground-muted)',
-              marginTop: '4px',
+              marginTop: '6px',
             }}
           >
             {formatDateLabel(now)}
@@ -493,7 +873,7 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
           disabled={actionLoading || loading}
           onClick={isCheckedIn ? handleCheckOut : handleCheckIn}
           style={{
-            height: '48px',
+            height: '50px',
             width: '100%',
             borderRadius: '12px',
             border: 'none',
@@ -506,9 +886,12 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
             justifyContent: 'center',
             gap: '8px',
             opacity: actionLoading || loading ? 0.7 : 1,
-            transition: 'opacity 0.15s ease, background 0.2s ease',
+            transition: 'opacity 0.15s ease, transform 0.1s ease',
             background: isCheckedIn ? 'var(--color-danger)' : 'var(--color-success)',
             color: '#ffffff',
+            boxShadow: isCheckedIn
+              ? '0 4px 14px rgba(239, 83, 80, 0.25)'
+              : '0 4px 14px rgba(76, 175, 80, 0.25)',
           }}
         >
           <i
@@ -530,21 +913,23 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
             gridTemplateColumns: '1fr 1fr 1fr',
             borderTop: '0.5px solid var(--color-border)',
             paddingTop: '16px',
+            alignItems: 'center',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', textAlign: 'center', padding: '0 2px' }}>
             <span
               style={{
-                fontSize: 'var(--text-xs)',
+                fontSize: '11px',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
+                letterSpacing: '0.04em',
                 color: 'var(--color-foreground-subtle)',
+                whiteSpace: 'nowrap',
               }}
             >
               Check-In
             </span>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', whiteSpace: 'nowrap' }}>
               {firstSession ? formatTime12h(firstSession.checkInAt) : '—'}
             </span>
           </div>
@@ -555,34 +940,38 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
               flexDirection: 'column',
               gap: '4px',
               alignItems: 'center',
+              textAlign: 'center',
+              padding: '0 2px',
               borderLeft: '0.5px solid var(--color-border)',
               borderRight: '0.5px solid var(--color-border)',
             }}
           >
             <span
               style={{
-                fontSize: 'var(--text-xs)',
+                fontSize: '11px',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
+                letterSpacing: '0.04em',
                 color: 'var(--color-foreground-subtle)',
+                whiteSpace: 'nowrap',
               }}
             >
               Hours Today
             </span>
-            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', whiteSpace: 'nowrap' }}>
               {formatDuration(totalSecs)}
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', textAlign: 'center', padding: '0 2px' }}>
             <span
               style={{
-                fontSize: 'var(--text-xs)',
+                fontSize: '11px',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
+                letterSpacing: '0.04em',
                 color: 'var(--color-foreground-subtle)',
+                whiteSpace: 'nowrap',
               }}
             >
               VS 9H
@@ -592,6 +981,7 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                 fontSize: 'var(--text-sm)',
                 fontWeight: 700,
                 color: vsNegative ? 'var(--color-secondary)' : 'var(--color-success)',
+                whiteSpace: 'nowrap',
               }}
             >
               {formatVs9h(totalSecs)}
@@ -647,7 +1037,7 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
-                    padding: '12px 16px',
+                    padding: '12px 14px',
                     borderBottom: idx < sessions.length - 1 ? '0.5px solid var(--color-border)' : 'none',
                   }}
                 >
@@ -659,25 +1049,25 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
                       flexShrink: 0,
                     }}
                   />
-                  <span
-                    style={{
-                      fontSize: 'var(--text-sm)',
-                      fontWeight: 600,
-                      color: 'var(--color-foreground)',
-                      minWidth: '72px',
-                    }}
-                  >
-                    {formatTime12h(session.checkInAt)}
-                  </span>
-                  <i
-                    className="ti ti-arrow-right"
-                    style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span
+                      style={{
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {formatTime12h(session.checkInAt)}
+                    </span>
+                    <i
+                      className="ti ti-arrow-right"
+                      style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }}
+                    />
                     {isOpen ? (
                       <Badge variant="active" label="Active" />
                     ) : (
-                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap' }}>
                         {session.checkOutAt ? formatTime12h(session.checkOutAt) : '—'}
                       </span>
                     )}
@@ -705,12 +1095,16 @@ function IndividualTimeClockView({ appUid }: { appUid: string }) {
             width: '100%',
             maxWidth: '480px',
             textAlign: 'center',
-            padding: '24px 0 8px',
+            padding: '24px 16px',
             color: 'var(--color-foreground-subtle)',
             fontSize: 'var(--text-sm)',
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
           }}
         >
-          No sessions recorded today. Check in to start tracking.
+          <i className="ti ti-clock-pause" style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }} />
+          No sessions recorded today. Punch in to start tracking your time.
         </div>
       )}
     </div>

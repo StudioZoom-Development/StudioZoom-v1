@@ -135,7 +135,7 @@ export function RecordPaymentModal({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 100,
+        zIndex: 9995,
         background: 'rgba(0, 0, 0, 0.7)',
         display: 'flex',
         alignItems: 'center',
@@ -146,17 +146,10 @@ export function RecordPaymentModal({
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="w-full max-w-[440px] max-h-[90dvh] overflow-y-auto rounded-2xl flex flex-col gap-4 shadow-2xl p-5 md:p-6"
         style={{
-          width: '100%',
-          maxWidth: '440px',
           background: 'var(--color-surface-overlay)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -305,23 +298,16 @@ export function RecordPaymentModal({
           )}
         </div>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '10px',
-          borderTop: '0.5px solid var(--color-border)',
-          paddingTop: '16px',
-          marginTop: '4px',
-        }}>
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 mt-1 border-t border-[var(--color-border)]">
           <Button
             variant="outline"
-            className="h-9"
+            className="w-full md:w-auto h-10 md:h-9"
             onClick={onClose}
           >
             Cancel
           </Button>
           <Button
-            className="h-9 font-medium"
+            className="w-full md:w-auto h-10 md:h-9 font-medium"
             onClick={handleRecordPaymentSubmit}
             disabled={submittingPayment}
           >
