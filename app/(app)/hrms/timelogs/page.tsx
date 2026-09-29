@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { format, parseISO, isValid } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { Badge } from '@/components/shared/Badge'
 import { DateField } from '@/components/shared/DateField'
 import { TimeField } from '@/components/shared/TimeField'
@@ -113,6 +115,8 @@ const TD_STYLE: React.CSSProperties = {
 // ─── Page Component ───────────────────────────────────────────────────────────
 
 export default function TimeLogsPage() {
+  const router = useRouter()
+  const { backSwipeHandlers } = useBackSwipe(() => router.back())
   const appUser = useAuthStore(s => s.appUser)
   const role = appUser?.role ?? 'staff'
   const isAdminOrManager = role === 'admin' || role === 'manager'
@@ -469,16 +473,13 @@ export default function TimeLogsPage() {
   }, [appUser])
 
   return (
-    <div style={{
-      fontFamily: 'var(--font-inter)',
-      color: 'var(--color-foreground)',
-      padding: '24px',
-      maxWidth: '1280px',
-      margin: '0 auto',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '20px',
-    }}>
+    <div
+      className="p-3.5 sm:p-6 md:p-6 w-full max-w-[1280px] mx-auto flex flex-col gap-4 sm:gap-5"
+      style={{
+        fontFamily: 'var(--font-inter)',
+        color: 'var(--color-foreground)',
+      }}
+    >
 
       {/* ── Page Title Header ────────────────────────────────────────────── */}
       {/* <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -495,8 +496,10 @@ export default function TimeLogsPage() {
         </div>
       </div> */}
 
-      {/* ── Filters & Flagged Indicator Bar ───────────────────────────────── */}
-      <div style={{
+      {/* ── Desktop View (Strict Invariance) ── */}
+      <div className="hidden md:flex md:flex-col gap-5">
+        {/* ── Filters & Flagged Indicator Bar ───────────────────────────────── */}
+        <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -878,6 +881,445 @@ export default function TimeLogsPage() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* ── Mobile View (Compact Cards & Touch Gestures) ── */}
+      <div className="flex flex-col md:hidden gap-3.5 pb-24" {...backSwipeHandlers}>
+        {/* Date Selector Header Card */}
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '14px',
+            padding: '12px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                color: 'var(--color-foreground-subtle)',
+              }}
+            >
+              Time Log Review
+            </span>
+            <span
+              style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 700,
+                color: 'var(--color-foreground)',
+                marginTop: '1px',
+              }}
+            >
+              {formatDateDisplay(selectedDate)}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {selectedDate !== getTodayDateString() && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(getTodayDateString())}
+                style={{
+                  height: '32px',
+                  padding: '0 10px',
+                  borderRadius: '16px',
+                  background: 'var(--color-primary-muted)',
+                  border: '0.5px solid var(--color-primary)',
+                  color: 'var(--color-primary)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-inter)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Today
+              </button>
+            )}
+            <div style={{ width: '130px' }}>
+              <DateField
+                value={selectedDate}
+                onChange={setSelectedDate}
+                placeholder="MM/DD/YYYY"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Staff Filter (Admin/Manager only) */}
+        {isAdminOrManager && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              value={selectedStaff}
+              onChange={e => setSelectedStaff(e.target.value)}
+              style={{ ...SELECT_STYLE, width: '100%', height: '36px' }}
+            >
+              <option value="all">Staff · All Members</option>
+              {staffList.map(s => (
+                <option key={s.uid} value={s.uid}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Quick Status Filter Chips */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch',
+            padding: '2px 0',
+          }}
+        >
+          {[
+            { id: 'all', label: `All` },
+            { id: 'flagged', label: `Flagged (${flaggedCount})` },
+            { id: 'corrected', label: `Corrected` },
+            { id: 'clean', label: `Clean` },
+          ].map(tab => {
+            const active = selectedStatus === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedStatus(tab.id)}
+                style={{
+                  height: '32px',
+                  padding: '0 12px',
+                  borderRadius: '16px',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-inter)',
+                  whiteSpace: 'nowrap',
+                  border: active ? '0.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                  background: active ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+                  color: active ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0,
+                }}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Flagged Review Alert Banner */}
+        {flaggedCount > 0 && selectedStatus !== 'flagged' && (
+          <div
+            onClick={() => setSelectedStatus('flagged')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              background: 'var(--color-secondary-muted)',
+              border: '0.5px solid var(--color-secondary)',
+              color: 'var(--color-secondary)',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: '16px' }} />
+              <span>{flaggedCount} {flaggedCount === 1 ? 'log requires review' : 'logs require review'}</span>
+            </div>
+            <span style={{ fontSize: '11px', textDecoration: 'underline' }}>Show flagged &gt;</span>
+          </div>
+        )}
+
+        {/* Mobile Log Cards List */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{
+                  height: '140px',
+                  background: 'var(--color-surface)',
+                  borderRadius: '12px',
+                  border: '0.5px solid var(--color-border)',
+                }} />
+              ))}
+            </div>
+          ) : processedRows.length === 0 ? (
+            <div style={{
+              background: 'var(--color-surface)',
+              borderRadius: '12px',
+              border: '0.5px solid var(--color-border)',
+              padding: '32px 16px',
+            }}>
+              <EmptyState
+                icon="ti-history"
+                title="No time logs found"
+                description="There are no time logs for the selected date and filters."
+              />
+            </div>
+          ) : (
+            processedRows.map(row => {
+              const isFlagged = row.status === 'flagged'
+
+              return (
+                <div
+                  key={`${row.staffUid}_${row.date}`}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderLeft: isFlagged ? '3px solid var(--color-secondary)' : row.status === 'corrected' ? '3px solid var(--color-accent)' : '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  {/* Card Header: Staff and Status */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <div style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '50%',
+                        background: 'var(--color-primary-muted)',
+                        color: 'var(--color-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}>
+                        {row.staffName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {row.staffName}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)' }}>
+                          {formatDateDisplay(row.date)}
+                        </div>
+                      </div>
+                    </div>
+                    <Badge variant={row.status} />
+                  </div>
+
+                  {/* Times Grid */}
+                  <div style={{
+                    background: 'var(--color-surface-raised)',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '8px',
+                    fontSize: 'var(--text-xs)',
+                  }}>
+                    <div>
+                      <span style={{ color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '10px' }}>Check-in</span>
+                      {row.isMissingCheckin ? (
+                        <span style={{ color: 'var(--color-danger)', fontWeight: 700 }}>Missing</span>
+                      ) : (
+                        <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{row.checkInDisplay}</span>
+                      )}
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '10px' }}>Check-out</span>
+                      {row.isMissingCheckout ? (
+                        <span style={{ color: 'var(--color-danger)', fontWeight: 700 }}>Missing</span>
+                      ) : (
+                        <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{row.checkOutDisplay}</span>
+                      )}
+                    </div>
+                    <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '6px' }}>
+                      <span style={{ color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '10px' }}>Hours</span>
+                      <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>{row.hoursDisplay}</span>
+                    </div>
+                    <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '6px' }}>
+                      <span style={{ color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '10px' }}>Variance</span>
+                      <span style={{
+                        fontWeight: 600,
+                        color: row.isNegativeVariance ? 'var(--color-secondary)' : 'var(--color-foreground-muted)',
+                      }}>
+                        {row.varianceDisplay}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Reason snippet if present */}
+                  {row.reason && (
+                    <div style={{
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-foreground-muted)',
+                      background: 'var(--color-surface-raised)',
+                      borderLeft: '2.5px solid var(--color-accent)',
+                      padding: '6px 10px',
+                      borderRadius: '4px',
+                    }}>
+                      &ldquo;{row.reason}&rdquo;
+                    </div>
+                  )}
+
+                  {/* Actions Footer */}
+                  {isFlagged && isAdminOrManager ? (
+                    <button
+                      onClick={() => handleOpenFix(row)}
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        borderRadius: '8px',
+                        background: 'var(--color-secondary-muted)',
+                        border: '0.5px solid var(--color-secondary)',
+                        color: 'var(--color-secondary)',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-inter)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <i className="ti ti-tool" style={{ fontSize: '14px' }} />
+                      Fix Flagged Time Log
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleOpenView(row)}
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        borderRadius: '8px',
+                        background: 'transparent',
+                        border: '0.5px solid var(--color-border)',
+                        color: 'var(--color-accent)',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-inter)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <i className="ti ti-eye" style={{ fontSize: '14px' }} />
+                      View Log Details
+                    </button>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Mobile Pending Leave Requests */}
+        {isAdminOrManager && pendingLeaveRequests.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                Pending Leave Requests
+              </span>
+              <span style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: 'var(--color-secondary-muted)',
+                color: 'var(--color-secondary)',
+              }}>
+                {pendingLeaveRequests.length}
+              </span>
+            </div>
+
+            {pendingLeaveRequests.map(req => {
+              const staff = staffMap.get(req.staffUid)
+              const staffName = staff?.name || 'Staff'
+
+              return (
+                <div
+                  key={req.requestId}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-foreground)' }}>
+                      {staffName}
+                    </span>
+                    <Badge variant="inquiry" label={req.type} />
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                    {formatDateDisplay(req.date)} {req.reason && `· ${req.reason}`}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleAcceptLeave(req)}
+                      style={{
+                        flex: 1,
+                        height: '40px',
+                        borderRadius: '8px',
+                        background: 'var(--color-success)',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleRejectLeave(req)}
+                      style={{
+                        flex: 1,
+                        height: '40px',
+                        borderRadius: '8px',
+                        background: 'var(--color-danger-muted)',
+                        color: 'var(--color-danger)',
+                        border: '0.5px solid var(--color-danger)',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ── Fix Popup Modal (Admin/Manager only) ─────────────────────────── */}
       {fixTarget && (
@@ -886,7 +1328,7 @@ export default function TimeLogsPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 100,
+            zIndex: 9995,
             background: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',
@@ -896,13 +1338,12 @@ export default function TimeLogsPage() {
         >
           <div
             onClick={e => e.stopPropagation()}
+            className="w-full max-w-[calc(100vw-24px)] md:w-[420px] md:max-w-[420px] max-h-[90dvh] overflow-y-auto"
             style={{
-              width: '420px',
-              maxWidth: '100%',
               background: 'var(--color-surface-overlay)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '16px',
-              padding: '24px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px',
@@ -1017,11 +1458,11 @@ export default function TimeLogsPage() {
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3 mt-1.5">
               <button
                 onClick={() => setFixTarget(null)}
                 style={{
-                  height: '36px',
+                  height: '40px',
                   padding: '0 16px',
                   borderRadius: '8px',
                   background: 'transparent',
@@ -1039,7 +1480,7 @@ export default function TimeLogsPage() {
                 onClick={handleSaveFix}
                 disabled={savingFix}
                 style={{
-                  height: '36px',
+                  height: '40px',
                   padding: '0 20px',
                   borderRadius: '8px',
                   background: 'var(--color-primary)',
@@ -1066,7 +1507,7 @@ export default function TimeLogsPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 100,
+            zIndex: 9995,
             background: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',
@@ -1076,13 +1517,12 @@ export default function TimeLogsPage() {
         >
           <div
             onClick={e => e.stopPropagation()}
+            className="w-full max-w-[calc(100vw-24px)] md:w-[460px] md:max-w-[460px] max-h-[90dvh] overflow-y-auto"
             style={{
-              width: '440px',
-              maxWidth: '100%',
               background: 'var(--color-surface-overlay)',
               border: '0.5px solid var(--color-border)',
               borderRadius: '16px',
-              padding: '24px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px',
@@ -1115,7 +1555,7 @@ export default function TimeLogsPage() {
             </div>
 
             {/* Old vs New Check-in */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{
                   fontSize: 'var(--text-xs)',
@@ -1127,7 +1567,7 @@ export default function TimeLogsPage() {
                   Old Check-in
                 </label>
                 <div style={{
-                  height: '36px',
+                  height: '38px',
                   display: 'flex',
                   alignItems: 'center',
                   padding: '0 12px',
@@ -1162,7 +1602,7 @@ export default function TimeLogsPage() {
                   />
                 ) : (
                   <div style={{
-                    height: '36px',
+                    height: '38px',
                     display: 'flex',
                     alignItems: 'center',
                     padding: '0 12px',
@@ -1179,7 +1619,7 @@ export default function TimeLogsPage() {
             </div>
 
             {/* Old vs New Check-out */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{
                   fontSize: 'var(--text-xs)',
@@ -1191,7 +1631,7 @@ export default function TimeLogsPage() {
                   Old Check-out
                 </label>
                 <div style={{
-                  height: '36px',
+                  height: '38px',
                   display: 'flex',
                   alignItems: 'center',
                   padding: '0 12px',
@@ -1226,7 +1666,7 @@ export default function TimeLogsPage() {
                   />
                 ) : (
                   <div style={{
-                    height: '36px',
+                    height: '38px',
                     display: 'flex',
                     alignItems: 'center',
                     padding: '0 12px',
@@ -1287,11 +1727,11 @@ export default function TimeLogsPage() {
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3 mt-1.5">
               <button
                 onClick={() => setViewTarget(null)}
                 style={{
-                  height: '36px',
+                  height: '40px',
                   padding: '0 16px',
                   borderRadius: '8px',
                   background: 'transparent',
@@ -1310,7 +1750,7 @@ export default function TimeLogsPage() {
                   onClick={handleSaveView}
                   disabled={!viewChanged || savingView}
                   style={{
-                    height: '36px',
+                    height: '40px',
                     padding: '0 20px',
                     borderRadius: '8px',
                     background: 'var(--color-primary)',

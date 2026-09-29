@@ -50,19 +50,15 @@ export function ConfirmModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        padding: '16px',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="w-full max-w-[420px] rounded-2xl flex flex-col gap-5 p-5 md:p-6 shadow-2xl"
         style={{
-          width: '420px',
           background: 'var(--color-surface-overlay)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '16px',
-          padding: '28px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -78,21 +74,11 @@ export function ConfirmModal({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5">
           <button
             type="button"
             onClick={onCancel}
-            style={{
-              height: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              background: 'transparent',
-              border: '0.5px solid var(--color-border)',
-              color: 'var(--color-foreground)',
-              fontSize: 'var(--text-sm)',
-              fontFamily: 'var(--font-inter)',
-            }}
+            className="w-full md:w-auto h-10 md:h-9 px-4 rounded-lg cursor-pointer bg-transparent border border-[var(--color-border)] text-[var(--color-foreground)] text-sm font-sans"
           >
             {cancelLabel}
           </button>
@@ -101,17 +87,11 @@ export function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
+            className="w-full md:w-auto h-10 md:h-9 px-4 rounded-lg cursor-pointer text-sm font-medium font-sans transition-opacity"
             style={{
-              height: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              cursor: 'pointer',
               background: isPrimary ? 'var(--color-primary-muted)' : 'var(--color-danger-muted)',
               border: `0.5px solid ${isPrimary ? 'var(--color-primary)' : 'var(--color-danger)'}`,
               color: isPrimary ? 'var(--color-primary)' : 'var(--color-danger)',
-              fontSize: 'var(--text-sm)',
-              fontWeight: 500,
-              fontFamily: 'var(--font-inter)',
               opacity: loading ? 0.6 : 1,
             }}
           >

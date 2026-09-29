@@ -11,6 +11,7 @@ import { subscribeToLeads, softDeleteLead } from '@/lib/firebase/queries/leads'
 import { formatDisplayDate } from '@/lib/utils/dates'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { Lead } from '@/types'
 
 // Select styling matching design components
@@ -122,8 +123,36 @@ export default function LeadsPage() {
     })
   }, [leads, sourceFilter, debouncedSearch])
 
+  // Mobile states
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  const [mobileVisibleCount, setMobileVisibleCount] = useState(15)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const { backSwipeHandlers } = useBackSwipe()
+
   const totalPages = Math.ceil(filteredLeads.length / pageSize) || 1
   const paginatedLeads = filteredLeads.slice((page - 1) * pageSize, page * pageSize)
+
+  // Mobile infinite scroll slice
+  const mobileLeads = useMemo(() => {
+    return filteredLeads.slice(0, mobileVisibleCount)
+  }, [filteredLeads, mobileVisibleCount])
+
+  // Mobile infinite scroll IntersectionObserver
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          setMobileVisibleCount(prev => Math.min(filteredLeads.length, prev + 15))
+        }
+      },
+      { threshold: 0.1 }
+    )
+    const el = sentinelRef.current
+    if (el) observer.observe(el)
+    return () => {
+      if (el) observer.unobserve(el)
+    }
+  }, [filteredLeads.length])
 
   const handleConvertToBooking = (lead: Lead) => {
     router.push(`/clients/new?leadId=${lead.leadId}`)
@@ -140,6 +169,8 @@ export default function LeadsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'var(--font-inter)' }}>
 
+      {/* ── DESKTOP VIEW (≥768px): 100% Invariant ── */}
+      <div className="hidden md:flex md:flex-col" style={{ gap: '16px' }}>
       {/* ── Control / Filter Bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
 
@@ -398,6 +429,510 @@ export default function LeadsPage() {
           </div>
         )}
       </div>
+      </div>
+      {/* ── END DESKTOP VIEW ── */}
+
+      {/* ── MOBILE VIEW (<768px): Compact Cards + Filter Drawer + Infinite Scroll ── */}
+      <div
+        className="block md:hidden"
+        {...backSwipeHandlers}
+        style={{
+          paddingBottom: '80px',
+        }}
+      >
+        {/* Sticky Mobile Header: Search + Filter + New Lead */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '12px',
+          }}
+        >
+          {/* Search Input */}
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              background: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '10px',
+              padding: '0 12px',
+              height: '42px',
+            }}
+          >
+            <i className="ti ti-search" style={{ fontSize: '16px', color: 'var(--color-foreground-subtle)', marginRight: '8px' }} />
+            <input
+              type="text"
+              placeholder="Search leads..."
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground)',
+              }}
+            />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput('')}
+                style={{ background: 'none', border: 'none', color: 'var(--color-foreground-muted)', cursor: 'pointer' }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Button with Count Badge */}
+          <button
+            onClick={() => setMobileFilterOpen(true)}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: sourceFilter !== 'All' ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+              border: sourceFilter !== 'All' ? '0.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+              color: sourceFilter !== 'All' ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              position: 'relative',
+              flexShrink: 0,
+            }}
+          >
+            <i className="ti ti-filter" style={{ fontSize: '18px' }} />
+            {sourceFilter !== 'All' && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '6px',
+                  right: '6px',
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)',
+                }}
+              />
+            )}
+          </button>
+
+          {/* New Lead Button */}
+          <button
+            onClick={() => router.push('/leads/new')}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <i className="ti ti-plus" style={{ fontSize: '18px' }} />
+          </button>
+        </div>
+
+        {/* 15.5 Active Filter Chip Row */}
+        {sourceFilter !== 'All' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px',
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+            }}
+          >
+            <div
+              onClick={() => setSourceFilter('All')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '16px',
+                background: 'var(--color-primary-muted)',
+                border: '0.5px solid var(--color-primary)',
+                color: 'var(--color-primary)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>Source: {sourceFilter}</span>
+              <i className="ti ti-x" style={{ fontSize: '12px' }} />
+            </div>
+            <button
+              onClick={() => setSourceFilter('All')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-foreground-muted)',
+                fontSize: 'var(--text-xs)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* 15.2 Compact Cards List */}
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[1, 2, 3, 4].map(n => (
+              <div
+                key={n}
+                style={{
+                  height: '110px',
+                  borderRadius: '12px',
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  animation: 'pulse 1.5s infinite',
+                }}
+              />
+            ))}
+          </div>
+        ) : filteredLeads.length === 0 ? (
+          <div
+            style={{
+              padding: '40px 20px',
+              borderRadius: '12px',
+              background: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              textAlign: 'center',
+            }}
+          >
+            <i className="ti ti-filter-off" style={{ fontSize: '32px', color: 'var(--color-foreground-subtle)', marginBottom: '10px' }} />
+            <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+              No leads found
+            </div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
+              Try adjusting your search query or source filter.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {mobileLeads.map((lead, idx) => (
+              <div
+                key={lead.leadId}
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                }}
+              >
+                {/* Header: Zero-padded ID, Name, Status Badge */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-foreground-subtle)' }}>
+                      #{String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <span
+                      onClick={() => router.push(`/leads/${lead.leadId}`)}
+                      style={{
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: 700,
+                        color: 'var(--color-foreground)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {lead.name}
+                    </span>
+                  </div>
+                  <Badge variant={lead.status as any} />
+                </div>
+
+                {/* Metadata Row: Date, Type, Source */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-foreground-muted)',
+                    marginBottom: '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <i className="ti ti-calendar" style={{ fontSize: '13px' }} />
+                    <span>{formatDisplayDate(lead.tentativeDate)}</span>
+                  </div>
+                  {lead.eventType && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <i className="ti ti-tag" style={{ fontSize: '13px' }} />
+                      <span>{lead.eventType}</span>
+                    </div>
+                  )}
+                  {lead.source && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <i className="ti ti-world" style={{ fontSize: '13px' }} />
+                      <span>{lead.source}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Contact row: Phone & Email */}
+                {(lead.contact || lead.email) && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      fontSize: 'var(--text-xs)',
+                      marginBottom: '12px',
+                      paddingTop: '8px',
+                      borderTop: '0.5px solid var(--color-border)',
+                    }}
+                  >
+                    {lead.contact && (
+                      <a
+                        href={`tel:${lead.contact}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: 'var(--color-accent)',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        <i className="ti ti-phone" style={{ fontSize: '13px' }} />
+                        <span>{lead.contact}</span>
+                      </a>
+                    )}
+                    {lead.email && (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: 'var(--color-foreground-muted)',
+                          textDecoration: 'none',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '160px',
+                        }}
+                      >
+                        <i className="ti ti-mail" style={{ fontSize: '13px' }} />
+                        <span>{lead.email}</span>
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Card Action Footer */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px' }}>
+                  <button
+                    onClick={() => handleConvertToBooking(lead)}
+                    style={{
+                      flex: 1,
+                      height: '36px',
+                      borderRadius: '8px',
+                      background: 'var(--color-primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 600,
+                      fontSize: 'var(--text-xs)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span>Convert to Booking</span>
+                    <i className="ti ti-arrow-right" style={{ fontSize: '12px' }} />
+                  </button>
+
+                  <button
+                    onClick={() => router.push(`/leads/${lead.leadId}`)}
+                    style={{
+                      height: '36px',
+                      padding: '0 12px',
+                      borderRadius: '8px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      color: 'var(--color-foreground)',
+                      fontWeight: 600,
+                      fontSize: 'var(--text-xs)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Details
+                  </button>
+
+                  <button
+                    onClick={() => setDeleteTarget(lead)}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      color: 'var(--color-danger)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <i className="ti ti-trash" style={{ fontSize: '14px' }} />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* 15.4 Infinite Scroll Sentinel */}
+            <div ref={sentinelRef} style={{ height: '20px' }} />
+
+            {/* End of Feed Message */}
+            {mobileVisibleCount >= filteredLeads.length && filteredLeads.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '16px 0',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-foreground-subtle)',
+                }}
+              >
+                <i className="ti ti-check" style={{ fontSize: '14px', color: 'var(--color-success)' }} />
+                <span>You've viewed all {filteredLeads.length} leads</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 15.3 Swipe-to-Dismiss Filter Bottom Sheet Drawer */}
+      {mobileFilterOpen && (
+        <>
+          <div
+            onClick={() => setMobileFilterOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.7)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 9990,
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: 'var(--color-surface-overlay)',
+              borderTop: '0.5px solid var(--color-border)',
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
+              padding: '16px 20px 32px 20px',
+              zIndex: 9995,
+              fontFamily: 'var(--font-inter)',
+            }}
+          >
+            {/* Grabber handle */}
+            <div
+              style={{
+                width: '36px',
+                height: '4px',
+                background: 'var(--color-border-strong)',
+                borderRadius: '2px',
+                margin: '0 auto 16px auto',
+              }}
+            />
+
+            <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-foreground)', margin: '0 0 16px 0' }}>
+              Filter by Source
+            </h3>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
+              {['All', 'Instagram', 'Referral', 'Walk-in', 'Website', 'Other'].map(src => {
+                const active = sourceFilter === src
+                return (
+                  <button
+                    key={src}
+                    onClick={() => setSourceFilter(src)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '20px',
+                      fontSize: 'var(--text-sm)',
+                      fontWeight: 600,
+                      background: active ? 'var(--color-primary)' : 'var(--color-surface-raised)',
+                      border: active ? '0.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                      color: active ? '#ffffff' : 'var(--color-foreground)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {src}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setSourceFilter('All')
+                  setMobileFilterOpen(false)
+                }}
+                style={{
+                  flex: 1,
+                  height: '44px',
+                  borderRadius: '8px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  cursor: 'pointer',
+                }}
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => setMobileFilterOpen(false)}
+                style={{
+                  flex: 2,
+                  height: '44px',
+                  borderRadius: '8px',
+                  background: 'var(--color-primary)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  cursor: 'pointer',
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Delete Lead Confirm Modal */}
       <ConfirmModal

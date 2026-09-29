@@ -6,7 +6,9 @@ import { format, parseISO, isValid } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
+import { Badge } from '@/components/shared/Badge'
 import { useRole } from '@/hooks/useAuth'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 
 import {
   StaffMember,
@@ -73,8 +75,6 @@ const BADGE_STYLES: Record<string, { bg: string; fg: string }> = {
   delivered:       { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
 }
 
-
-
 function getInitials(name: string): string {
   if (!name) return 'SP'
   const parts = name.trim().split(/\s+/)
@@ -95,10 +95,13 @@ function formatEventDate(dateStr: string): string {
   }
 }
 
+type TabType = 'profile' | 'attendance' | 'payslips' | 'workHistory'
+
 export default function StaffDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const uid = resolvedParams.id
   const router = useRouter()
+  const { backSwipeHandlers } = useBackSwipe()
 
   const { isAdmin, isManager } = useRole()
   const canViewHours = isAdmin || isManager
@@ -118,8 +121,9 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
     baseSalary: ''
   })
 
-  // Tabs State
-  const [activeTab, setActiveTab] = useState<'attendance' | 'payslips' | 'workHistory'>('attendance')
+  // Tabs State (On mobile: 'profile' | 'attendance' | 'payslips' | 'workHistory')
+  const [activeTab, setActiveTab] = useState<TabType>('profile')
+  const desktopTab = activeTab === 'profile' ? 'attendance' : activeTab
   
   // Tab Data States
   const [attData, setAttData] = useState<{ present: number; late: number; absent: number; totalMinutes: number } | null>(null)
@@ -148,40 +152,47 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
 
   // Load attendance summary on mount
   useEffect(() => {
+    if (!uid) return
     const now = new Date()
-    getAttendanceSummary(uid, now.getFullYear(), now.getMonth() + 1).then(res => {
-      setAttData(res)
+    getAttendanceSummary(uid, now.getFullYear(), now.getMonth() + 1).then(data => {
+      setAttData(data)
     })
   }, [uid])
 
-  const handleTabClick = (tab: typeof activeTab) => {
+  // Handle Tab Switch
+  const handleTabClick = (tab: TabType) => {
     setActiveTab(tab)
-    if (tab === 'payslips' && payData.length === 0) {
+    if (tab === 'payslips' && payData.length === 0 && !loadingPay) {
       setLoadingPay(true)
-      getPayslipHistory(uid).then(res => {
-        setPayData(res)
-        setLoadingPay(false)
-      })
+      getPayslipHistory(uid)
+        .then(data => setPayData(data))
+        .finally(() => setLoadingPay(false))
     }
-    if (tab === 'workHistory' && workData.length === 0) {
+    if (tab === 'workHistory' && workData.length === 0 && !loadingWork) {
       setLoadingWork(true)
-      getWorkHistory(uid).then(res => {
-        setWorkData(res)
-        setLoadingWork(false)
-      })
+      getWorkHistory(uid)
+        .then(data => setWorkData(data))
+        .finally(() => setLoadingWork(false))
     }
   }
 
+  // Handle Save Profile
   const handleSave = async () => {
     setSaving(true)
     try {
-      const rawSalary = Number(form.baseSalary.replace(/[^0-9]/g, ''))
+      let parsedSalary: number | undefined
+      if (form.baseSalary) {
+        const cleaned = form.baseSalary.replace(/[^0-9.]/g, '')
+        const num = parseFloat(cleaned)
+        if (!isNaN(num)) parsedSalary = num
+      }
+
       await updateStaffProfile(uid, {
-        name: form.name,
-        contact: form.contact,
-        email: form.email,
-        jobTitle: form.jobTitle,
-        baseSalary: isNaN(rawSalary) ? undefined : rawSalary,
+        name:       form.name,
+        contact:    form.contact,
+        email:      form.email,
+        jobTitle:   form.jobTitle,
+        baseSalary: parsedSalary
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -192,20 +203,27 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-
-
   if (loading) {
     return (
-      <div style={{ padding: '24px', maxWidth: '1280px', margin: '0 auto' }}>
-        <LoadingSkeleton lines={6} height="32px" gap="16px" />
+      <div className="p-3.5 sm:p-6 md:p-6 w-full max-w-[1280px] mx-auto flex flex-col gap-4">
+        <LoadingSkeleton lines={2} height="36px" gap="12px" />
+        <div className="flex flex-col md:grid md:grid-cols-[38fr_62fr] gap-4">
+          <LoadingSkeleton lines={6} height="36px" gap="10px" />
+          <LoadingSkeleton lines={4} height="50px" gap="10px" />
+        </div>
       </div>
     )
   }
 
   if (!staff) {
     return (
-      <div style={{ padding: '24px', maxWidth: '1280px', margin: '0 auto', color: 'var(--color-foreground-muted)' }}>
-        Staff member not found.
+      <div className="p-3.5 sm:p-6 md:p-6 w-full max-w-[1280px] mx-auto flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+          Staff member not found.
+        </div>
+        <Button onClick={() => router.push('/hrms/staff')}>
+          Back to staff list
+        </Button>
       </div>
     )
   }
@@ -216,253 +234,296 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   const statusText = staff.isActive ? 'Active' : 'Inactive'
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1280px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div
+      className="p-3.5 sm:p-6 md:p-6 w-full max-w-[1280px] mx-auto flex flex-col gap-4 sm:gap-5 pb-24 md:pb-6"
+      {...backSwipeHandlers}
+    >
+      {/* Scoped CSS Rule: Enforces exact desktop 38fr 62fr side-by-side grid without relying on arbitrary tailwind classes */}
+      <style>{`
+        .staff-detail-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          width: 100%;
+        }
+        @media (min-width: 768px) {
+          .staff-detail-grid {
+            display: grid !important;
+            grid-template-columns: 38fr 62fr !important;
+            gap: 16px !important;
+            align-items: start !important;
+          }
+        }
+        .att-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+        @media (min-width: 640px) {
+          .att-summary-grid {
+            grid-template-columns: repeat(4, 1fr) !important;
+          }
+        }
+      `}</style>
       
       {/* Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span
-          onClick={() => router.back()}
-          style={{ cursor: 'pointer', color: 'var(--color-foreground-muted)', display: 'flex' }}
-        >
-          <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={() => router.push('/hrms/staff')}
+            className="hidden md:flex"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '6px',
+              margin: '-6px 0 -6px -6px',
+              cursor: 'pointer',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-foreground-muted)',
+              borderRadius: '8px'
+            }}
+            title="Back to staff list"
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
+          </button>
 
-        {/* 44px Avatar */}
-        <div style={{
-          width: '44px',
-          height: '44px',
-          borderRadius: '50%',
-          background: 'var(--color-primary-muted)',
-          color: 'var(--color-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 'var(--text-sm)',
-          fontWeight: 700,
-          flexShrink: 0
-        }}>
-          {initials}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {/* 44px Avatar */}
           <div style={{
-            fontSize: 'var(--text-2xl)',
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: 'var(--color-primary-muted)',
+            color: 'var(--color-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 'var(--text-sm)',
             fontWeight: 700,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.2,
-            color: 'var(--color-foreground)'
+            flexShrink: 0
           }}>
-            {staff.name}
+            {initials}
           </div>
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
-            {roleText} · joined {formattedJoined} · {statusText}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            <div style={{
+              fontSize: 'var(--text-2xl)',
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+              lineHeight: 1.2,
+              color: 'var(--color-foreground)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {staff.name}
+            </div>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {roleText} · joined {formattedJoined} · {statusText}
+            </div>
           </div>
         </div>
+
+        <Badge
+          variant={staff.isActive ? 'active' : 'service'}
+          label={staff.isActive ? 'Active' : 'Inactive'}
+        />
       </div>
 
-      {/* Main Grid 38fr / 62fr */}
-      <div style={{ display: 'grid', gridTemplateColumns: '38fr 62fr', gap: '16px', alignItems: 'start' }}>
+      {/* Mobile Tab Bar (< 768px): Allows clean 1-tap switching on mobile */}
+      <div className="flex md:hidden items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {[
+          { id: 'profile' as const, label: 'Profile', icon: 'ti-user' },
+          { id: 'attendance' as const, label: 'Attendance', icon: 'ti-calendar-check' },
+          { id: 'payslips' as const, label: 'Payslips', icon: 'ti-file-invoice' },
+          { id: 'workHistory' as const, label: 'Work history', icon: 'ti-briefcase' },
+        ].map(t => {
+          const isSelected = activeTab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => handleTabClick(t.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                borderRadius: '20px',
+                fontSize: 'var(--text-xs)',
+                fontWeight: isSelected ? 600 : 500,
+                background: isSelected ? 'var(--color-primary)' : 'var(--color-surface-raised)',
+                color: isSelected ? '#ffffff' : 'var(--color-foreground-muted)',
+                border: isSelected ? 'none' : '0.5px solid var(--color-border)',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+                minHeight: '36px',
+              }}
+            >
+              <i className={`ti ${t.icon}`} style={{ fontSize: '13px' }} />
+              <span>{t.label}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Main Grid: 38% / 62% on Desktop, Single Selected Tab on Mobile */}
+      <div className="staff-detail-grid">
         
-        {/* Left Card — Profile */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px'
-        }}>
+        {/* Left Card: Profile Form (Always visible on desktop; on mobile visible when activeTab === 'profile') */}
+        <div className={activeTab === 'profile' ? 'w-full' : 'hidden md:block w-full'}>
           <div style={{
-            fontSize: 'var(--text-xs)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            color: 'var(--color-foreground-subtle)'
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            boxSizing: 'border-box',
+            width: '100%'
           }}>
-            PROFILE
+            <div style={{
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: 'var(--color-foreground-subtle)'
+            }}>
+              PROFILE
+            </div>
+
+            {/* Full Name */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Full name
+              </label>
+              <Input
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                className="h-9"
+              />
+            </div>
+
+            {/* Contact */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Contact
+              </label>
+              <Input
+                value={form.contact}
+                onChange={e => setForm({ ...form, contact: e.target.value })}
+                className="h-9"
+              />
+            </div>
+
+            {/* Email */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Email
+              </label>
+              <Input
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                className="h-9"
+              />
+            </div>
+
+            {/* Job title */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Job title
+              </label>
+              <Input
+                value={form.jobTitle}
+                onChange={e => setForm({ ...form, jobTitle: e.target.value })}
+                className="h-9"
+              />
+            </div>
+
+            {/* Join Date */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Join date
+              </label>
+              <Input
+                value={form.joinDate}
+                onChange={e => setForm({ ...form, joinDate: e.target.value })}
+                className="h-9"
+              />
+            </div>
+
+            {/* Base Salary */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                Base salary
+              </label>
+              <Input
+                value={form.baseSalary}
+                onChange={e => setForm({ ...form, baseSalary: e.target.value })}
+                className="h-9"
+              />
+            </div>
+
+            {/* Save Button */}
+            <Button
+              className="h-9 font-medium w-full mt-1"
+              style={{ minHeight: '40px' }}
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save profile'}
+            </Button>
           </div>
-
-          {/* Full Name */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Full name
-            </label>
-            <Input
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              className="h-9"
-            />
-          </div>
-
-          {/* Contact */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Contact
-            </label>
-            <Input
-              value={form.contact}
-              onChange={e => setForm({ ...form, contact: e.target.value })}
-              className="h-9"
-            />
-          </div>
-
-          {/* Email */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Email
-            </label>
-            <Input
-              value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              className="h-9"
-            />
-          </div>
-
-          {/* Job title */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Job title
-            </label>
-            <Input
-              value={form.jobTitle}
-              onChange={e => setForm({ ...form, jobTitle: e.target.value })}
-              className="h-9"
-            />
-          </div>
-
-          {/* Join Date */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Join date
-            </label>
-            <Input
-              value={form.joinDate}
-              onChange={e => setForm({ ...form, joinDate: e.target.value })}
-              className="h-9"
-            />
-          </div>
-
-          {/* Base Salary */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-              Base salary
-            </label>
-            <Input
-              value={form.baseSalary}
-              onChange={e => setForm({ ...form, baseSalary: e.target.value })}
-              className="h-9"
-            />
-          </div>
-
-          {/* Save Button */}
-          <Button
-            className="h-9 font-medium w-full"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save profile'}
-          </Button>
-
-
         </div>
 
-        {/* Right Card — Tabs Container */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          overflow: 'hidden'
-        }}>
-          {/* Tabs Navigation Header */}
-          <div style={{ display: 'flex', borderBottom: '0.5px solid var(--color-border)', padding: '0 12px' }}>
-            {[
-              { id: 'attendance', label: 'Attendance' },
-              { id: 'payslips', label: 'Payslips' },
-              { id: 'workHistory', label: 'Work history' }
-            ].map(tab => (
-              <div
-                key={tab.id}
-                onClick={() => handleTabClick(tab.id as typeof activeTab)}
-                style={{
-                  cursor: 'pointer',
-                  padding: '12px 14px',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 600,
-                  color: activeTab === tab.id ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
-                  borderBottom: activeTab === tab.id ? '2px solid var(--color-primary)' : '2px solid transparent',
-                  transition: 'color 0.15s, border-color 0.15s'
-                }}
-              >
-                {tab.label}
-              </div>
-            ))}
-          </div>
+        {/* Right Card: Tabs Container (Always visible on desktop; on mobile visible when activeTab !== 'profile') */}
+        <div className={activeTab !== 'profile' ? 'w-full' : 'hidden md:block w-full'}>
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}>
+            {/* Desktop Tabs Header (Hidden on Mobile) */}
+            <div className="hidden md:flex border-b border-[var(--color-border)] px-3">
+              {[
+                { id: 'attendance', label: 'Attendance' },
+                { id: 'payslips', label: 'Payslips' },
+                { id: 'workHistory', label: 'Work history' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabClick(tab.id as typeof activeTab)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: desktopTab === tab.id ? '2px solid var(--color-primary)' : '2px solid transparent',
+                    cursor: 'pointer',
+                    padding: '12px 14px',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 600,
+                    color: desktopTab === tab.id ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                    transition: 'color 0.15s, border-color 0.15s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Tab 1: Attendance */}
-          {activeTab === 'attendance' && (
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: canViewHours ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: '10px' }}>
-                
-                {/* Present */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '2px',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '10px',
-                  padding: '12px 4px'
-                }}>
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-success)' }}>
-                    {attData?.present ?? 17}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Present · Jul
-                  </span>
-                </div>
-
-                {/* Late */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '2px',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '10px',
-                  padding: '12px 4px'
-                }}>
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-secondary)' }}>
-                    {attData?.late ?? 1}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Late
-                  </span>
-                </div>
-
-                {/* Absent */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '2px',
-                  background: 'var(--color-surface-raised)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '10px',
-                  padding: '12px 4px'
-                }}>
-                  <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-danger)' }}>
-                    {attData?.absent ?? 0}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                    Absent
-                  </span>
-                </div>
-
-                {/* Hours — only shown in admin/manager login */}
-                {canViewHours && (
+            {/* Tab 1: Attendance */}
+            {desktopTab === 'attendance' && (
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="att-summary-grid">
+                  
+                  {/* Present */}
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -471,145 +532,219 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                     background: 'var(--color-surface-raised)',
                     border: '0.5px solid var(--color-border)',
                     borderRadius: '10px',
-                    padding: '12px 4px'
+                    padding: '12px 6px'
                   }}>
-                    <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                      {Math.floor((attData?.totalMinutes ?? 9600) / 60)}h
+                    <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-success)' }}>
+                      {attData?.present ?? 17}
                     </span>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                      Hours
+                      Present · Jul
                     </span>
                   </div>
+
+                  {/* Late */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '10px',
+                    padding: '12px 6px'
+                  }}>
+                    <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-secondary)' }}>
+                      {attData?.late ?? 1}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                      Late
+                    </span>
+                  </div>
+
+                  {/* Absent */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '10px',
+                    padding: '12px 6px'
+                  }}>
+                    <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-danger)' }}>
+                      {attData?.absent ?? 0}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                      Absent
+                    </span>
+                  </div>
+
+                  {/* Hours — only shown in admin/manager login */}
+                  {canViewHours && (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '10px',
+                      padding: '12px 6px'
+                    }}>
+                      <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                        {Math.floor((attData?.totalMinutes ?? 9600) / 60)}h
+                      </span>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                        Hours
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/hrms/attendance?staff=${uid}`)}
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-accent)',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      background: 'transparent',
+                      border: 'none',
+                      padding: '8px 0',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      minHeight: '40px'
+                    }}
+                  >
+                    <span>Open attendance grid</span>
+                    <i className="ti ti-arrow-right" style={{ fontSize: '13px' }} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: Payslips */}
+            {desktopTab === 'payslips' && (
+              <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column' }}>
+                {loadingPay ? (
+                  <div style={{ padding: '12px 0' }}>
+                    <LoadingSkeleton lines={4} height="24px" gap="12px" />
+                  </div>
+                ) : payData.length === 0 ? (
+                  <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--color-foreground-muted)', fontSize: 'var(--text-sm)' }}>
+                    No payslips found for this staff member.
+                  </div>
+                ) : (
+                  payData.map(p => {
+                    const dateObj = new Date(p.year, p.month - 1)
+                    const monthLabel = format(dateObj, 'MMMM yyyy')
+                    const formattedPay = '₹' + p.netPay.toLocaleString('en-IN')
+
+                    return (
+                      <div
+                        key={p.payslipId}
+                        onClick={() => router.push(`/hrms/payslips/${p.payslipId}`)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '12px 8px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          cursor: 'pointer',
+                          borderRadius: '6px',
+                          minHeight: '44px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-raised)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <i className="ti ti-file-invoice" style={{ fontSize: '18px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                            {monthLabel}
+                          </span>
+                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                            {p.payslipNumber}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)', flexShrink: 0 }}>
+                          {formattedPay}
+                        </span>
+                        <i className="ti ti-chevron-right" style={{ fontSize: '14px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                      </div>
+                    )
+                  })
                 )}
               </div>
+            )}
 
-              <div>
-                <span
-                  onClick={() => router.push(`/hrms/attendance?staff=${uid}`)}
-                  style={{
-                    fontSize: 'var(--text-xs)',
-                    color: 'var(--color-accent)',
-                    cursor: 'pointer',
-                    fontWeight: 500
-                  }}
-                >
-                  Open attendance grid →
-                </span>
-              </div>
-            </div>
-          )}
+            {/* Tab 3: Work history */}
+            {desktopTab === 'workHistory' && (
+              <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column' }}>
+                {loadingWork ? (
+                  <div style={{ padding: '12px 0' }}>
+                    <LoadingSkeleton lines={4} height="24px" gap="12px" />
+                  </div>
+                ) : workData.length === 0 ? (
+                  <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--color-foreground-muted)', fontSize: 'var(--text-sm)' }}>
+                    No work history recorded for this staff member.
+                  </div>
+                ) : (
+                  workData.map((w, i) => {
+                    const icon = ROLE_ICONS[w.role] ?? 'ti-camera'
+                    const roleLabel = ROLE_LABELS[w.role] ?? w.role
+                    const formattedDate = formatEventDate(w.eventDate)
+                    const stageStyle = BADGE_STYLES[w.stage] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
+                    const stageLabel = STAGE_LABELS[w.stage] ?? w.stage
 
-          {/* Tab 2: Payslips */}
-          {activeTab === 'payslips' && (
-            <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column' }}>
-              {loadingPay ? (
-                <div style={{ padding: '12px 0' }}>
-                  <LoadingSkeleton lines={4} height="24px" gap="12px" />
-                </div>
-              ) : payData.length === 0 ? (
-                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--color-foreground-muted)', fontSize: 'var(--text-sm)' }}>
-                  No payslips found for this staff member.
-                </div>
-              ) : (
-                payData.map(p => {
-                  const dateObj = new Date(p.year, p.month - 1)
-                  const monthLabel = format(dateObj, 'MMMM yyyy')
-                  const formattedPay = '₹' + p.netPay.toLocaleString('en-IN')
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '12px 8px',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          minHeight: '44px'
+                        }}
+                      >
+                        <i className={`ti ${icon}`} style={{ fontSize: '18px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {w.eventName}
+                          </span>
+                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                            {roleLabel} · {formattedDate}
+                          </span>
+                        </div>
 
-                  return (
-                    <div
-                      key={p.payslipId}
-                      onClick={() => router.push(`/hrms/payslips/${p.payslipId}`)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '11px 6px',
-                        borderBottom: '0.5px solid var(--color-border)',
-                        cursor: 'pointer',
-                        borderRadius: '6px'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-raised)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <i className="ti ti-file-invoice" style={{ fontSize: '17px', color: 'var(--color-foreground-subtle)' }} />
-                      <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                        {monthLabel}
-                      </span>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginRight: '16px' }}>
-                        {p.payslipNumber}
-                      </span>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                        {formattedPay}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          )}
-
-          {/* Tab 3: Work history */}
-          {activeTab === 'workHistory' && (
-            <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column' }}>
-              {loadingWork ? (
-                <div style={{ padding: '12px 0' }}>
-                  <LoadingSkeleton lines={4} height="24px" gap="12px" />
-                </div>
-              ) : workData.length === 0 ? (
-                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--color-foreground-muted)', fontSize: 'var(--text-sm)' }}>
-                  No work history recorded for this staff member.
-                </div>
-              ) : (
-                workData.map((w, i) => {
-                  const icon = ROLE_ICONS[w.role] ?? 'ti-camera'
-                  const roleLabel = ROLE_LABELS[w.role] ?? w.role
-                  const formattedDate = formatEventDate(w.eventDate)
-                  const stageStyle = BADGE_STYLES[w.stage] ?? { bg: 'var(--color-surface-raised)', fg: 'var(--color-foreground-muted)' }
-                  const stageLabel = STAGE_LABELS[w.stage] ?? w.stage
-
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '11px 6px',
-                        borderBottom: '0.5px solid var(--color-border)'
-                      }}
-                    >
-                      <i className={`ti ${icon}`} style={{ fontSize: '17px', color: 'var(--color-foreground-subtle)' }} />
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                          {w.eventName}
-                        </span>
-                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                          {roleLabel} · {formattedDate}
+                        {/* Inline Stage Badge */}
+                        <span style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: '10px',
+                          background: stageStyle.bg,
+                          color: stageStyle.fg,
+                          flexShrink: 0
+                        }}>
+                          {stageLabel}
                         </span>
                       </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
 
-                      {/* Inline Stage Badge (span with Badge tokens, not <Badge> component) */}
-                      <span style={{
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 600,
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        background: stageStyle.bg,
-                        color: stageStyle.fg
-                      }}>
-                        {stageLabel}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          )}
-
+          </div>
         </div>
-      </div>
 
+      </div>
 
     </div>
   )

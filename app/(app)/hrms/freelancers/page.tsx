@@ -14,6 +14,7 @@ import {
   addFreelancer,
 } from '@/lib/firebase/queries/freelancers'
 import { useUIStore } from '@/store/uiStore'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 
 function getInitials(name: string): string {
   if (!name) return 'FL'
@@ -41,6 +42,7 @@ const SKILL_FILTERS = [
 
 export default function FreelancersListPage() {
   const router = useRouter()
+  const { backSwipeHandlers } = useBackSwipe()
   const testDatasetMode = useUIStore(s => s.testDatasetMode)
   const testModeCutoff = useUIStore(s => s.testModeCutoff)
   const [freelancers, setFreelancers] = useState<Freelancer[]>([])
@@ -75,6 +77,16 @@ export default function FreelancersListPage() {
     })
     return () => unsub()
   }, [testDatasetMode, testModeCutoff])
+
+  // Support ?action=new query param from quick create actions
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('action') === 'new') {
+        setShowAddModal(true)
+      }
+    }
+  }, [])
 
   // Load payouts to derive lastEngaged dates
   useEffect(() => {
@@ -154,17 +166,14 @@ export default function FreelancersListPage() {
   }
 
   return (
-    <div style={{
-      padding: '24px',
-      maxWidth: '1280px',
-      margin: '0 auto',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '16px',
-      fontFamily: 'var(--font-inter)',
-    }}>
-      {/* Top Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+    <div
+      className="p-3.5 sm:p-6 md:p-8 max-w-[1280px] mx-auto flex flex-col gap-4"
+      style={{
+        fontFamily: 'var(--font-inter)',
+      }}
+    >
+      {/* Desktop Top Bar (≥768px): Invariant */}
+      <div className="hidden md:flex items-center gap-2.5 flex-wrap">
         {/* Search */}
         <div style={{ position: 'relative' }}>
           <i
@@ -232,13 +241,101 @@ export default function FreelancersListPage() {
         </Button>
       </div>
 
-      {/* Freelancers Table Container */}
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '0.5px solid var(--color-border)',
-        borderRadius: '12px',
-        overflow: 'hidden',
-      }}>
+      {/* Mobile Top Bar (<768px): Touch-optimized */}
+      <div className="flex md:hidden flex-col gap-2.5">
+        {/* Row 1: Search + Add Button */}
+        <div className="flex items-center gap-2">
+          <div style={{ position: 'relative', flex: 1 }}>
+            <i
+              className="ti ti-search"
+              style={{
+                fontSize: '15px',
+                color: 'var(--color-foreground-subtle)',
+                position: 'absolute',
+                left: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              placeholder="Search freelancers..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                fontFamily: 'var(--font-inter)',
+                width: '100%',
+                boxSizing: 'border-box',
+                height: '38px',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '10px',
+                padding: '0 12px 0 32px',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground)',
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          <Button
+            className="h-[38px] px-3.5 text-xs font-semibold shrink-0"
+            onClick={handleOpenAddModal}
+          >
+            ＋ Add
+          </Button>
+        </div>
+
+        {/* Row 2: Horizontal Scrolling Filter Chips */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch',
+            paddingBottom: '2px',
+          }}
+        >
+          {SKILL_FILTERS.map(f => {
+            const isActive = skillFilter === f.key
+            return (
+              <span
+                key={f.key}
+                onClick={() => setSkillFilter(f.key)}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '6px 14px',
+                  borderRadius: '16px',
+                  background: isActive ? 'var(--color-primary-muted)' : 'var(--color-surface)',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                  border: `0.5px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  transition: 'all 0.15s ease',
+                  userSelect: 'none',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {f.label}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Freelancers Table Container (Desktop Invariance) */}
+      <div
+        className="hidden md:block"
+        style={{
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          overflow: 'hidden',
+        }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
             <tr>
@@ -457,30 +554,227 @@ export default function FreelancersListPage() {
         </table>
       </div>
 
+      {/* Mobile Card List (Compact Cards & Touch Gestures) */}
+      <div className="flex flex-col md:hidden gap-3 pb-24" {...backSwipeHandlers}>
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[1, 2, 3, 4].map(i => (
+              <div
+                key={i}
+                style={{
+                  height: '110px',
+                  background: 'var(--color-surface)',
+                  borderRadius: '12px',
+                  border: '0.5px solid var(--color-border)',
+                }}
+              />
+            ))}
+          </div>
+        ) : filteredFreelancers.length === 0 ? (
+          <div style={{
+            background: 'var(--color-surface)',
+            borderRadius: '12px',
+            border: '0.5px solid var(--color-border)',
+            padding: '32px 16px',
+          }}>
+            <EmptyState
+              title="No freelancers found"
+              description={searchQuery || skillFilter !== 'all' ? 'Try adjusting your search or skill filter.' : 'Add your first freelancer to get started.'}
+            />
+          </div>
+        ) : (
+          filteredFreelancers.map(f => {
+            const skillLower = (f.skill || 'other').toLowerCase()
+            const skillStyle = SKILL_COLORS[skillLower] || SKILL_COLORS.other
+            const skillLabel = f.skill ? f.skill.charAt(0).toUpperCase() + f.skill.slice(1) : 'Other'
+            const lastDate = lastEngagedMap.get(f.freelancerId)
+            const formattedLast = lastDate ? format(lastDate, 'd MMM yyyy') : '—'
+            const isItemActive = f.isActive !== false
+
+            return (
+              <div
+                key={f.freelancerId}
+                onClick={() => router.push(`/hrms/freelancers/${f.freelancerId}`)}
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                }}
+              >
+                {/* Header: Avatar, Name, Skill, Status Dot */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: 'var(--color-secondary-muted)',
+                      color: 'var(--color-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}>
+                      {getInitials(f.name)}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-foreground)' }}>
+                        {f.name}
+                      </div>
+                      <div style={{ marginTop: '2px' }}>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '1px 6px',
+                          borderRadius: '8px',
+                          background: skillStyle.bg,
+                          color: skillStyle.fg,
+                          display: 'inline-block',
+                        }}>
+                          {skillLabel}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-foreground-muted)',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    background: 'var(--color-surface-raised)',
+                  }}>
+                    <span style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: isItemActive ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                    }} />
+                    {isItemActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+
+                {/* Details Pill Row */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--color-surface-raised)',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  fontSize: 'var(--text-xs)',
+                }}>
+                  <div>
+                    <span style={{ color: 'var(--color-foreground-subtle)', marginRight: '6px' }}>Day rate:</span>
+                    <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+                      ₹{(f.dayRate || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--color-foreground-subtle)', marginRight: '6px' }}>Last engaged:</span>
+                    <span style={{ color: 'var(--color-foreground-muted)' }}>{formattedLast}</span>
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '0.5px solid var(--color-border)',
+                    paddingTop: '8px',
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {f.contact ? (
+                    <a
+                      href={`tel:${f.contact}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: 'var(--color-primary)',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <i className="ti ti-phone" style={{ fontSize: '14px' }} />
+                      <span>{f.contact}</span>
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>No contact</span>
+                  )}
+
+                  <button
+                    onClick={() => router.push(`/hrms/freelancers/${f.freelancerId}`)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--color-accent)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 0',
+                    }}
+                  >
+                    <span>Details</span>
+                    <i className="ti ti-chevron-right" style={{ fontSize: '12px' }} />
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
       {/* Add Freelancer Modal Overlay */}
       {showAddModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
-        }}>
-          <div style={{
-            background: 'var(--color-surface-overlay)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '480px',
-            padding: '24px',
+        <div
+          onClick={() => setShowAddModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            zIndex: 50,
             display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-          }}>
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--color-surface-overlay)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
                 Add Freelancer
@@ -494,6 +788,7 @@ export default function FreelancersListPage() {
                   color: 'var(--color-foreground-muted)',
                   cursor: 'pointer',
                   fontSize: '18px',
+                  padding: '4px',
                 }}
               >
                 <i className="ti ti-x" />
@@ -644,16 +939,21 @@ export default function FreelancersListPage() {
               </div>
 
               {/* Modal Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 mt-3">
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto h-10 sm:h-9"
                   onClick={() => setShowAddModal(false)}
                   disabled={saving}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saving}>
+                <Button
+                  type="submit"
+                  className="w-full sm:w-auto h-10 sm:h-9 font-medium"
+                  disabled={saving}
+                >
                   {saving ? 'Adding...' : 'Add freelancer'}
                 </Button>
               </div>

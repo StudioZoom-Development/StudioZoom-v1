@@ -118,16 +118,57 @@ export default function NewUserPage() {
   }
 
   return (
-    <div style={{
-      maxWidth: '680px',
-      margin: '0 auto',
-      padding: '24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '24px',
-      fontFamily: 'var(--font-inter)',
-      color: 'var(--color-foreground)',
-    }}>
+    <div
+      style={{
+        maxWidth: '680px',
+        margin: '0 auto',
+        padding: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+        fontFamily: 'var(--font-inter)',
+        color: 'var(--color-foreground)',
+      }}
+    >
+      <style>{`
+        .user-new-grid-2 {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 14px;
+        }
+        .user-new-roles {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .user-new-footer {
+          display: flex;
+          flex-direction: column-reverse;
+          gap: 10px;
+          margin-top: 8px;
+        }
+        .user-new-footer button,
+        .user-new-footer .user-new-btn {
+          width: 100%;
+        }
+        @media (min-width: 768px) {
+          .user-new-grid-2 {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .user-new-roles {
+            flex-direction: row !important;
+          }
+          .user-new-footer {
+            flex-direction: row !important;
+            justify-content: flex-end !important;
+            gap: 12px !important;
+          }
+          .user-new-footer button,
+          .user-new-footer .user-new-btn {
+            width: auto !important;
+          }
+        }
+      `}</style>
       
       {/* Header */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -209,7 +250,7 @@ export default function NewUserPage() {
           </div>
 
           {/* Email & Password */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div className="user-new-grid-2">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
                 Email address <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -257,7 +298,7 @@ export default function NewUserPage() {
           {/* App Role */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>App Role</label>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="user-new-roles">
               {[
                 { value: 'staff',   label: 'Staff',   desc: 'Standard HR & Event access' },
                 { value: 'manager', label: 'Manager', desc: 'Manage events & equipment' },
@@ -310,7 +351,7 @@ export default function NewUserPage() {
           </div>
 
           {/* Job Title & Contact */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div className="user-new-grid-2">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Job Title</label>
               <select
@@ -365,7 +406,7 @@ export default function NewUserPage() {
           </div>
 
           {/* Join Date Picker & Base Salary */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div className="user-new-grid-2">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Join Date</label>
               <DateField
@@ -388,7 +429,7 @@ export default function NewUserPage() {
         </div>
 
         {/* Footer Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+        <div className="user-new-footer">
           <button
             type="button"
             onClick={() => setShowCancelConfirm(true)}
@@ -407,7 +448,7 @@ export default function NewUserPage() {
             Cancel
           </button>
 
-          <Button type="submit" className="h-9 px-6 font-medium" disabled={saving}>
+          <Button type="submit" className="h-9 px-6 font-medium user-new-btn" disabled={saving}>
             {saving ? 'Creating user…' : 'Create user & staff member'}
           </Button>
         </div>

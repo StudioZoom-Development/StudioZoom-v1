@@ -10,9 +10,11 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
 import { BookingDraft } from '@/types'
 import { subscribeToDrafts, deleteBookingDraft } from '@/lib/firebase/queries/drafts'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 
 export default function DraftsPage() {
   const router = useRouter()
+  const { backSwipeHandlers } = useBackSwipe(() => router.push('/clients'))
   const [drafts, setDrafts] = useState<BookingDraft[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -49,7 +51,7 @@ export default function DraftsPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span
             onClick={() => router.push('/clients')}
-            style={{ cursor: 'pointer', color: 'var(--color-foreground-muted)', display: 'flex' }}
+            className="hidden md:flex items-center cursor-pointer text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] transition-colors"
           >
             <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
           </span>
@@ -98,13 +100,16 @@ export default function DraftsPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '0.5px solid var(--color-border)',
-        borderRadius: '12px',
-        overflow: 'hidden',
-      }}>
+      {/* Table (Desktop Invariance) */}
+      <div
+        className="hidden md:block"
+        style={{
+          background: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          overflow: 'hidden',
+        }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
           <thead>
             <tr>
@@ -207,6 +212,125 @@ export default function DraftsPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Draft Cards List */}
+      <div className="flex flex-col md:hidden gap-3 pb-24" {...backSwipeHandlers}>
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[1, 2, 3].map(i => (
+              <div key={i} style={{ height: '110px', background: 'var(--color-surface)', borderRadius: '12px', border: '0.5px solid var(--color-border)' }} />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ background: 'var(--color-surface)', borderRadius: '12px', border: '0.5px solid var(--color-border)', padding: '32px 16px' }}>
+            <EmptyState
+              icon="ti-files"
+              title="No saved drafts"
+              description="When you click 'Save as draft' in the booking wizard, your progress will be saved here."
+              action={{ label: '＋ New booking', onClick: () => router.push('/clients/new') }}
+            />
+          </div>
+        ) : (
+          filtered.map(draft => (
+            <div
+              key={draft.draftId}
+              onClick={() => router.push(`/clients/new?draftId=${draft.draftId}`)}
+              style={{
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '12px',
+                padding: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-foreground)' }}>
+                    {draft.clientName || 'Untitled Client'}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                    {draft.eventName || draft.eventType || 'Event'}
+                  </div>
+                </div>
+                <Badge variant="planning" label={`Step ${(draft.currentStep ?? 0) + 1} of 6`} />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--color-surface-raised)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: 'var(--text-xs)',
+              }}>
+                <div>
+                  <span style={{ color: 'var(--color-foreground-subtle)', marginRight: '6px' }}>Package:</span>
+                  <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+                    {draft.totalAmount ? `₹${draft.totalAmount.toLocaleString('en-IN')}` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-foreground-subtle)', marginRight: '6px' }}>Saved:</span>
+                  <span style={{ color: 'var(--color-foreground-muted)' }}>
+                    {draft.updatedAt instanceof Date ? format(draft.updatedAt, 'd MMM, h:mm a') : '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderTop: '0.5px solid var(--color-border)',
+                  paddingTop: '8px',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <span
+                  onClick={() => router.push(`/clients/new?draftId=${draft.draftId}`)}
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    color: 'var(--color-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>Resume Booking</span>
+                  <i className="ti ti-arrow-right" style={{ fontSize: '13px' }} />
+                </span>
+
+                <button
+                  onClick={() => setDeleteTarget(draft)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-danger)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 8px',
+                  }}
+                >
+                  <i className="ti ti-trash" style={{ fontSize: '14px' }} />
+                  <span>Delete</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <ConfirmModal
