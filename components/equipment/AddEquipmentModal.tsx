@@ -906,10 +906,28 @@ function EquipmentModalContent({
             borderTop: '0.5px solid var(--color-border)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             gap: '10px',
+            flexWrap: 'wrap',
           }}
         >
+          {error ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: 'var(--color-danger)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+              }}
+            >
+              <i className="ti ti-alert-circle" style={{ fontSize: '15px' }} />
+              <span>{error}</span>
+            </div>
+          ) : <div />}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
             onClick={onClose}
@@ -947,9 +965,10 @@ function EquipmentModalContent({
               gap: '8px',
             }}
           >
-            {loading && <i className="ti ti-loader animate-spin" />}
-            <span>{isEditing ? 'Save Changes' : 'Add Equipment'}</span>
-          </button>
+              {loading && <i className="ti ti-loader animate-spin" />}
+              <span>{isEditing ? 'Save Changes' : 'Add Equipment'}</span>
+            </button>
+          </div>
         </div>
       </form>
     </div>

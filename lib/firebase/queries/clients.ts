@@ -40,6 +40,13 @@ export function subscribeToClients(
           createdAt: data.createdAt instanceof Timestamp
             ? data.createdAt.toDate()
             : data.createdAt ? new Date(data.createdAt) : new Date(),
+          lastRemindedAt: data.lastRemindedAt instanceof Timestamp
+            ? data.lastRemindedAt.toDate()
+            : data.lastRemindedAt && typeof (data.lastRemindedAt as { toDate?: () => Date }).toDate === 'function'
+            ? (data.lastRemindedAt as { toDate: () => Date }).toDate()
+            : data.lastRemindedAt && typeof (data.lastRemindedAt as { seconds?: number }).seconds === 'number'
+            ? new Date((data.lastRemindedAt as { seconds: number }).seconds * 1000)
+            : data.lastRemindedAt ? new Date(data.lastRemindedAt as string | number) : undefined,
           eventDates: Array.isArray(data.eventDates)
             ? data.eventDates.map((ed: Partial<EventDateEntry>) => ({
                 ...ed,
@@ -107,6 +114,13 @@ export async function getClientById(clientId: string): Promise<Client | null> {
     freelancerIds: Array.isArray(data.freelancerIds) ? data.freelancerIds : [],
     eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : data.eventDate ? new Date(data.eventDate) : new Date(),
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt ? new Date(data.createdAt) : new Date(),
+    lastRemindedAt: data.lastRemindedAt instanceof Timestamp
+      ? data.lastRemindedAt.toDate()
+      : data.lastRemindedAt && typeof (data.lastRemindedAt as { toDate?: () => Date }).toDate === 'function'
+      ? (data.lastRemindedAt as { toDate: () => Date }).toDate()
+      : data.lastRemindedAt && typeof (data.lastRemindedAt as { seconds?: number }).seconds === 'number'
+      ? new Date((data.lastRemindedAt as { seconds: number }).seconds * 1000)
+      : data.lastRemindedAt ? new Date(data.lastRemindedAt as string | number) : undefined,
     eventDates: Array.isArray(data.eventDates)
       ? data.eventDates.map((ed: Partial<EventDateEntry>) => ({
           ...ed,

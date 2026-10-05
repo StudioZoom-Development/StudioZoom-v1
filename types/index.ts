@@ -74,6 +74,8 @@ export interface Client {
   recurringSchedule?:  RecurringSchedule
   bookingGroupId?:     string
   projectIds?:         string[]          // IDs of all sibling session projects for recurring bookings
+  lastRemindedAt?:     Date
+  reminderCount?:      number
   createdBy:           string
   createdAt:           Date
   updatedAt:           Date
@@ -558,22 +560,38 @@ export type ExpenseCategory =
   | 'salaries'
   | string
 
+export interface CustomExpenseCategory {
+  id: string
+  key: string
+  label: string
+  icon: string
+  defaultBudget?: number
+  isDeleted?: boolean
+  createdAt?: Date
+}
+
 export interface Expense {
-  expenseId:    string
-  code?:        string
-  date:         Date
-  category:     ExpenseCategory
-  amount:       number
-  method:       string
-  vendor?:      string
-  note?:        string
-  description?: string
-  projectId?:   string
-  projectName?: string
-  source:       'manual' | 'freelancerPayout' | 'salary' | 'autoPayout' | string
-  createdBy:    string
-  createdAt:    Date
-  isDeleted?:   boolean
+  expenseId:      string
+  code?:          string
+  date:           Date
+  category:       ExpenseCategory
+  amount:         number
+  method:         string
+  vendor?:        string
+  note?:          string
+  description?:   string
+  projectId?:     string
+  projectName?:   string
+  source:         'manual' | 'freelancerPayout' | 'salary' | 'autoPayout' | 'payable' | string
+  payableId?:     string
+  hrmsPayoutId?:  string
+  gstAmount?:     number
+  gstRate?:       number
+  vendorGstin?:   string
+  isGstClaimable?: boolean
+  createdBy:      string
+  createdAt:      Date
+  isDeleted?:     boolean
 }
 
 export interface Budget {
@@ -583,6 +601,36 @@ export interface Budget {
   year:           number
   month?:         number
   budgetedAmount: number
+}
+
+export interface AccountPayable {
+  payableId:      string
+  vendorName:     string
+  vendorGstin?:   string
+  category:       ExpenseCategory | string
+  billNumber?:    string
+  amount:         number
+  gstAmount?:     number
+  gstRate?:       number
+  dueDate:        Date
+  status:         'pending' | 'overdue' | 'paid'
+  note?:          string
+  projectId?:     string
+  projectName?:   string
+  paidDate?:      Date
+  paymentMethod?: string
+  expenseId?:     string
+  createdAt:      Date
+  isDeleted?:     boolean
+}
+
+export interface CashOpeningBalances {
+  cashInBank:     number
+  cashInUPI:      number
+  cashInHand:     number
+  asOfDate:       Date
+  updatedAt?:     Date
+  updatedBy?:     string
 }
 
 // ─── QUOTATION & INVOICE ──────────────────────────────────────────────────

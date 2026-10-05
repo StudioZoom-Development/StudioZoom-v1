@@ -22,8 +22,15 @@ service cloud.firestore {
       allow write:       if isAdminOrManager();
       allow delete:      if isAdmin();
       match /payments/{paymentId} {
-        allow read, write: if isAdminOrManager();
+        allow read:        if isSignedIn();
+        allow write:       if isAdminOrManager();
       }
+    }
+
+    // Collection group rule for cross-client payments query
+    match /{path=**}/payments/{paymentId} {
+      allow read:        if isSignedIn();
+      allow write:       if isAdminOrManager();
     }
 
     match /bookingDrafts/{draftId} {
@@ -106,6 +113,7 @@ service cloud.firestore {
         resource.data.staffUid == request.auth.uid &&
         resource.data.status == 'open'
       );
+      allow delete: if isAdminOrManager();
     }
 
     match /timeLogCorrections/{correctionId} {
@@ -137,7 +145,12 @@ service cloud.firestore {
     match /freelancers/{freelancerId}   { allow read, write: if isAdminOrManager(); }
     match /freelancerPayouts/{payoutId} { allow read, write: if isAdmin(); }
     match /expenses/{expenseId}         { allow read, write: if isAdmin(); }
+    match /expenseCategories/{categoryId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
     match /budgets/{budgetId}           { allow read, write: if isAdmin(); }
+    match /payables/{payableId}         { allow read, write: if isAdmin(); }
     match /quotations/{quotationId}     { allow read, write: if isAdminOrManager(); }
     match /invoices/{invoiceId}         { allow read, write: if isAdminOrManager(); }
 

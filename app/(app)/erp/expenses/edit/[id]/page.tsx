@@ -9,9 +9,9 @@ import { DateField } from '@/components/shared/DateField'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { useRole } from '@/hooks/useAuth'
 import { useAuthStore } from '@/store/authStore'
-import { getExpenseById, updateExpense } from '@/lib/firebase/queries/expenses'
+import { getExpenseById, updateExpense, subscribeToExpenseCategories } from '@/lib/firebase/queries/expenses'
 import { subscribeToClients } from '@/lib/firebase/queries/clients'
-import type { Client, ExpenseCategory } from '@/types'
+import type { Client, ExpenseCategory, CustomExpenseCategory } from '@/types'
 
 const CATEGORY_OPTIONS: Array<{ label: string; value: ExpenseCategory }> = [
   { label: 'Equipment',     value: 'equipment' },
@@ -56,8 +56,23 @@ export default function EditExpensePage() {
   const [note, setNote] = useState<string>('')
 
   const [clients, setClients] = useState<Client[]>([])
+  const [customCategories, setCustomCategories] = useState<CustomExpenseCategory[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>('')
+
+  // Dynamic category options combining standard, active custom, and currently selected category
+  const categoryOptions = useMemo(() => {
+    const list: Array<{ label: string; value: ExpenseCategory }> = [...CATEGORY_OPTIONS]
+    for (const c of customCategories) {
+      if (!list.some(o => o.value === c.key)) {
+        list.push({ label: c.label, value: c.key as ExpenseCategory })
+      }
+    }
+    if (category && !list.some(o => o.value === category)) {
+      list.push({ label: category, value: category })
+    }
+    return list
+  }, [customCategories, category])
 
   // Deduplicate project options so each project name appears exactly once
   const uniqueProjectOptions = useMemo(() => {
@@ -77,12 +92,18 @@ export default function EditExpensePage() {
     return list.sort((a, b) => a.label.localeCompare(b.label))
   }, [clients])
 
-  // Fetch client and project options
+  // Fetch client, project, and custom categories options
   useEffect(() => {
-    const unsub = subscribeToClients({}, data => {
+    const unsubClients = subscribeToClients({}, data => {
       setClients(data)
     })
-    return () => unsub()
+    const unsubCats = subscribeToExpenseCategories(cats => {
+      setCustomCategories(cats)
+    })
+    return () => {
+      unsubClients()
+      unsubCats()
+    }
   }, [])
 
   // Load existing expense data
@@ -359,7 +380,7 @@ export default function EditExpensePage() {
                 cursor: 'pointer',
               }}
             >
-              {CATEGORY_OPTIONS.map(opt => (
+              {categoryOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
