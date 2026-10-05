@@ -617,14 +617,20 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
     return list
   }, [payables, payableStatusFilter, payableSearch])
 
-  // Reset pagination when search or filters change
-  useEffect(() => {
+  // Reset pagination when search or filters change (storing previous render info per React docs)
+  const [prevReceivableKey, setPrevReceivableKey] = useState('')
+  const currentReceivableKey = `${agingFilter}|${receivableSearch}|${receivablePageSize}`
+  if (prevReceivableKey !== currentReceivableKey) {
+    setPrevReceivableKey(currentReceivableKey)
     setReceivablePage(1)
-  }, [agingFilter, receivableSearch, receivablePageSize])
+  }
 
-  useEffect(() => {
+  const [prevPayableKey, setPrevPayableKey] = useState('')
+  const currentPayableKey = `${payableStatusFilter}|${payableSearch}|${payablePageSize}`
+  if (prevPayableKey !== currentPayableKey) {
+    setPrevPayableKey(currentPayableKey)
     setPayablePage(1)
-  }, [payableStatusFilter, payableSearch, payablePageSize])
+  }
 
   // Receivables pagination & totals
   const totalReceivablePages = Math.max(1, Math.ceil(filteredReceivables.length / receivablePageSize))
