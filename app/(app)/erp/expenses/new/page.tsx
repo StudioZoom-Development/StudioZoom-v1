@@ -8,9 +8,9 @@ import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { useRole } from '@/hooks/useAuth'
 import { useAuthStore } from '@/store/authStore'
-import { createExpense } from '@/lib/firebase/queries/expenses'
+import { createExpense, subscribeToExpenseCategories } from '@/lib/firebase/queries/expenses'
 import { subscribeToClients } from '@/lib/firebase/queries/clients'
-import type { Client, ExpenseCategory } from '@/types'
+import type { Client, ExpenseCategory, CustomExpenseCategory } from '@/types'
 
 const CATEGORY_OPTIONS: Array<{ label: string; value: ExpenseCategory }> = [
   { label: 'Equipment',     value: 'equipment' },
@@ -49,8 +49,18 @@ export default function AddExpensePage() {
   const [generatedCode] = useState<string>(() => `EXP-${Math.floor(1000 + Math.random() * 9000)}`)
 
   const [clients, setClients] = useState<Client[]>([])
+  const [customCategories, setCustomCategories] = useState<CustomExpenseCategory[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>('')
+
+  // Dynamic category options combining standard and active custom categories
+  const categoryOptions = useMemo(() => {
+    const list: Array<{ label: string; value: ExpenseCategory }> = [...CATEGORY_OPTIONS]
+    for (const c of customCategories) {
+      list.push({ label: c.label, value: c.key as ExpenseCategory })
+    }
+    return list
+  }, [customCategories])
 
   // Deduplicate project options so each project name appears exactly once
   const uniqueProjectOptions = useMemo(() => {
@@ -70,13 +80,18 @@ export default function AddExpensePage() {
     return list.sort((a, b) => a.label.localeCompare(b.label))
   }, [clients])
 
-  // Fetch client and project options from clients collection
-  // Requirement: "Project dropdown details should be fetched from the clients page."
+  // Fetch client, project, and custom categories options
   useEffect(() => {
-    const unsub = subscribeToClients({}, data => {
+    const unsubClients = subscribeToClients({}, data => {
       setClients(data)
     })
-    return () => unsub()
+    const unsubCats = subscribeToExpenseCategories(cats => {
+      setCustomCategories(cats)
+    })
+    return () => {
+      unsubClients()
+      unsubCats()
+    }
   }, [])
 
   // Admin access guard
@@ -277,7 +292,7 @@ export default function AddExpensePage() {
                 cursor: 'pointer',
               }}
             >
-              {CATEGORY_OPTIONS.map(opt => (
+              {categoryOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

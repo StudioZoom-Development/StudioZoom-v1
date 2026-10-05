@@ -45,6 +45,7 @@ export interface CreateEquipmentInput {
 }
 
 export interface UpdateEquipmentInput {
+  itemCode?: string
   name?: string
   category?: EquipmentCategory
   brand?: string
@@ -320,17 +321,22 @@ export async function updateEquipment(
 ): Promise<void> {
   const docRef = doc(db, 'equipment', itemId)
   const snap = await getDoc(docRef)
-  if (!snap.exists()) {
-    throw new Error('Equipment item not found')
-  }
 
-  const prev = snap.data() as Record<string, unknown>
+  const prev = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
   const prevStatus = (prev.status as EquipmentStatus) || 'available'
 
   const payload: Record<string, unknown> = {
     updatedAt: serverTimestamp(),
   }
 
+  if (!snap.exists()) {
+    payload.itemId = itemId
+    payload.itemCode = input.itemCode?.trim() || `EQ-${itemId.replace(/^eq_/, '').toUpperCase()}`
+    payload.createdAt = serverTimestamp()
+    payload.isDeleted = false
+  }
+
+  if (input.itemCode !== undefined) payload.itemCode = input.itemCode.trim()
   if (input.name !== undefined) payload.name = input.name.trim()
   if (input.category !== undefined) payload.category = input.category
   if (input.brand !== undefined) payload.brand = input.brand.trim()
@@ -361,7 +367,7 @@ export async function updateEquipment(
     payload.nextMaintenanceDate = input.nextMaintenanceDate ? Timestamp.fromDate(input.nextMaintenanceDate) : null
   }
 
-  await updateDoc(docRef, payload)
+  await setDoc(docRef, payload, { merge: true })
 
   // Audit status changes
   if (input.status && input.status !== prevStatus && user) {

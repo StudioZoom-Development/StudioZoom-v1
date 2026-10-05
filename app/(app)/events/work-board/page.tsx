@@ -21,7 +21,7 @@ import {
   saveWorkItemDetails,
   CreateWorkItemData,
 } from '@/lib/firebase/queries/workItems'
-import { updateTrackStageStatus } from '@/lib/firebase/queries/postProduction'
+import { updateTrackStageStatus, updateTrackAssignment } from '@/lib/firebase/queries/postProduction'
 import {
   subscribeToProjects,
   subscribeToAllStaffAssignments,
@@ -47,6 +47,7 @@ import {
   StaffAssignment,
   Freelancer,
   PostProdStageStatus,
+  PostProdTrackKey,
 } from '@/types'
 
 // ─── Fallback Data (matching events board fallback) ────────────────────────────
@@ -2807,6 +2808,13 @@ export default function WorkBoardPage() {
 
       // 3. Bidirectional sync: update the Project itself so it reflects on the Event Board
       if (item.projectId) {
+        const trackKey: PostProdTrackKey | null =
+          item.postProdTrackKey ||
+          (item.type === 'photoEditing' || item.type === 'photoDesigning' ? 'photoTrack' :
+           item.type === 'albumDesign' || item.type === 'albumDesigning' || item.type === 'albumCreating' ? 'albumTrack' :
+           item.type === 'highlights' || item.type === 'highlightsEditing' || item.type === 'videoEditing' ? 'videoTrack' :
+           item.type === 'fullFilm' || item.type === 'fullVideoEditing' ? 'fullVideoTrack' : null)
+
         // If demo project, update local demo state and broadcast
         if (item.projectId.startsWith('demo-')) {
           setProjects(prev => {
@@ -2829,10 +2837,27 @@ export default function WorkBoardPage() {
                   updatedStaff = Array.from(new Set([...updatedStaff, newId]))
                 }
 
+                let updatedPP = p.postProduction ? { ...p.postProduction } : undefined
+                if (updatedPP && trackKey && updatedPP[trackKey]) {
+                  updatedPP = {
+                    ...updatedPP,
+                    [trackKey]: {
+                      ...updatedPP[trackKey],
+                      assignment: {
+                        staffUid: isFreelancer ? '' : newId,
+                        staffName: isFreelancer ? '' : newName,
+                        freelancerId: isFreelancer ? newId : '',
+                        freelancerName: isFreelancer ? newName : '',
+                      },
+                    },
+                  }
+                }
+
                 return {
                   ...p,
                   staffUids: updatedStaff,
                   freelancerIds: updatedFl,
+                  postProduction: updatedPP || p.postProduction,
                   updatedAt: new Date(),
                 }
               }
@@ -2859,6 +2884,18 @@ export default function WorkBoardPage() {
               await assignFreelancerToProject(item.projectId, newId, { role: item.type, days: 1, dayRate: 6000 }, item.clientId).catch(() => {})
             } else {
               await assignStaffToProject(item.projectId, newId, item.clientId).catch(() => {})
+            }
+
+            // Sync track assignment directly to project.postProduction so it immediately reflects on the Event Board
+            if (trackKey) {
+              await updateTrackAssignment(
+                item.projectId,
+                trackKey,
+                isFreelancer ? '' : newId,
+                isFreelancer ? '' : newName,
+                isFreelancer ? newId : undefined,
+                isFreelancer ? newName : undefined
+              ).catch((err) => console.error('Failed to update track assignment:', err))
             }
           } catch (err) {
             console.error('Failed to sync reassignment with project:', err)
@@ -2888,6 +2925,25 @@ export default function WorkBoardPage() {
 
     try {
       await saveWorkItemDetails(updatedItem)
+
+      // Sync post-prod track assignment if applicable
+      const trackKey: PostProdTrackKey | null =
+        updatedItem.postProdTrackKey ||
+        (updatedItem.type === 'photoEditing' || updatedItem.type === 'photoDesigning' ? 'photoTrack' :
+         updatedItem.type === 'albumDesign' || updatedItem.type === 'albumDesigning' || updatedItem.type === 'albumCreating' ? 'albumTrack' :
+         updatedItem.type === 'highlights' || updatedItem.type === 'highlightsEditing' || updatedItem.type === 'videoEditing' ? 'videoTrack' :
+         updatedItem.type === 'fullFilm' || updatedItem.type === 'fullVideoEditing' ? 'fullVideoTrack' : null)
+
+      if (updatedItem.projectId && trackKey) {
+        await updateTrackAssignment(
+          updatedItem.projectId,
+          trackKey,
+          updatedItem.isFreelancer ? '' : updatedItem.assignedToUid,
+          updatedItem.isFreelancer ? '' : updatedItem.assignedToName,
+          updatedItem.isFreelancer ? updatedItem.assignedToUid : undefined,
+          updatedItem.isFreelancer ? updatedItem.assignedToName : undefined
+        ).catch(() => {})
+      }
     } catch (err) {
       console.error('Failed to save work item details in Firestore:', err)
     } finally {

@@ -55,3 +55,9 @@ firebase-debug.log
 .agents/rules/
 .agents/skills/
 .agents/workflows/
+
+# Local developer maintenance scripts
+scripts/inspect-db.mjs
+scripts/reset-and-sync-from-prod.mjs
+
+

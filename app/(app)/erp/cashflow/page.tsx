@@ -1,1 +1,16 @@
-export default function Page() { return <div style={{color:'var(--color-foreground-muted)',padding:'40px',textAlign:'center',fontFamily:'var(--font-inter)'}}><i className="ti ti-tools" style={{fontSize:'32px',display:'block',marginBottom:'12px'}}/>Cashflow — coming in next build</div> }
+import React, { Suspense } from 'react'
+import { FinancialsHub } from '@/components/financials/FinancialsHub'
+import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
+
+export const metadata = {
+  title: 'Cashflow · Studio Zoom',
+  description: 'Monthly income vs outflow, net position, and transaction drill-down',
+}
+
+export default function CashflowPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: '24px' }}><LoadingSkeleton lines={6} /></div>}>
+      <FinancialsHub initialTab="cashflow" />
+    </Suspense>
+  )
+}

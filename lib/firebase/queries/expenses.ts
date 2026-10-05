@@ -10,7 +10,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import type { Expense, ExpenseCategory } from '@/types'
+import type { Expense, ExpenseCategory, CustomExpenseCategory } from '@/types'
 
 export interface CreateExpenseInput {
   date: Date
@@ -196,4 +196,76 @@ export async function updateExpense(
   if (data.projectName !== undefined) payload.projectName = data.projectName
 
   await updateDoc(ref, payload)
+}
+
+function mapDocToCustomCategory(id: string, data: Record<string, unknown>): CustomExpenseCategory {
+  return {
+    id,
+    key: typeof data.key === 'string' && data.key ? data.key : id,
+    label: typeof data.label === 'string' ? data.label : 'Custom Category',
+    icon: typeof data.icon === 'string' && data.icon ? data.icon : 'ti-tag',
+    defaultBudget: typeof data.defaultBudget === 'number' ? data.defaultBudget : undefined,
+    isDeleted: Boolean(data.isDeleted),
+    createdAt: parseDate(data.createdAt),
+  }
+}
+
+/**
+ * Real-time subscription to active custom expense categories.
+ */
+export function subscribeToExpenseCategories(
+  callback: (categories: CustomExpenseCategory[]) => void
+): () => void {
+  const q = query(collection(db, 'expenseCategories'))
+  return onSnapshot(
+    q,
+    snap => {
+      const list = snap.docs
+        .map(d => mapDocToCustomCategory(d.id, d.data() as Record<string, unknown>))
+        .filter(c => !c.isDeleted)
+        .sort((a, b) => a.label.localeCompare(b.label))
+      callback(list)
+    },
+    err => {
+      console.warn('[expenses] subscribeToExpenseCategories warning:', err)
+      callback([])
+    }
+  )
+}
+
+/**
+ * Create a new custom expense category.
+ */
+export async function createExpenseCategory(input: {
+  label: string
+  icon?: string
+  defaultBudget?: number
+  key?: string
+}): Promise<string> {
+  const catRef = doc(collection(db, 'expenseCategories'))
+  const id = catRef.id
+  const rawKey = input.key?.trim() || input.label.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || id
+  const key = rawKey.startsWith('custom_') ? rawKey : `custom_${rawKey}`
+
+  await setDoc(catRef, {
+    key,
+    label: input.label.trim(),
+    icon: input.icon?.trim() || 'ti-tag',
+    defaultBudget: typeof input.defaultBudget === 'number' ? input.defaultBudget : 25000,
+    isDeleted: false,
+    createdAt: serverTimestamp(),
+  })
+
+  return id
+}
+
+/**
+ * Soft delete a custom expense category.
+ */
+export async function deleteExpenseCategory(id: string): Promise<void> {
+  const ref = doc(db, 'expenseCategories', id)
+  await updateDoc(ref, {
+    isDeleted: true,
+    updatedAt: serverTimestamp(),
+  })
 }
