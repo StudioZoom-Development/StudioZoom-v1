@@ -46,7 +46,7 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   present:         { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
   late:            { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   halfDay:         { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
-  leave:           { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  leave:           { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
   absent:          { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
   pending:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   weekOff:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },

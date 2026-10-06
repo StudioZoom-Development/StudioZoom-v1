@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import type { LeaveRequest, LeaveRequestType } from '@/types'
+import { createNotification } from './notifications'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +157,35 @@ export async function submitLeaveRequest(
     createdAt: serverTimestamp(),
   })
 
+  // Trigger notifications for Admin, Manager, and Staff applicant
+  try {
+    await Promise.all([
+      createNotification({
+        recipient:           'admin',
+        recipientRole:       'admin',
+        type:                'leave_applied',
+        referenceId:         ref.id,
+        referenceCollection: 'leaveRequests',
+      }),
+      createNotification({
+        recipient:           'manager',
+        recipientRole:       'manager',
+        type:                'leave_applied',
+        referenceId:         ref.id,
+        referenceCollection: 'leaveRequests',
+      }),
+      createNotification({
+        recipient:           staffUid,
+        recipientRole:       'staff',
+        type:                'leave_applied',
+        referenceId:         ref.id,
+        referenceCollection: 'leaveRequests',
+      }),
+    ])
+  } catch (err) {
+    console.warn('[leaveRequests] notification creation notice:', err)
+  }
+
   return ref.id
 }
 
@@ -211,6 +241,19 @@ export async function approveLeaveRequest(
       updatedAt: serverTimestamp(),
     })
   }
+
+  // Trigger notification for Staff member
+  try {
+    await createNotification({
+      recipient:           staffUid,
+      recipientRole:       'staff',
+      type:                'leave_approved',
+      referenceId:         requestId,
+      referenceCollection: 'leaveRequests',
+    })
+  } catch (err) {
+    console.warn('[leaveRequests] notification creation notice:', err)
+  }
 }
 
 /**
@@ -264,5 +307,18 @@ export async function rejectLeaveRequest(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
+  }
+
+  // Trigger notification for Staff member
+  try {
+    await createNotification({
+      recipient:           staffUid,
+      recipientRole:       'staff',
+      type:                'leave_rejected',
+      referenceId:         requestId,
+      referenceCollection: 'leaveRequests',
+    })
+  } catch (err) {
+    console.warn('[leaveRequests] notification creation notice:', err)
   }
 }
