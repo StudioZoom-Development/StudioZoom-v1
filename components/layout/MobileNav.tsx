@@ -38,7 +38,6 @@ const ERP_SECTIONS: NavSectionOption[] = [
   { href: '/erp/quotations', icon: 'ti-file-text', label: 'Quotations',          description: 'Estimates, package pricing & client proposals', roles: ['admin', 'manager'] },
   { href: '/erp/invoices',   icon: 'ti-receipt',   label: 'Invoices',            description: 'GST tax invoices, billing & payments', roles: ['admin'] },
   { href: '/erp/expenses',   icon: 'ti-wallet',    label: 'Expenses',            description: 'Production costs, petty cash & travel', roles: ['admin'] },
-  { href: '/erp/cashflow',   icon: 'ti-chart-bar', label: 'Cashflow',            description: 'Cash in / cash out monthly overview', roles: ['admin'] },
   { href: '/erp/accounts',   icon: 'ti-scale',     label: 'Accounts & Budgets',  description: 'Ledgers, studio accounts & margins', roles: ['admin'] },
 ]
 

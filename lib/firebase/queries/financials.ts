@@ -12,7 +12,7 @@ import {
   increment,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import type { Expense, Client, Budget, ExpenseCategory, AccountPayable, CashOpeningBalances, CustomExpenseCategory } from '@/types'
+import type { Expense, Client, Budget, ExpenseCategory, AccountPayable, CashOpeningBalances, CustomExpenseCategory, BankAccount } from '@/types'
 export type { CashOpeningBalances }
 
 export interface ClientPaymentRecord {
@@ -23,8 +23,11 @@ export interface ClientPaymentRecord {
   method: string
   instalment?: string
   transactionId?: string
+  bankAccountId?: string
+  bankAccountName?: string
   recordedByName?: string
 }
+
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +101,8 @@ export interface FinancialLineItem {
   clientId?: string
   projectId?: string
   invoiceNumber?: string
+  bankAccountId?: string
+  bankAccountName?: string
 }
 
 export interface MonthlyFinancialSummary {
@@ -184,6 +189,19 @@ export interface CashflowForecastMonth {
   scenario: ForecastScenario
 }
 
+export interface BankPositionSummary {
+  bankAccountId: string
+  nickname: string
+  bankName: string
+  accountHolder: string
+  accountNumberMasked: string
+  upiId?: string
+  balance: number
+  monthCollections: number
+  totalCollections: number
+  isDefault: boolean
+}
+
 export interface CashPositionSummary {
   cashInHand: number
   cashInBank: number
@@ -193,6 +211,7 @@ export interface CashPositionSummary {
   runwayMonths: number
   hasCustomOpeningBalances: boolean
   asOfDate?: Date
+  bankAccountsBreakdown?: BankPositionSummary[]
 }
 
 export interface OutflowCategoryBreakdown {
@@ -400,6 +419,8 @@ export function subscribeToAllClientPayments(
           method: (data.method as string) || 'bankTransfer',
           instalment: (data.instalment as string) || '',
           transactionId: (data.transactionId as string) || '',
+          bankAccountId: (data.bankAccountId as string) || undefined,
+          bankAccountName: (data.bankAccountName as string) || undefined,
           recordedByName: (data.recordedByName as string) || '',
         }
       })
@@ -788,7 +809,61 @@ export function exportCashflowTransactionsCSV(
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Generates and downloads a dedicated statement CSV for a specific bank account's client collections.
+ */
+export function exportBankInflowCSV(
+  items: Array<{
+    date: Date
+    clientName: string
+    eventName?: string
+    instalment: string
+    amount: number
+    method: string
+    bankAccountName?: string
+    transactionId?: string
+    recordedByName?: string
+  }>,
+  bankName: string,
+  periodLabel: string = 'Current'
+): void {
+  if (typeof window === 'undefined') return
+
+  const lines: string[] = []
+  lines.push('STUDIO ZOOM — BANK INFLOW STATEMENT')
+  lines.push(`Account / Bank: ${bankName}`)
+  lines.push(`Period: ${periodLabel}`)
+  lines.push(`Generated: ${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN')}`)
+  lines.push(`Total Transactions: ${items.length}`)
+  lines.push('')
+  lines.push('Date,Client Name,Event Name,Instalment,Amount (INR),Method,Bank Account,Transaction Ref / UTR,Recorded By')
+
+  let totalAmount = 0
+  for (const it of items) {
+    totalAmount += it.amount
+    const dStr = it.date instanceof Date && !isNaN(it.date.getTime())
+      ? it.date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      : ''
+    lines.push(`"${dStr}","${it.clientName.replace(/"/g, '""')}","${(it.eventName || '').replace(/"/g, '""')}","${it.instalment}",${it.amount},"${it.method.toUpperCase()}","${(it.bankAccountName || bankName).replace(/"/g, '""')}","${(it.transactionId || '').replace(/"/g, '""')}","${(it.recordedByName || '').replace(/"/g, '""')}"`)
+  }
+
+  lines.push('')
+  lines.push(`TOTAL COLLECTIONS (INR),,,,${totalAmount},,,,`)
+
+  const csvContent = lines.join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `StudioZoom_Bank_Inflows_${bankName.replace(/[\s/]/g, '_')}_${periodLabel.replace(/[\s/]/g, '_')}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // ─── AGGREGATED FINANCIALS COMPILER ─────────────────────────────────────────
+
 
 export function compileMonthlyFinancials(
   expenses: Expense[],
@@ -797,7 +872,8 @@ export function compileMonthlyFinancials(
   openingBalances?: CashOpeningBalances | null,
   scenario: ForecastScenario = 'expected',
   selectedMonthKey?: string,
-  clientPayments: ClientPaymentRecord[] = []
+  clientPayments: ClientPaymentRecord[] = [],
+  bankAccounts: BankAccount[] = []
 ): {
   monthlyMap: Map<string, MonthlyFinancialSummary>
   last6Months: MonthlyFinancialSummary[]
@@ -892,6 +968,11 @@ export function compileMonthlyFinancials(
       })()
     : 0
 
+  // Bank Collections tracking per bank account
+  const bankCollectionsMonthMap = new Map<string, number>()
+  const bankCollectionsTotalMap = new Map<string, number>()
+  const effectiveMonthKey = selectedMonthKey || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
   // 1. Process Income from Client bookings & payments
   const clientMap = new Map<string, Client>()
   for (const c of clients) {
@@ -922,7 +1003,11 @@ export function compileMonthlyFinancials(
     // Only accumulate into liquid cash position if transaction occurred AFTER verified baseline date
     if (!hasCustomOpeningBalances || date.getTime() > baselineCutoffTime) {
       const methodLower = (payment.method || '').toLowerCase()
-      if (methodLower === 'cash') {
+      if (payment.bankAccountId && bankAccounts.length > 0) {
+        // Funds are deposited directly into a designated studio bank account.
+        // Tracked in bankCollectionsTotalMap and included in that bank account's balance.
+        // Do not double-count into cashInUPI or fallback cashInBank!
+      } else if (methodLower === 'cash') {
         cashInHand += payment.amount
       } else if (methodLower === 'gpay' || methodLower === 'upi' || methodLower === 'phonepe') {
         cashInUPI += payment.amount
@@ -955,13 +1040,22 @@ export function compileMonthlyFinancials(
     monthData.income += payment.amount
     monthData.incomeCount += 1
 
+    if (payment.bankAccountId) {
+      const prevTotal = bankCollectionsTotalMap.get(payment.bankAccountId) || 0
+      bankCollectionsTotalMap.set(payment.bankAccountId, prevTotal + payment.amount)
+      if (key === effectiveMonthKey) {
+        const prevMonth = bankCollectionsMonthMap.get(payment.bankAccountId) || 0
+        bankCollectionsMonthMap.set(payment.bankAccountId, prevMonth + payment.amount)
+      }
+    }
+
     monthData.lineItems.push({
       id: `pay_${payment.paymentId}`,
       date,
       type: 'income',
       category: 'Client Payment',
       label: c?.eventName || c?.name || 'Client Payment',
-      meta: `${c?.name || 'Client'} · ${payment.instalment || 'Payment'} (${(payment.method || 'Transfer').toUpperCase()})`,
+      meta: `${c?.name || 'Client'} · ${payment.instalment || 'Payment'} (${(payment.method || 'Transfer').toUpperCase()}${payment.bankAccountName ? ` · 🏦 ${payment.bankAccountName}` : ''})`,
       amount: payment.amount,
       signedAmount: payment.amount,
       icon: 'ti-receipt',
@@ -971,6 +1065,8 @@ export function compileMonthlyFinancials(
       clientId: payment.clientId,
       projectId: c?.projectId,
       invoiceNumber: c?.invoiceNumber,
+      bankAccountId: payment.bankAccountId,
+      bankAccountName: payment.bankAccountName,
     })
   }
 
@@ -1259,8 +1355,30 @@ export function compileMonthlyFinancials(
     overdueCount,
   }
 
+  const bankAccountsBreakdown: BankPositionSummary[] = bankAccounts.map(b => {
+    const monthCollections = bankCollectionsMonthMap.get(b.bankAccountId) || 0
+    const totalCollections = bankCollectionsTotalMap.get(b.bankAccountId) || 0
+    const startingBal = b.openingBalance || 0
+    return {
+      bankAccountId: b.bankAccountId,
+      nickname: b.nickname,
+      bankName: b.bankName,
+      accountHolder: b.accountHolder,
+      accountNumberMasked: b.accountNumberMasked,
+      upiId: b.upiId,
+      balance: startingBal + totalCollections,
+      monthCollections,
+      totalCollections,
+      isDefault: Boolean(b.isDefault),
+    }
+  })
+
+  // If studio has configured bank accounts, the verified bank treasury is the sum of all bank account balances
+  const totalBankAccountsBalance = bankAccountsBreakdown.reduce((sum, b) => sum + b.balance, 0)
+  const effectiveCashInBank = bankAccounts.length > 0 ? totalBankAccountsBalance : cashInBank
+
   // 5. Total Available Cash & Burn Rate / Runway
-  const totalAvailable = Math.max(0, cashInHand + cashInBank + cashInUPI)
+  const totalAvailable = Math.max(0, cashInHand + effectiveCashInBank + cashInUPI)
 
   // Average monthly burn rate across last 3 months
   let last3MonthsBurnSum = 0
@@ -1273,13 +1391,14 @@ export function compileMonthlyFinancials(
 
   const cashPosition: CashPositionSummary = {
     cashInHand,
-    cashInBank,
+    cashInBank: effectiveCashInBank,
     cashInUPI,
     totalAvailable,
     monthlyBurnRate,
     runwayMonths,
     hasCustomOpeningBalances,
     asOfDate: openingBalances?.asOfDate,
+    bankAccountsBreakdown,
   }
 
   // 6. Cashflow Forecast for Next 1 - 3 Months with Sensitivity Scenarios

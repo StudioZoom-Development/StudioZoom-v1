@@ -81,13 +81,31 @@ export interface Client {
   updatedAt:           Date
 }
 
+export interface BankAccount {
+  bankAccountId:       string
+  bankName:            string              // e.g. "HDFC Bank", "State Bank of India (SBI)"
+  accountHolder:       string              // e.g. "Studio Zoom (Owner)", "Father's Account"
+  nickname:            string              // e.g. "Studio HDFC (Primary)", "Father's SBI"
+  accountNumberMasked: string              // e.g. "•••• 4821" (last 4 digits)
+  upiId?:              string              // e.g. "studiozoom@hdfcbank"
+  ifsc?:               string              // e.g. "HDFC0001234"
+  isDefault?:          boolean             // Auto-selected by default in payment modals
+  isActive?:           boolean             // Set to false if account is retired
+  openingBalance?:     number              // Baseline starting balance for reconciliation
+  createdAt?:          Date
+  updatedAt?:          Date
+  isDeleted?:          boolean
+}
+
 export interface Payment {
   paymentId:       string
-  instalment:      '1st' | '2nd' | '3rd'
+  instalment:      '1st' | '2nd' | '3rd' | string
   amount:          number
   date:            Date
   method:          'cash' | 'gpay' | 'bankTransfer' | 'cheque'
   transactionId?:  string
+  bankAccountId?:  string
+  bankAccountName?: string
   recordedBy:      string
   recordedByName?: string
 }

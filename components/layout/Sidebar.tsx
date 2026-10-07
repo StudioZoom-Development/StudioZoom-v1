@@ -39,7 +39,6 @@ const ERP_ITEMS: NavItem[] = [
   { id: 'quotations', label: 'Quotations', icon: 'ti-file-text', href: '/erp/quotations', roles: ['admin','manager'] },
   { id: 'invoices',   label: 'Invoices',   icon: 'ti-receipt',   href: '/erp/invoices',   roles: ['admin'] },
   { id: 'expenses',   label: 'Expenses',   icon: 'ti-wallet',    href: '/erp/expenses',   roles: ['admin'] },
-  { id: 'cashflow',   label: 'Cashflow',   icon: 'ti-chart-bar', href: '/erp/cashflow',   roles: ['admin'] },
   { id: 'accounts',   label: 'Accounts',   icon: 'ti-scale',     href: '/erp/accounts',   roles: ['admin'] },
 ]
 

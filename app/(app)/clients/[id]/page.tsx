@@ -31,7 +31,8 @@ import { EditClientModal } from '@/components/shared/EditClientModal'
 import { RecordPaymentModal } from '@/components/shared/RecordPaymentModal'
 import { Skeleton } from '@/components/shared/LoadingSkeleton'
 import { useBackSwipe } from '@/hooks/useMobileGestures'
-import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry, Freelancer } from '@/types'
+import { subscribeToBankAccounts } from '@/lib/firebase/queries/bankAccounts'
+import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry, Freelancer, BankAccount } from '@/types'
 
 interface PaymentItem {
   paymentId:       string
@@ -40,9 +41,12 @@ interface PaymentItem {
   date:            Date
   method:          string
   transactionId?:  string
+  bankAccountId?:  string
+  bankAccountName?: string
   recordedBy:      string
   recordedByName?: string
 }
+
 
 const STAGE_ORDER: ProjectStage[] = [
   'booked', 'planning', 'preProduction', 'eventDay', 'postProduction', 'delivered'
@@ -220,8 +224,20 @@ export default function ClientDetailPage() {
   const [editDate, setEditDate] = useState('')
   const [editMethod, setEditMethod] = useState<'cash' | 'gpay' | 'bankTransfer' | 'cheque'>('gpay')
   const [editTransactionId, setEditTransactionId] = useState('')
+  const [editBankAccountId, setEditBankAccountId] = useState('')
   const [submittingEditPayment, setSubmittingEditPayment] = useState(false)
   const [editPaymentError, setEditPaymentError] = useState('')
+
+  // Bank accounts
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+
+  useEffect(() => {
+    const unsub = subscribeToBankAccounts((list) => {
+      setBankAccounts(list)
+    })
+    return () => unsub()
+  }, [])
+
 
   // Delete payment modal state
   const [deletePaymentTarget, setDeletePaymentTarget] = useState<PaymentItem | null>(null)
@@ -444,6 +460,7 @@ export default function ClientDetailPage() {
     setEditDate(format(p.date, 'yyyy-MM-dd'))
     setEditMethod((p.method as 'cash' | 'gpay' | 'bankTransfer' | 'cheque') || 'gpay')
     setEditTransactionId(p.transactionId || '')
+    setEditBankAccountId(p.bankAccountId || bankAccounts.find(b => b.isDefault)?.bankAccountId || bankAccounts[0]?.bankAccountId || '')
     setEditPaymentError('')
   }
 
@@ -463,6 +480,7 @@ export default function ClientDetailPage() {
     setEditPaymentError('')
 
     try {
+      const targetBank = bankAccounts.find(b => b.bankAccountId === editBankAccountId)
       await editPayment(
         client.clientId,
         editingPayment.paymentId,
@@ -472,10 +490,13 @@ export default function ClientDetailPage() {
           date: new Date(editDate),
           method: editMethod,
           transactionId: editMethod !== 'cash' ? editTransactionId.trim() : '',
+          bankAccountId: targetBank?.bankAccountId,
+          bankAccountName: targetBank?.nickname || targetBank?.bankName,
         },
         appUser?.uid || 'system',
         appUser?.name || 'Staff'
       )
+
 
       const updatedClient = await getClientById(client.clientId)
       if (updatedClient) setClient(updatedClient)
@@ -671,6 +692,12 @@ export default function ClientDetailPage() {
                 <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)' }}>
                   {p.method}
                 </span>
+                {p.bankAccountName && (
+                  <span style={{ fontSize: '11px', color: 'var(--color-accent)', background: 'var(--color-accent-muted)', padding: '1px 6px', borderRadius: '4px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <i className="ti ti-building-bank" style={{ fontSize: '11px' }} />
+                    {p.bankAccountName}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
@@ -1871,6 +1898,43 @@ export default function ClientDetailPage() {
                   <option value="cash">Cash</option>
                   <option value="bankTransfer">Bank Transfer</option>
                   <option value="cheque">Cheque</option>
+                </select>
+              </div>
+
+              {/* Deposit Bank Account */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                    {editMethod === 'cash' ? 'Target Ledger / Drawer' : 'Deposit To Bank Account'}
+                  </label>
+                  {editBankAccountId && (
+                    <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 500 }}>
+                      {bankAccounts.find(b => b.bankAccountId === editBankAccountId)?.accountHolder || ''}
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={editBankAccountId}
+                  onChange={e => setEditBankAccountId(e.target.value)}
+                  style={{
+                    fontFamily: 'var(--font-inter)',
+                    height: '38px',
+                    width: '100%',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    padding: '0 10px',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--color-foreground)',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {bankAccounts.map(b => (
+                    <option key={b.bankAccountId} value={b.bankAccountId}>
+                      {b.nickname} {b.accountNumberMasked ? `(${b.accountNumberMasked})` : ''} {b.isDefault ? '— Primary' : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
