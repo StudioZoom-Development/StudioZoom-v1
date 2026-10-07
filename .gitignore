@@ -56,8 +56,10 @@ firebase-debug.log
 .agents/skills/
 .agents/workflows/
 
-# Local developer maintenance scripts
+# Local developer maintenance scripts & backups
 scripts/inspect-db.mjs
 scripts/reset-and-sync-from-prod.mjs
+scripts/backup-prod-data.mjs
+backups/
 
 
