@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { format, parseISO, isValid } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
 import { useBackSwipe } from '@/hooks/useMobileGestures'
@@ -121,6 +121,9 @@ export default function TimeLogsPage() {
   const role = appUser?.role ?? 'staff'
   const isAdminOrManager = role === 'admin' || role === 'manager'
 
+  const searchParams = useSearchParams()
+  const highlightId = searchParams.get('highlight')
+
   // Filter States
   const [selectedStaff, setSelectedStaff] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
@@ -131,6 +134,19 @@ export default function TimeLogsPage() {
   const [logs, setLogs] = useState<TimeLog[]>([])
   const [pendingLeaveRequests, setPendingLeaveRequests] = useState<LeaveRequest[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Scroll to highlighted leave request if provided in query params
+  useEffect(() => {
+    if (highlightId && pendingLeaveRequests.length > 0) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`leave-req-${highlightId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 250)
+      return () => clearTimeout(timer)
+    }
+  }, [highlightId, pendingLeaveRequests])
 
   // Modals
   const [fixTarget, setFixTarget] = useState<ProcessedTimeLogRow | null>(null)
@@ -814,12 +830,39 @@ export default function TimeLogsPage() {
                     pendingLeaveRequests.map(req => {
                       const staff = staffMap.get(req.staffUid)
                       const staffName = staff?.name || 'Staff'
+                      const isHighlighted = highlightId === req.requestId
 
                       return (
-                        <tr key={req.requestId} style={{ borderBottom: '0.5px solid var(--color-border)' }}>
+                        <tr
+                          key={req.requestId}
+                          id={`leave-req-${req.requestId}`}
+                          style={{
+                            borderBottom: '0.5px solid var(--color-border)',
+                            background: isHighlighted ? 'var(--color-primary-muted)' : undefined,
+                            transition: 'background 0.3s ease',
+                          }}
+                        >
                           {/* Staff */}
                           <td style={{ ...TD_STYLE, fontWeight: 600 }}>
-                            {staffName}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>{staffName}</span>
+                              {isHighlighted && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: 'var(--color-primary)',
+                                    color: '#ffffff',
+                                    letterSpacing: '0.02em',
+                                    textTransform: 'uppercase',
+                                  }}
+                                >
+                                  Selected
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Applied On */}

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { signOut } from '@/lib/firebase/auth'
 import { MobileSideDrawer } from './MobileSideDrawer'
+import { NotificationPanel } from './NotificationPanel'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':          'Dashboard',
@@ -455,30 +456,7 @@ export function TopBar() {
 
         {/* Desktop Right: Bell + Avatar + Role */}
         <div className="hidden md:flex items-center gap-3 flex-shrink-0">
-          <div
-            style={{
-              position: 'relative',
-              cursor: 'pointer',
-              color: 'var(--color-foreground-muted)',
-              display: 'flex',
-            }}
-            onClick={() => router.push('/notifications')}
-            title="Notifications"
-          >
-            <i className="ti ti-bell" style={{ fontSize: '20px' }} />
-            <span
-              style={{
-                position: 'absolute',
-                top: '-2px',
-                right: '-2px',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                background: 'var(--color-primary)',
-                border: '2px solid var(--color-surface)',
-              }}
-            />
-          </div>
+          <NotificationPanel />
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div
               style={{

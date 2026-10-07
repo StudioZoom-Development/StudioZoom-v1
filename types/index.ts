@@ -767,3 +767,28 @@ export interface SavedAddress {
   updatedAt?: Date
   isDeleted?: boolean
 }
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+export type NotificationType = 'leave_applied' | 'leave_approved' | 'leave_rejected'
+
+export interface AppNotification {
+  notificationId:      string
+  recipient:           string               // 'admin' | 'manager' | staffUid (user UID)
+  recipientRole?:      'admin' | 'manager' | 'staff'
+  type:                NotificationType
+  referenceId:         string               // ID in referenceCollection (e.g. leaveRequest requestId)
+  referenceCollection: 'leaveRequests'
+  isRead:              boolean
+  createdAt:           Date
+  readAt?:             Date
+  isDeleted?:          boolean
+}
+
+export interface CreateNotificationInput {
+  recipient:           string
+  recipientRole?:      'admin' | 'manager' | 'staff'
+  type:                NotificationType
+  referenceId:         string
+  referenceCollection: 'leaveRequests'
+}
+

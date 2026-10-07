@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { format, addMonths, subMonths, getDaysInMonth } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
 import { DateField } from '@/components/shared/DateField'
@@ -1683,8 +1684,29 @@ function TeamAttendanceView() {
 
 function MyAttendancePage() {
   const appUser = useAuthStore(s => s.appUser)
+  const searchParams = useSearchParams()
+  const targetDateParam = searchParams.get('date')
 
-  const [viewDate, setViewDate] = useState<Date>(() => new Date())
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    if (targetDateParam) {
+      const parsed = new Date(targetDateParam + 'T00:00:00')
+      if (!isNaN(parsed.getTime())) return parsed
+    }
+    return new Date()
+  })
+
+  // Sync viewDate if date query parameter changes
+  const [prevTargetParam, setPrevTargetParam] = useState(targetDateParam)
+  if (targetDateParam !== prevTargetParam) {
+    setPrevTargetParam(targetDateParam)
+    if (targetDateParam) {
+      const parsed = new Date(targetDateParam + 'T00:00:00')
+      if (!isNaN(parsed.getTime())) {
+        setViewDate(parsed)
+      }
+    }
+  }
+
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth() + 1
 
@@ -2179,18 +2201,31 @@ function MyAttendancePage() {
                     {appUser.name || 'Staff Member'}
                   </td>
 
-                  {dayData.map(({ day, status }) => (
-                    <td key={day} style={{ ...TD, textAlign: 'center', padding: '0 1px' }}>
-                      {status ? (
-                        <Badge
-                          variant={STATUS_VARIANT[status] ?? 'notIn'}
-                          label={STATUS_LABEL[status] ?? status}
-                        />
-                      ) : (
-                        <span style={{ color: 'var(--color-foreground-subtle)', fontSize: '12px' }}>·</span>
-                      )}
-                    </td>
-                  ))}
+                  {dayData.map(({ day, dayStr, status }) => {
+                    const isTargetDate = targetDateParam === dayStr
+                    return (
+                      <td
+                        key={day}
+                        style={{
+                          ...TD,
+                          textAlign: 'center',
+                          padding: '2px 1px',
+                          background: isTargetDate ? 'var(--color-primary-muted)' : undefined,
+                          outline: isTargetDate ? '1.5px solid var(--color-primary)' : undefined,
+                          borderRadius: isTargetDate ? '4px' : undefined,
+                        }}
+                      >
+                        {status ? (
+                          <Badge
+                            variant={STATUS_VARIANT[status] ?? 'notIn'}
+                            label={STATUS_LABEL[status] ?? status}
+                          />
+                        ) : (
+                          <span style={{ color: 'var(--color-foreground-subtle)', fontSize: '12px' }}>·</span>
+                        )}
+                      </td>
+                    )
+                  })}
 
                   <td
                     style={{

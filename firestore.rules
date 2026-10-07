@@ -124,9 +124,7 @@ service cloud.firestore {
     }
 
     match /leaveRequests/{requestId} {
-      allow read: if isSignedIn() && (
-        request.auth.uid == resource.data.staffUid || isAdminOrManager()
-      );
+      allow read: if isSignedIn();
       // Staff can submit their own leave/permission requests, or Admins/Managers can create
       allow create: if isAdminOrManager() || (
         isSignedIn() && request.resource.data.staffUid == request.auth.uid
@@ -164,5 +162,14 @@ service cloud.firestore {
       allow read:  if isSignedIn();
       allow write: if isAdminOrManager();
     }
+
+    match /bankAccounts/{bankAccountId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /notifications/{notificationId} {
+      allow read, write: if isSignedIn();
+    }
   }
 }
+
