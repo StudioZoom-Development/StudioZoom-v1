@@ -1042,8 +1042,17 @@ export default function ExpensesPage() {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
               {/* Circular SVG Donut */}
-              <div style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0, margin: '0 auto' }}>
-                <svg width="140" height="140" viewBox="0 0 140 140">
+              <div
+                style={{ position: 'relative', width: '140px', height: '140px', flexShrink: 0, margin: '0 auto' }}
+                onMouseLeave={() => setHoveredCategory(null)}
+              >
+                <svg
+                  width="140"
+                  height="140"
+                  viewBox="0 0 140 140"
+                  style={{ overflow: 'visible' }}
+                  onMouseLeave={() => setHoveredCategory(null)}
+                >
                   {(() => {
                     const radius = 50
                     const circumference = 2 * Math.PI * radius
@@ -1051,7 +1060,7 @@ export default function ExpensesPage() {
 
                     return categoryBreakdown.map((cat, i) => {
                       const fraction = totalSpend > 0 ? cat.amount / totalSpend : 0
-                      const dashLength = fraction * circumference
+                      const dashLength = Math.max(0, fraction * circumference)
                       const currentOffset = offsetAccum
                       offsetAccum += dashLength
 
@@ -1059,29 +1068,30 @@ export default function ExpensesPage() {
 
                       return (
                         <circle
-                          key={i}
+                          key={cat.label || i}
                           cx="70"
                           cy="70"
                           r={radius}
                           fill="transparent"
                           stroke={cat.colorVar}
-                          strokeWidth={isHovered ? '24' : '18'}
+                          strokeWidth="19"
                           strokeDasharray={`${dashLength} ${circumference - dashLength}`}
                           strokeDashoffset={-currentOffset}
                           style={{
-                            transformOrigin: 'center',
-                            transform: 'rotate(-90deg)',
-                            transition: 'stroke-width 0.2s ease, opacity 0.2s ease',
+                            transformOrigin: '70px 70px',
+                            transform: isHovered ? 'rotate(-90deg) scale(1.05)' : 'rotate(-90deg) scale(1)',
+                            transition: 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease',
                             cursor: 'pointer',
-                            opacity: hoveredCategory && !isHovered ? 0.45 : 1,
+                            opacity: hoveredCategory ? (isHovered ? 1 : 0.35) : 1,
                           }}
                           onMouseEnter={() => setHoveredCategory(cat.label)}
-                          onMouseLeave={() => setHoveredCategory(null)}
                           onClick={() => {
                             setSelectedCategory(cat.label)
                             setCurrentPage(1)
                           }}
-                        />
+                        >
+                          <title>{`${cat.label}: ₹${cat.amount.toLocaleString('en-IN')} (${cat.percent}%)`}</title>
+                        </circle>
                       )
                     })
                   })()}
@@ -1101,16 +1111,39 @@ export default function ExpensesPage() {
                     justifyContent: 'center',
                     pointerEvents: 'none',
                     textAlign: 'center',
+                    padding: '0 8px',
                   }}
                 >
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
-                    {hoveredCategory || 'Total'}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                    {hoveredCategory
-                      ? `₹${(categoryBreakdown.find(c => c.label === hoveredCategory)?.amount || 0).toLocaleString('en-IN')}`
-                      : `₹${totalSpend.toLocaleString('en-IN')}`}
-                  </span>
+                  {(() => {
+                    const hoveredCatObj = categoryBreakdown.find((c) => c.label === hoveredCategory)
+                    return (
+                      <>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: hoveredCatObj ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                            fontWeight: 600,
+                            maxWidth: '90px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {hoveredCatObj ? `${hoveredCatObj.label} (${hoveredCatObj.percent}%)` : 'Total Spend'}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 'var(--text-sm)',
+                            fontWeight: 700,
+                            color: 'var(--color-foreground)',
+                            marginTop: '1px',
+                          }}
+                        >
+                          ₹{(hoveredCatObj ? hoveredCatObj.amount : totalSpend).toLocaleString('en-IN')}
+                        </span>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
 

@@ -151,7 +151,8 @@ export function subscribeToPayments(
   callback: (payments: Array<{
     paymentId: string; instalment: string
     amount: number; date: Date; method: string
-    transactionId?: string; recordedBy: string; recordedByName?: string
+    transactionId?: string; bankAccountId?: string; bankAccountName?: string
+    recordedBy: string; recordedByName?: string
   }>) => void
 ): () => void {
   const q = query(
@@ -160,13 +161,15 @@ export function subscribeToPayments(
   )
   return onSnapshot(q, snap => {
     callback(snap.docs.map(d => ({
-      paymentId:      d.id,
-      instalment:     d.data().instalment as string,
-      amount:         d.data().amount     as number,
-      method:         d.data().method     as string,
-      transactionId:  (d.data().transactionId as string) || '',
-      recordedBy:     d.data().recordedBy as string,
-      recordedByName: (d.data().recordedByName as string) ?? (d.data().recordedBy as string),
+      paymentId:       d.id,
+      instalment:      d.data().instalment as string,
+      amount:          d.data().amount     as number,
+      method:          d.data().method     as string,
+      transactionId:   (d.data().transactionId as string) || '',
+      bankAccountId:   (d.data().bankAccountId as string) || undefined,
+      bankAccountName: (d.data().bankAccountName as string) || undefined,
+      recordedBy:      d.data().recordedBy as string,
+      recordedByName:  (d.data().recordedByName as string) ?? (d.data().recordedBy as string),
       date: d.data().date instanceof Timestamp
         ? d.data().date.toDate()
         : d.data().date ? new Date(d.data().date) : new Date(),
@@ -202,21 +205,31 @@ export async function recalculateClientBalance(clientId: string): Promise<{ bala
 /** Record a new payment — saves payment doc + recalculates client balance */
 export async function recordPayment(
   clientId: string,
-  payment: { instalment: string; amount: number; date: Date; method: string; transactionId?: string },
+  payment: {
+    instalment: string
+    amount: number
+    date: Date
+    method: string
+    transactionId?: string
+    bankAccountId?: string
+    bankAccountName?: string
+  },
   recordedBy: string,
   recordedByName?: string
 ): Promise<void> {
   const payRef = doc(collection(db, 'clients', clientId, 'payments'))
   await setDoc(payRef, {
-    paymentId:      payRef.id,
-    instalment:     payment.instalment,
-    amount:         payment.amount,
-    date:           Timestamp.fromDate(payment.date),
-    method:         payment.method,
-    transactionId:  payment.transactionId || '',
+    paymentId:       payRef.id,
+    instalment:      payment.instalment,
+    amount:          payment.amount,
+    date:            Timestamp.fromDate(payment.date),
+    method:          payment.method,
+    transactionId:   payment.transactionId || '',
+    bankAccountId:   payment.bankAccountId || '',
+    bankAccountName: payment.bankAccountName || '',
     recordedBy,
-    recordedByName: recordedByName ?? recordedBy,
-    createdAt:      serverTimestamp(),
+    recordedByName:  recordedByName ?? recordedBy,
+    createdAt:       serverTimestamp(),
   })
 
   await recalculateClientBalance(clientId)
@@ -226,24 +239,35 @@ export async function recordPayment(
 export async function editPayment(
   clientId: string,
   paymentId: string,
-  payment: { instalment: string; amount: number; date: Date; method: string; transactionId?: string },
+  payment: {
+    instalment: string
+    amount: number
+    date: Date
+    method: string
+    transactionId?: string
+    bankAccountId?: string
+    bankAccountName?: string
+  },
   updatedBy: string,
   updatedByName?: string
 ): Promise<void> {
   const payRef = doc(db, 'clients', clientId, 'payments', paymentId)
   await updateDoc(payRef, {
-    instalment:     payment.instalment,
-    amount:         payment.amount,
-    date:           Timestamp.fromDate(payment.date),
-    method:         payment.method,
-    transactionId:  payment.transactionId || '',
+    instalment:      payment.instalment,
+    amount:          payment.amount,
+    date:            Timestamp.fromDate(payment.date),
+    method:          payment.method,
+    transactionId:   payment.transactionId || '',
+    bankAccountId:   payment.bankAccountId || '',
+    bankAccountName: payment.bankAccountName || '',
     updatedBy,
-    updatedByName:  updatedByName ?? updatedBy,
-    updatedAt:      serverTimestamp(),
+    updatedByName:   updatedByName ?? updatedBy,
+    updatedAt:       serverTimestamp(),
   })
 
   await recalculateClientBalance(clientId)
 }
+
 
 /** Delete a payment record and recalculate client balance */
 export async function deletePayment(

@@ -1723,27 +1723,43 @@ function AvailablePersonCard({
       background: 'var(--color-surface)',
       border: '0.5px solid var(--color-border)',
       borderRadius: '12px',
-      padding: '20px',
+      padding: '16px',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: '12px',
+      gap: '10px',
       textAlign: 'center',
+      boxSizing: 'border-box',
     }}>
       <div style={{
-        width: '48px', height: '48px', borderRadius: '50%',
+        width: '44px', height: '44px', borderRadius: '50%',
         background: isFreelancer ? 'var(--color-purple-muted)' : 'var(--color-primary-muted)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 'var(--text-lg)', fontWeight: 700,
+        fontSize: 'var(--text-base)', fontWeight: 700,
         color: isFreelancer ? 'var(--color-purple)' : 'var(--color-primary)',
+        flexShrink: 0,
       }}>
         {getInitials(name)}
       </div>
-      <div>
-        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+      <div style={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
+        <div style={{
+          fontSize: 'var(--text-sm)',
+          fontWeight: 600,
+          color: 'var(--color-foreground)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
           {name}
         </div>
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+        <div style={{
+          fontSize: 'var(--text-xs)',
+          color: 'var(--color-foreground-muted)',
+          marginTop: '2px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
           {roleSubtitle}
         </div>
         <div style={{
@@ -1771,6 +1787,7 @@ function AvailablePersonCard({
           fontFamily: 'var(--font-inter)',
           cursor: 'pointer',
           padding: '8px',
+          marginTop: 'auto',
         }}
       >
         Assign Work
@@ -2552,6 +2569,13 @@ export default function WorkBoardPage() {
   // Filtered staff list for Staff tab
   const filteredStaffList = useMemo(() => {
     return staff.filter(s => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const matchName = (s.name || '').toLowerCase().includes(q)
+        const matchTitle = (s.jobTitle || s.role || '').toLowerCase().includes(q)
+        if (!matchName && !matchTitle) return false
+      }
+
       if (filterStaff && s.uid !== filterStaff) return false
       const sItems = allWorkItems.filter(w => w.assignedToUid === s.uid)
 
@@ -2577,11 +2601,18 @@ export default function WorkBoardPage() {
 
       return true
     })
-  }, [staff, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+  }, [staff, allWorkItems, filterStaff, filterType, filterStatus, filterPriority, searchQuery])
 
   // Filtered freelancers list for Staff tab
   const filteredFreelancersList = useMemo(() => {
     return freelancers.filter(f => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const matchName = (f.name || '').toLowerCase().includes(q)
+        const matchSkill = (f.skill || '').toLowerCase().includes(q)
+        if (!matchName && !matchSkill) return false
+      }
+
       if (filterStaff && f.freelancerId !== filterStaff) return false
       const fItems = allWorkItems.filter(w => w.assignedToUid === f.freelancerId)
 
@@ -2607,11 +2638,18 @@ export default function WorkBoardPage() {
 
       return true
     })
-  }, [freelancers, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+  }, [freelancers, allWorkItems, filterStaff, filterType, filterStatus, filterPriority, searchQuery])
 
   // Filtered available staff for Available tab
   const filteredAvailableStaff = useMemo(() => {
     return availableStaff.filter(s => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const matchName = (s.name || '').toLowerCase().includes(q)
+        const matchTitle = (s.jobTitle || s.role || '').toLowerCase().includes(q)
+        if (!matchName && !matchTitle) return false
+      }
+
       if (filterStaff && s.uid !== filterStaff) return false
       const sItems = allWorkItems.filter(w => w.assignedToUid === s.uid)
 
@@ -2637,11 +2675,18 @@ export default function WorkBoardPage() {
 
       return true
     })
-  }, [availableStaff, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+  }, [availableStaff, allWorkItems, filterStaff, filterType, filterStatus, filterPriority, searchQuery])
 
   // Filtered available freelancers for Available tab
   const filteredAvailableFreelancers = useMemo(() => {
     return availableFreelancers.filter(f => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const matchName = (f.name || '').toLowerCase().includes(q)
+        const matchSkill = (f.skill || '').toLowerCase().includes(q)
+        if (!matchName && !matchSkill) return false
+      }
+
       if (filterStaff && f.freelancerId !== filterStaff) return false
       const fItems = allWorkItems.filter(w => w.assignedToUid === f.freelancerId)
 
@@ -2667,7 +2712,7 @@ export default function WorkBoardPage() {
 
       return true
     })
-  }, [availableFreelancers, allWorkItems, filterStaff, filterType, filterStatus, filterPriority])
+  }, [availableFreelancers, allWorkItems, filterStaff, filterType, filterStatus, filterPriority, searchQuery])
 
   // Update Status handler (used by cards and side panel)
   const handleStatusChange = async (id: string, status: WorkItemStatus) => {
@@ -4010,7 +4055,14 @@ export default function WorkBoardPage() {
               Work Board
             </h1>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', margin: '2px 0 0 0' }}>
-              {filtered.length} active tasks across stages
+              {activeTab === 'board'
+                ? `${filtered.length} active tasks across stages`
+                : activeTab === 'events'
+                  ? `${shootGroups.length} shoots (${filtered.length} tasks)`
+                  : activeTab === 'staff'
+                    ? `${filteredStaffList.length + filteredFreelancersList.length} team members`
+                    : `${filteredAvailableStaff.length + filteredAvailableFreelancers.length} available today`
+              }
             </p>
           </div>
 
@@ -4119,45 +4171,47 @@ export default function WorkBoardPage() {
           })}
         </div>
 
-        {/* Quick Filter Chips */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '6px',
-            overflowX: 'auto',
-            paddingBottom: '8px',
-            marginBottom: '14px',
-            scrollbarWidth: 'none',
-          }}
-        >
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'my', label: 'My Tasks' },
-            { id: 'high', label: 'High Priority' },
-            { id: 'overdue', label: 'Overdue' },
-          ].map(qf => {
-            const active = quickFilter === qf.id
-            return (
-              <button
-                key={qf.id}
-                onClick={() => setQuickFilter(qf.id as typeof quickFilter)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  background: active ? 'var(--color-surface-overlay)' : 'var(--color-surface-raised)',
-                  border: active ? '0.5px solid var(--color-border-strong)' : '0.5px solid var(--color-border)',
-                  color: active ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                {qf.label}
-              </button>
-            )
-          })}
-        </div>
+        {/* Quick Filter Chips (Only for Board Tab) */}
+        {activeTab === 'board' && (
+          <div
+            style={{
+              display: 'flex',
+              gap: '6px',
+              overflowX: 'auto',
+              paddingBottom: '8px',
+              marginBottom: '14px',
+              scrollbarWidth: 'none',
+            }}
+          >
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'my', label: 'My Tasks' },
+              { id: 'high', label: 'High Priority' },
+              { id: 'overdue', label: 'Overdue' },
+            ].map(qf => {
+              const active = quickFilter === qf.id
+              return (
+                <button
+                  key={qf.id}
+                  onClick={() => setQuickFilter(qf.id as typeof quickFilter)}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    background: active ? 'var(--color-surface-overlay)' : 'var(--color-surface-raised)',
+                    border: active ? '0.5px solid var(--color-border-strong)' : '0.5px solid var(--color-border)',
+                    color: active ? 'var(--color-foreground)' : 'var(--color-foreground-muted)',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  {qf.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* ── TAB: BOARD (Stage Buckets & Cards) ── */}
         {activeTab === 'board' && (
@@ -4455,63 +4509,240 @@ export default function WorkBoardPage() {
           </div>
         )}
 
-        {/* ── TAB: STAFF WORKLOAD ── */}
+        {/* ── TAB: STAFF WORKLOAD (Mobile) ── */}
         {activeTab === 'staff' && !isStaff && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {effectiveStaff.map(s => {
-              const staffItems = allWorkItems.filter(w => w.assignedToUid === s.uid && w.status !== 'done')
-              const completedCount = allWorkItems.filter(w => w.assignedToUid === s.uid && w.status === 'done').length
+            {filteredStaffList.length === 0 && filteredFreelancersList.length === 0 ? (
+              <div
+                style={{
+                  padding: '36px 20px',
+                  borderRadius: '12px',
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  textAlign: 'center',
+                }}
+              >
+                <i className="ti ti-users" style={{ fontSize: '28px', color: 'var(--color-foreground-subtle)', marginBottom: '8px', display: 'block' }} />
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
+                  No team members match the search or filter criteria.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Staff Members */}
+                {filteredStaffList.map(s => {
+                  const staffItems = allWorkItems.filter(w => w.assignedToUid === s.uid && w.status !== 'done')
+                  const completedCount = allWorkItems.filter(w => w.assignedToUid === s.uid && w.status === 'done').length
 
-              return (
-                <div
-                  key={s.uid}
+                  return (
+                    <div
+                      key={s.uid}
+                      style={{
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '12px',
+                        padding: '14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: 'var(--color-primary-muted)',
+                              color: 'var(--color-primary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {getInitials(s.name)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              {s.name}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)' }}>
+                              {s.jobTitle || s.role}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: staffItems.length > 3 ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                            {staffItems.length} active
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            {completedCount} done
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Freelancers */}
+                {filteredFreelancersList.map(f => {
+                  const flItems = allWorkItems.filter(w => w.assignedToUid === f.freelancerId && w.status !== 'done')
+                  const completedCount = allWorkItems.filter(w => w.assignedToUid === f.freelancerId && w.status === 'done').length
+
+                  return (
+                    <div
+                      key={f.freelancerId}
+                      style={{
+                        background: 'var(--color-surface)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '12px',
+                        padding: '14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: 'var(--color-purple-muted)',
+                              color: 'var(--color-purple)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {getInitials(f.name)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              {f.name}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--color-purple)' }}>
+                              {f.skill.charAt(0).toUpperCase() + f.skill.slice(1)} (Freelancer)
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: flItems.length > 3 ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                            {flItems.length} active
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            {completedCount} done
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: AVAILABLE TODAY (Mobile) ── */}
+        {activeTab === 'available' && !isStaff && (
+          <div>
+            {/* Quick summary banner */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '10px',
+                marginBottom: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
                   style={{
-                    background: 'var(--color-surface)',
-                    border: '0.5px solid var(--color-border)',
-                    borderRadius: '12px',
-                    padding: '14px',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: 'var(--color-success)',
+                    display: 'inline-block',
                   }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          background: 'var(--color-primary-muted)',
-                          color: 'var(--color-primary)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {getInitials(s.name)}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                          {s.name}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)' }}>
-                          {s.role}
-                        </div>
-                      </div>
-                    </div>
+                />
+                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  Team Members Ready
+                </span>
+              </div>
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 700,
+                  color: 'var(--color-success)',
+                  background: 'var(--color-success-muted)',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                {filteredAvailableStaff.length + filteredAvailableFreelancers.length} available
+              </span>
+            </div>
 
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: staffItems.length > 3 ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
-                        {staffItems.length} active
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
-                        {completedCount} done
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {filteredAvailableStaff.length === 0 && filteredAvailableFreelancers.length === 0 ? (
+              <div
+                style={{
+                  padding: '48px 20px',
+                  borderRadius: '12px',
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  textAlign: 'center',
+                }}
+              >
+                <i className="ti ti-users" style={{ fontSize: '32px', color: 'var(--color-foreground-subtle)', marginBottom: '8px', display: 'block' }} />
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
+                  {availableStaff.length === 0 && availableFreelancers.length === 0
+                    ? 'All team members are currently assigned to active works.'
+                    : 'No available team members match the search or filter criteria.'}
+                </p>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                  gap: '12px',
+                }}
+              >
+                {/* Available Staff */}
+                {filteredAvailableStaff.map(s => (
+                  <AvailablePersonCard
+                    key={s.uid}
+                    name={s.name}
+                    roleSubtitle={s.jobTitle || 'Staff Member'}
+                    isFreelancer={false}
+                    onAssign={() => {
+                      setCreateAssignee({ id: s.uid, isFreelancer: false })
+                      setShowCreate(true)
+                    }}
+                  />
+                ))}
+
+                {/* Available Freelancers */}
+                {filteredAvailableFreelancers.map(f => (
+                  <AvailablePersonCard
+                    key={f.freelancerId}
+                    name={f.name}
+                    roleSubtitle={`${f.skill.charAt(0).toUpperCase() + f.skill.slice(1)} (Freelancer)`}
+                    isFreelancer={true}
+                    onAssign={() => {
+                      setCreateAssignee({ id: f.freelancerId, isFreelancer: true })
+                      setShowCreate(true)
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -25,6 +25,7 @@ import {
   logInvoiceReminder,
   exportGstSummaryCSV,
   exportCashflowTransactionsCSV,
+  exportBankInflowCSV,
   compileMonthlyFinancials,
   compileBudgetRows,
   compileProjectProfitability,
@@ -37,12 +38,21 @@ import {
   type ForecastScenario,
   type ClientPaymentRecord,
   type FinancialLineItem,
+  type BankPositionSummary,
 } from '@/lib/firebase/queries/financials'
-import type { Expense, Client, Budget, AccountPayable, ExpenseCategory, CashOpeningBalances, CustomExpenseCategory } from '@/types'
+import {
+  subscribeToBankAccounts,
+  createBankAccount,
+  updateBankAccount,
+  deleteBankAccount,
+  seedDefaultBankAccountsIfEmpty,
+} from '@/lib/firebase/queries/bankAccounts'
+import type { Expense, Client, Budget, AccountPayable, ExpenseCategory, CashOpeningBalances, CustomExpenseCategory, BankAccount } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { RecordPaymentModal } from '@/components/shared/RecordPaymentModal'
+
 import { Badge } from '@/components/shared/Badge'
 
 interface FinancialsHubProps {
@@ -75,6 +85,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
   const searchParams = useSearchParams()
   const { isAdmin } = useRole()
   const isAuthLoading = useAuthStore((s) => s.loading)
+  const appUser = useAuthStore((s) => s.appUser)
 
   // Active view tab: 'cashflow' | 'accounts' | 'profitability' | 'executive'
   const [activeTab, setActiveTab] = useState<'cashflow' | 'accounts' | 'profitability' | 'executive'>(() => {
@@ -101,8 +112,26 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
   // Chart view toggle: historical vs forecast
   const [cashflowViewMode, setCashflowViewMode] = useState<'historical' | 'forecast'>('historical')
 
-  // Accounts sub-tab: Receivables (money owed to us) vs Payables (money we owe)
-  const [accountsSubTab, setAccountsSubTab] = useState<'receivables' | 'payables'>('receivables')
+  // Accounts sub-tab: Receivables (money owed to us) vs Payables (money we owe) vs Bank Accounts
+  const [accountsSubTab, setAccountsSubTab] = useState<'receivables' | 'payables' | 'bankAccounts'>('receivables')
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [drillBankFilter, setDrillBankFilter] = useState<string>('all')
+  const [bankLedgerFilter, setBankLedgerFilter] = useState<string>('all')
+  const [bankLedgerSearch, setBankLedgerSearch] = useState<string>('')
+  const [bankLedgerPage, setBankLedgerPage] = useState<number>(1)
+  const [bankLedgerPageSize, setBankLedgerPageSize] = useState<number>(10)
+  const [isAddBankAccountOpen, setIsAddBankAccountOpen] = useState(false)
+  const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null)
+  const [bankModalName, setBankModalName] = useState('')
+  const [bankModalNickname, setBankModalNickname] = useState('')
+  const [bankModalHolder, setBankModalHolder] = useState('')
+  const [bankModalMasked, setBankModalMasked] = useState('')
+  const [bankModalUpi, setBankModalUpi] = useState('')
+  const [bankModalIfsc, setBankModalIfsc] = useState('')
+  const [bankModalOpening, setBankModalOpening] = useState('')
+  const [bankModalIsDefault, setBankModalIsDefault] = useState(false)
+  const [savingBankAccount, setSavingBankAccount] = useState(false)
+  const [bankModalError, setBankModalError] = useState<string | null>(null)
 
   // Drill-down filter & search
   const [drillSearch, setDrillSearch] = useState('')
@@ -120,9 +149,11 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
   const [payablePage, setPayablePage] = useState<number>(1)
   const [payablePageSize, setPayablePageSize] = useState<number>(10)
 
-  // Project profitability search & sort
+  // Project profitability search, sort & pagination
   const [profitabilitySearch, setProfitabilitySearch] = useState('')
   const [profitabilitySort, setProfitabilitySort] = useState<'revenue' | 'profit' | 'margin'>('revenue')
+  const [profitabilityPage, setProfitabilityPage] = useState<number>(1)
+  const [profitabilityPageSize, setProfitabilityPageSize] = useState<number>(10)
 
   // Modals & Dialogs State
   const [customCategories, setCustomCategories] = useState<CustomExpenseCategory[]>([])
@@ -247,6 +278,14 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
       if (mounted) setCustomCategories(items)
     })
 
+    const unsubBankAccounts = subscribeToBankAccounts((items) => {
+      if (mounted) setBankAccounts(items)
+    })
+
+    seedDefaultBankAccountsIfEmpty(appUser?.uid || 'admin').catch((err) => {
+      console.warn('[BankAccounts] Auto-seed warning:', err)
+    })
+
     return () => {
       mounted = false
       unsubExpenses()
@@ -256,6 +295,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
       unsubOpeningBalances()
       unsubPayments()
       unsubCustomCategories()
+      unsubBankAccounts()
     }
   }, [])
 
@@ -281,9 +321,10 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
       openingBalances,
       forecastScenario,
       selectedMonthKey,
-      clientPayments
+      clientPayments,
+      bankAccounts
     )
-  }, [expenses, clients, payables, openingBalances, forecastScenario, selectedMonthKey, clientPayments])
+  }, [expenses, clients, payables, openingBalances, forecastScenario, selectedMonthKey, clientPayments, bankAccounts])
 
   // Dynamic date helpers for Indian Financial Years (April to March)
   const now = useMemo(() => new Date(), [])
@@ -531,18 +572,182 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
       list = list.filter((i) => i.type === drillTypeFilter)
     }
 
+    if (drillBankFilter !== 'all') {
+      list = list.filter((i) => i.bankAccountId === drillBankFilter)
+    }
+
     if (drillSearch.trim()) {
       const q = drillSearch.toLowerCase().trim()
       list = list.filter(
         (i) =>
           i.label.toLowerCase().includes(q) ||
           i.meta.toLowerCase().includes(q) ||
-          i.category.toLowerCase().includes(q)
+          i.category.toLowerCase().includes(q) ||
+          (i.bankAccountName && i.bankAccountName.toLowerCase().includes(q))
       )
     }
 
     return list
-  }, [currentMonthSummary, drillTypeFilter, drillSearch])
+  }, [currentMonthSummary, drillTypeFilter, drillBankFilter, drillSearch])
+
+  // Cross-client payments for bank ledger
+  const bankLedgerPayments = useMemo(() => {
+    let list = clientPayments
+
+    if (bankLedgerFilter !== 'all') {
+      list = list.filter(p => p.bankAccountId === bankLedgerFilter)
+    }
+
+    if (bankLedgerSearch.trim()) {
+      const q = bankLedgerSearch.toLowerCase().trim()
+      list = list.filter(p => {
+        const client = clients.find(c => c.clientId === p.clientId)
+        return (
+          (client?.name && client.name.toLowerCase().includes(q)) ||
+          (client?.eventName && client.eventName.toLowerCase().includes(q)) ||
+          (p.bankAccountName && p.bankAccountName.toLowerCase().includes(q)) ||
+          (p.transactionId && p.transactionId.toLowerCase().includes(q)) ||
+          (p.instalment && p.instalment.toLowerCase().includes(q)) ||
+          (p.method && p.method.toLowerCase().includes(q))
+        )
+      })
+    }
+
+    // Sort newest date first
+    return [...list].sort((a, b) => {
+      const da = a.date instanceof Date ? a.date.getTime() : 0
+      const db = b.date instanceof Date ? b.date.getTime() : 0
+      return db - da
+    })
+  }, [clientPayments, bankLedgerFilter, bankLedgerSearch, clients])
+
+  const totalFilteredBankAmount = useMemo(() => {
+    return bankLedgerPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
+  }, [bankLedgerPayments])
+
+  const handleExportBankStatement = () => {
+    const activeBank = bankAccounts.find(b => b.bankAccountId === bankLedgerFilter)
+    const bankLabel = activeBank ? `${activeBank.nickname} (${activeBank.accountNumberMasked})` : 'All Accounts'
+    const exportItems = bankLedgerPayments.map(p => {
+      const c = clients.find(cl => cl.clientId === p.clientId)
+      return {
+        date: p.date,
+        clientName: c?.name || 'Client',
+        eventName: c?.eventName,
+        instalment: p.instalment || 'Payment',
+        amount: p.amount,
+        method: p.method,
+        bankAccountName: p.bankAccountName || activeBank?.nickname,
+        transactionId: p.transactionId,
+        recordedByName: p.recordedByName,
+      }
+    })
+    exportBankInflowCSV(exportItems, bankLabel, currentMonthSummary.fullMonthLabel)
+  }
+
+  const handleOpenAddBankAccount = () => {
+    setEditingBankAccount(null)
+    setBankModalName('')
+    setBankModalNickname('')
+    setBankModalHolder('')
+    setBankModalMasked('')
+    setBankModalUpi('')
+    setBankModalIfsc('')
+    setBankModalOpening('')
+    setBankModalIsDefault(bankAccounts.length === 0)
+    setBankModalError(null)
+    setIsAddBankAccountOpen(true)
+  }
+
+  const handleOpenEditBankAccount = (bankAccountId: string) => {
+    const b = bankAccounts.find(acc => acc.bankAccountId === bankAccountId)
+    if (!b) return
+    setEditingBankAccount(b)
+    setBankModalName(b.bankName)
+    setBankModalNickname(b.nickname)
+    setBankModalHolder(b.accountHolder)
+    setBankModalMasked(b.accountNumberMasked)
+    setBankModalUpi(b.upiId || '')
+    setBankModalIfsc(b.ifsc || '')
+    setBankModalOpening(b.openingBalance ? String(b.openingBalance) : '')
+    setBankModalIsDefault(Boolean(b.isDefault))
+    setBankModalError(null)
+    setIsAddBankAccountOpen(true)
+  }
+
+  const handleSaveBankAccountSubmit = async () => {
+    setBankModalError(null)
+    if (!bankModalNickname.trim()) {
+      setBankModalError('Please enter an account nickname')
+      return
+    }
+    if (!bankModalName.trim()) {
+      setBankModalError('Please enter the bank name')
+      return
+    }
+    if (!bankModalHolder.trim()) {
+      setBankModalError('Please enter the account holder name')
+      return
+    }
+
+    setSavingBankAccount(true)
+    try {
+      if (editingBankAccount) {
+        await updateBankAccount(
+          editingBankAccount.bankAccountId,
+          {
+            bankName: bankModalName.trim(),
+            nickname: bankModalNickname.trim(),
+            accountHolder: bankModalHolder.trim(),
+            accountNumberMasked: bankModalMasked.trim(),
+            upiId: bankModalUpi.trim() || undefined,
+            ifsc: bankModalIfsc.trim() || undefined,
+            openingBalance: bankModalOpening ? parseFloat(bankModalOpening) : 0,
+            isDefault: bankModalIsDefault,
+          },
+          appUser?.uid || 'admin'
+        )
+      } else {
+        await createBankAccount(
+          {
+            bankName: bankModalName.trim(),
+            nickname: bankModalNickname.trim(),
+            accountHolder: bankModalHolder.trim(),
+            accountNumberMasked: bankModalMasked.trim(),
+            upiId: bankModalUpi.trim() || undefined,
+            ifsc: bankModalIfsc.trim() || undefined,
+            openingBalance: bankModalOpening ? parseFloat(bankModalOpening) : 0,
+            isDefault: bankModalIsDefault,
+            isActive: true,
+          },
+          appUser?.uid || 'admin'
+        )
+      }
+      setIsAddBankAccountOpen(false)
+      setEditingBankAccount(null)
+    } catch (err) {
+      console.error('Failed to save bank account:', err)
+      setBankModalError('Failed to save bank account. Please try again.')
+    } finally {
+      setSavingBankAccount(false)
+    }
+  }
+
+  const handleDeleteBankAccount = async (bankAccountId: string, nickname: string) => {
+    if (!window.confirm(`Are you sure you want to remove ${nickname}? Historical payments will preserve this bank's name.`)) {
+      return
+    }
+    try {
+      await deleteBankAccount(bankAccountId, appUser?.uid || 'admin')
+      if (bankLedgerFilter === bankAccountId) {
+        setBankLedgerFilter('all')
+      }
+    } catch (err) {
+      console.error('Failed to delete bank account:', err)
+      alert('Failed to delete bank account. Please try again.')
+    }
+  }
+
 
   // Budget vs Actuals compilation for selected month
   const {
@@ -660,6 +865,23 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
     return filteredPayables.reduce((acc, p) => acc + (p.amount || 0), 0)
   }, [filteredPayables])
 
+  // Bank Ledger pagination & totals
+  const [prevBankLedgerKey, setPrevBankLedgerKey] = useState('')
+  const currentBankLedgerKey = `${bankLedgerFilter}|${bankLedgerSearch}|${bankLedgerPageSize}`
+  if (prevBankLedgerKey !== currentBankLedgerKey) {
+    setPrevBankLedgerKey(currentBankLedgerKey)
+    setBankLedgerPage(1)
+  }
+
+  const totalBankLedgerPages = Math.max(1, Math.ceil(bankLedgerPayments.length / bankLedgerPageSize))
+  const safeBankLedgerPage = Math.min(bankLedgerPage, totalBankLedgerPages)
+
+  const paginatedBankLedgerPayments = useMemo(() => {
+    if (bankLedgerPageSize >= 9999) return bankLedgerPayments
+    const start = (safeBankLedgerPage - 1) * bankLedgerPageSize
+    return bankLedgerPayments.slice(start, start + bankLedgerPageSize)
+  }, [bankLedgerPayments, safeBankLedgerPage, bankLedgerPageSize])
+
   // Project Profitability list
   const projectProfitabilityList = useMemo(() => {
     let list = compileProjectProfitability(clients, expenses)
@@ -684,6 +906,15 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
 
     return list
   }, [clients, expenses, profitabilitySearch, profitabilitySort])
+
+  const totalProfitabilityPages = Math.max(1, Math.ceil(projectProfitabilityList.length / profitabilityPageSize))
+  const safeProfitabilityPage = Math.min(Math.max(1, profitabilityPage), totalProfitabilityPages)
+
+  const paginatedProfitabilityList = useMemo(() => {
+    if (profitabilityPageSize >= 9999) return projectProfitabilityList
+    const start = (safeProfitabilityPage - 1) * profitabilityPageSize
+    return projectProfitabilityList.slice(start, start + profitabilityPageSize)
+  }, [projectProfitabilityList, safeProfitabilityPage, profitabilityPageSize])
 
   // Bar chart scale calculation based on active displayed months
   const maxChartBarValue = useMemo(() => {
@@ -1022,7 +1253,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
     lines.push(`Bank Balance,${cashPosition.cashInBank}`)
     lines.push(`UPI / Gateway,${cashPosition.cashInUPI}`)
     lines.push(`Total Available Liquid,${cashPosition.totalAvailable}`)
-    lines.push(`Monthly Burn Rate,${cashPosition.monthlyBurnRate}`)
+    lines.push(`Monthly Operating Outflow,${cashPosition.monthlyBurnRate}`)
     lines.push(`Cash Runway Months,${cashPosition.runwayMonths}`)
     lines.push('')
 
@@ -1127,6 +1358,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
       style={{
         width: '100%',
         maxWidth: '1280px',
+        minWidth: 0,
         margin: '0 auto',
         padding: '20px 16px 40px',
         display: 'flex',
@@ -1134,10 +1366,18 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
         gap: '20px',
         fontFamily: 'var(--font-inter)',
         boxSizing: 'border-box',
+        overflowX: 'hidden',
       }}
       className="financials-hub-root"
     >
       <style>{`
+        .financials-hub-root {
+          width: 100% !important;
+          max-width: 1280px !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+
         /* Desktop preservation rules (>= 768px) */
         @media (min-width: 768px) {
           .financials-mobile-cards {
@@ -1147,14 +1387,49 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
             display: block !important;
           }
           .cashflow-chart-drill-grid {
+            display: grid !important;
             grid-template-columns: minmax(0, 1fr) 380px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            gap: 16px !important;
+            align-items: stretch !important;
+          }
+          .cashflow-chart-drill-grid > div {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            height: 100% !important;
+          }
+          .cashflow-chart-drill-grid > div:last-child {
+            max-height: 480px !important;
+            overflow: hidden !important;
+          }
+          .cashflow-drilldown-list::-webkit-scrollbar {
+            width: 5px;
+          }
+          .cashflow-drilldown-list::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .cashflow-drilldown-list::-webkit-scrollbar-thumb {
+            background: var(--color-border-strong);
+            border-radius: 4px;
           }
           .cashflow-chart-drill-grid.cashflow-layout-full-ledger {
             grid-template-columns: minmax(0, 1fr) !important;
           }
           .accounts-tables-grid {
+            display: grid !important;
             grid-template-columns: 55fr 45fr !important;
             align-items: start !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+          }
+          .accounts-tables-grid > div {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
           }
           .financials-modal-grid-2 {
             grid-template-columns: 1fr 1fr !important;
@@ -1200,10 +1475,20 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
             padding: 12px 14px !important;
           }
           .cashflow-chart-drill-grid {
+            display: grid !important;
             grid-template-columns: minmax(0, 1fr) !important;
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .cashflow-chart-drill-grid > div:last-child {
+            max-height: 420px !important;
+            overflow: hidden !important;
           }
           .accounts-tables-grid {
+            display: grid !important;
             grid-template-columns: minmax(0, 1fr) !important;
+            width: 100% !important;
+            min-width: 0 !important;
           }
           .financials-modal-grid-2,
           .financials-modal-grid-3 {
@@ -1365,22 +1650,6 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
               <i className="ti ti-download" style={{ fontSize: '14px' }} />
               <span className="hidden sm:inline">Export</span> Full Audit CSV
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => window.print()}
-              style={{
-                height: '34px',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                borderRadius: '8px',
-              }}
-            >
-              <i className="ti ti-printer" style={{ fontSize: '14px' }} />
-              <span className="hidden sm:inline">Print /</span> PDF
-            </Button>
           </div>
         </div>
 
@@ -1525,6 +1794,10 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
             borderRadius: '12px',
             padding: '12px 16px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box',
           }}
         >
           {/* Top Row: Dynamic FY Picker & Stepper + Active Month Stepper with Net Indicator */}
@@ -1773,6 +2046,10 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
               background: 'var(--color-surface-raised)',
               borderRadius: '8px',
               border: '0.5px solid var(--color-border)',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
             <span
@@ -1799,7 +2076,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                   onClick={() => setSelectedMonthKey(m.monthKey)}
                   title={`${m.fullMonthLabel} · In: ${formatINR(m.income)} | Out: ${formatINR(m.outflow)} | Net: ${formatINR(m.net)}`}
                   style={{
-                    flex: '1 0 54px',
+                    flex: '0 0 auto',
                     minWidth: '54px',
                     height: '32px',
                     border: isSelected ? '1px solid var(--color-primary)' : '0.5px solid var(--color-border)',
@@ -1863,7 +2140,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
 
       {/* ─── TAB 1: CASHFLOW & FORECAST ────────────────────────────────────── */}
       {(activeTab === 'cashflow' || activeTab === 'executive') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           {/* Actual Cash Position, Burn Rate & Runway Strip */}
           <div
             style={{
@@ -1891,7 +2168,10 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    setBaselineBank(String(openingBalances ? openingBalances.cashInBank : 0))
+                    const totalBankBalance = cashPosition.bankAccountsBreakdown && cashPosition.bankAccountsBreakdown.length > 0
+                      ? cashPosition.bankAccountsBreakdown.reduce((sum, b) => sum + b.balance, 0)
+                      : (openingBalances ? openingBalances.cashInBank : 0)
+                    setBaselineBank(String(totalBankBalance))
                     setBaselineCash(String(openingBalances ? openingBalances.cashInHand : 0))
                     setBaselineUPI(String(openingBalances ? openingBalances.cashInUPI : 0))
                     const d = openingBalances?.asOfDate
@@ -1927,16 +2207,44 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
               <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
                 {formatINR(cashPosition.totalAvailable)}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
-                <span>Bank: {formatCompactINR(cashPosition.cashInBank)}</span>
-                <span>·</span>
-                <span>UPI: {formatCompactINR(cashPosition.cashInUPI)}</span>
-                <span>·</span>
-                <span>Cash: {formatCompactINR(cashPosition.cashInHand)}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--color-foreground-subtle)', flexWrap: 'wrap' }}>
+                {cashPosition.bankAccountsBreakdown && cashPosition.bankAccountsBreakdown.length > 0 ? (
+                  <>
+                    {cashPosition.bankAccountsBreakdown.map((b) => (
+                      <span key={b.bankAccountId} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="ti ti-building-bank" style={{ fontSize: '11px', color: 'var(--color-primary)' }} />
+                        <span style={{ color: 'var(--color-foreground)' }}>{b.nickname}:</span>
+                        <span>{formatCompactINR(b.balance)}</span>
+                      </span>
+                    ))}
+                    {cashPosition.cashInUPI > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="ti ti-device-mobile" style={{ fontSize: '11px', color: 'var(--color-accent)' }} />
+                        <span style={{ color: 'var(--color-foreground)' }}>UPI:</span>
+                        <span>{formatCompactINR(cashPosition.cashInUPI)}</span>
+                      </span>
+                    )}
+                    {cashPosition.cashInHand > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <i className="ti ti-cash" style={{ fontSize: '11px', color: 'var(--color-success)' }} />
+                        <span style={{ color: 'var(--color-foreground)' }}>Cash:</span>
+                        <span>{formatCompactINR(cashPosition.cashInHand)}</span>
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span>Bank: {formatCompactINR(cashPosition.cashInBank)}</span>
+                    <span>·</span>
+                    <span>UPI: {formatCompactINR(cashPosition.cashInUPI)}</span>
+                    <span>·</span>
+                    <span>Cash: {formatCompactINR(cashPosition.cashInHand)}</span>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Monthly Burn Rate */}
+            {/* Monthly Operating Outflow */}
             <div
               style={{
                 background: 'var(--color-surface)',
@@ -1950,9 +2258,9 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Monthly Burn Rate
+                  Monthly Operating Outflow
                 </span>
-                <i className="ti ti-flame" style={{ color: 'var(--color-secondary)', fontSize: '16px' }} />
+                <i className="ti ti-trending-down" style={{ color: 'var(--color-secondary)', fontSize: '16px' }} />
               </div>
               <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-danger)' }}>
                 {formatINR(cashPosition.monthlyBurnRate)}/mo
@@ -2113,8 +2421,12 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr)',
+              gridTemplateColumns: 'minmax(0, 1fr) 380px',
               gap: '16px',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              alignItems: 'stretch',
             }}
             className="cashflow-chart-drill-grid"
           >
@@ -2127,9 +2439,14 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 padding: '18px 20px',
                 display: 'flex',
                 flexDirection: 'column',
+                justifyContent: 'space-between',
                 gap: '16px',
                 minWidth: 0,
+                width: '100%',
+                maxWidth: '100%',
+                height: '100%',
                 overflow: 'hidden',
+                boxSizing: 'border-box',
               }}
             >
               {/* Chart Controls */}
@@ -2165,7 +2482,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   {/* Historical vs Forecast Toggle */}
                   <div
                     style={{
@@ -2292,11 +2609,21 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
 
               {/* Chart Rendering */}
               {cashflowViewMode === 'historical' ? (
-                <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: '6px' }}>
+                <div
+                  style={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    paddingBottom: '6px',
+                    boxSizing: 'border-box',
+                  }}
+                >
                   <div
                     style={{
-                      minWidth: displayedMonths.length > 12 ? `${displayedMonths.length * 64}px` : '100%',
-                      width: '100%',
+                      minWidth: displayedMonths.length > 12 ? `${displayedMonths.length * 50}px` : '100%',
+                      width: displayedMonths.length > 12 ? `${displayedMonths.length * 50}px` : '100%',
                     }}
                   >
                     {/* Historical Bar Chart */}
@@ -2307,7 +2634,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                         height: '210px',
                         borderBottom: '0.5px solid var(--color-border-strong)',
                         paddingTop: '20px',
-                        gap: '8px',
+                        gap: displayedMonths.length > 12 ? '4px' : '8px',
                       }}
                     >
                       {displayedMonths.map((m) => {
@@ -2321,16 +2648,16 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                             onClick={() => setSelectedMonthKey(m.monthKey)}
                             style={{
                               flex: 1,
-                              minWidth: displayedMonths.length > 12 ? '56px' : 'auto',
+                              minWidth: displayedMonths.length > 12 ? '44px' : 'auto',
                               display: 'flex',
                               alignItems: 'flex-end',
                               justifyContent: 'center',
-                              gap: displayedMonths.length > 12 ? '4px' : '6px',
+                              gap: displayedMonths.length > 12 ? '3px' : '6px',
                               height: '100%',
                               cursor: 'pointer',
                               borderRadius: '8px 8px 0 0',
                               background: isSelected ? 'var(--color-surface-raised)' : 'transparent',
-                              padding: '0 4px',
+                              padding: '0 2px',
                               transition: 'all 0.15s ease',
                               borderTop: isSelected ? '0.5px solid var(--color-border-strong)' : '0.5px solid transparent',
                               borderLeft: isSelected ? '0.5px solid var(--color-border-strong)' : '0.5px solid transparent',
@@ -2341,7 +2668,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                           >
                             <div
                               style={{
-                                width: displayedMonths.length > 12 ? '14px' : '18px',
+                                width: displayedMonths.length > 12 ? '13px' : '18px',
                                 borderRadius: '4px 4px 0 0',
                                 background: 'var(--color-primary)',
                                 height: `${Math.max(6, incomeH)}px`,
@@ -2350,7 +2677,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                             />
                             <div
                               style={{
-                                width: displayedMonths.length > 12 ? '14px' : '18px',
+                                width: displayedMonths.length > 12 ? '13px' : '18px',
                                 borderRadius: '4px 4px 0 0',
                                 background: 'var(--color-secondary)',
                                 opacity: 0.9,
@@ -2364,7 +2691,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                     </div>
 
                     {/* X-Axis Labels */}
-                    <div style={{ display: 'flex', gap: '8px', paddingTop: '8px' }}>
+                    <div style={{ display: 'flex', gap: displayedMonths.length > 12 ? '4px' : '8px', paddingTop: '8px' }}>
                       {displayedMonths.map((m) => {
                         const isSelected = m.monthKey === selectedMonthKey
                         return (
@@ -2373,7 +2700,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                             onClick={() => setSelectedMonthKey(m.monthKey)}
                             style={{
                               flex: 1,
-                              minWidth: displayedMonths.length > 12 ? '56px' : 'auto',
+                              minWidth: displayedMonths.length > 12 ? '44px' : 'auto',
                               textAlign: 'center',
                               display: 'flex',
                               flexDirection: 'column',
@@ -2551,12 +2878,18 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 background: 'var(--color-surface)',
                 border: '0.5px solid var(--color-border)',
                 borderRadius: '12px',
-                padding: '16px 18px',
+                padding: '18px 20px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
-                maxHeight: '560px',
+                height: '100%',
+                maxHeight: '480px',
+                minHeight: 0,
                 minWidth: 0,
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                overflow: 'hidden',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
@@ -2621,6 +2954,31 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                       Out
                     </button>
                   </div>
+
+                  {/* Account / Ledger Filter */}
+                  <select
+                    value={drillBankFilter}
+                    onChange={(e) => setDrillBankFilter(e.target.value)}
+                    style={{
+                      height: '24px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '6px',
+                      padding: '0 8px',
+                      fontSize: '11px',
+                      color: 'var(--color-foreground)',
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                    title="Filter transactions by deposit account or ledger"
+                  >
+                    <option value="all">All Accounts</option>
+                    {bankAccounts.map((b) => (
+                      <option key={b.bankAccountId} value={b.bankAccountId}>
+                        {b.nickname}
+                      </option>
+                    ))}
+                  </select>
 
                   {/* Export CSV Button */}
                   <button
@@ -2709,7 +3067,20 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
               </div>
 
               {/* Transactions List */}
-              <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
+              <div
+                className="cashflow-drilldown-list"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflowY: 'auto',
+                  flex: 1,
+                  minHeight: 0,
+                  paddingRight: '6px',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'var(--color-border-strong) transparent',
+                }}
+              >
                 {filteredLineItems.length === 0 ? (
                   <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--color-foreground-subtle)', fontSize: 'var(--text-xs)' }}>
                     No recorded transactions for this filter.
@@ -2765,7 +3136,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
 
       {/* ─── TAB 2: ACCOUNTS, BUDGETS, AGING & PAYABLES ────────────────────── */}
       {(activeTab === 'accounts' || activeTab === 'executive') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           {/* Sub-navigation Switcher: Receivables vs Payables */}
           <div
             className="financials-subnav-row"
@@ -2827,10 +3198,53 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                   {formatCompactINR(payablesSummary.totalPayable)}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setAccountsSubTab('bankAccounts')}
+                style={{
+                  border: 'none',
+                  background: accountsSubTab === 'bankAccounts' ? 'var(--color-primary)' : 'var(--color-surface)',
+                  color: accountsSubTab === 'bankAccounts' ? '#ffffff' : 'var(--color-foreground-muted)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <i className="ti ti-building-bank" />
+                <span>Bank Accounts & Ledgers</span>
+                <span style={{ padding: '1px 6px', borderRadius: '10px', background: accountsSubTab === 'bankAccounts' ? 'rgba(255,255,255,0.25)' : 'var(--color-surface-raised)', fontSize: '10px' }}>
+                  {bankAccounts.length}
+                </span>
+              </button>
             </div>
 
             {/* Quick Actions */}
             <div className="financials-subnav-actions" style={{ display: 'flex', gap: '8px' }}>
+              {accountsSubTab === 'bankAccounts' && (
+                <Button
+                  onClick={handleOpenAddBankAccount}
+                  style={{
+                    height: '32px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    background: 'var(--color-primary)',
+                    color: '#ffffff',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <i className="ti ti-plus" />
+                  Add Bank Account
+                </Button>
+              )}
               {accountsSubTab === 'payables' && (
                 <Button
                   onClick={() => setIsAddPayableOpen(true)}
@@ -2849,34 +3263,760 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                   Add Payable Bill
                 </Button>
               )}
-              <Button
-                variant="outline"
-                onClick={handleCopyPreviousBudgets}
-                disabled={savingBudget}
-                style={{
-                  height: '32px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <i className="ti ti-copy" />
-                Clone Last Month&apos;s Budgets
-              </Button>
             </div>
           </div>
 
-          {/* Two-Column Grid: Budget vs Actuals & Receivables/Payables */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr)',
-              gap: '16px',
-            }}
-            className="accounts-tables-grid"
-          >
+          {/* Sub-tab view: Bank Accounts (full-width standalone without Budget Card) vs Receivables/Payables with Budget Grid */}
+          {accountsSubTab === 'bankAccounts' ? (
+            /* ── BANK ACCOUNTS & INFLOW LEDGERS (Full-Width, No Budget Card) ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* 1. BANK ACCOUNTS GRID */}
+              <div>
+                <div style={{ marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)', margin: 0 }}>
+                    Studio Bank Accounts & Ledgers
+                  </h3>
+                  <span style={{ fontSize: '12px', color: 'var(--color-foreground-subtle)' }}>
+                    Configured settlement accounts for client booking payments and cash custody
+                  </span>
+                </div>
+
+                {bankAccounts.length === 0 ? (
+                  <div
+                    style={{
+                      background: 'var(--color-surface)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '12px',
+                      padding: '40px 20px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '12px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '12px',
+                        background: 'var(--color-surface-raised)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--color-foreground-subtle)',
+                      }}
+                    >
+                      <i className="ti ti-building-bank" style={{ fontSize: '24px' }} />
+                    </div>
+                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
+                      No bank accounts configured yet. Add your studio or family bank account to start tracking multi-account collections.
+                    </span>
+                    <Button
+                      onClick={handleOpenAddBankAccount}
+                      style={{ height: '34px', fontSize: '12px', background: 'var(--color-primary)', color: '#ffffff' }}
+                    >
+                      <i className="ti ti-plus" style={{ marginRight: '6px' }} />
+                      Add First Bank Account
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                      gap: '14px',
+                    }}
+                  >
+                    {bankAccounts.map((acc) => {
+                      const breakdown = cashPosition.bankAccountsBreakdown?.find(
+                        (b) => b.bankAccountId === acc.bankAccountId
+                      )
+                      const thisMonthInflow = breakdown?.monthCollections || 0
+                      const totalBalance = breakdown?.balance || (acc.openingBalance || 0)
+                      const isSelectedInLedger = bankLedgerFilter === acc.bankAccountId
+
+                      return (
+                        <div
+                          key={acc.bankAccountId}
+                          style={{
+                            background: 'var(--color-surface)',
+                            border: isSelectedInLedger
+                              ? '1.5px solid var(--color-primary)'
+                              : '0.5px solid var(--color-border)',
+                            borderRadius: '12px',
+                            padding: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: '14px',
+                            boxShadow: isSelectedInLedger ? '0 4px 16px rgba(198, 83, 159, 0.15)' : 'none',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div>
+                            {/* Top Bar: Icon, Nickname, Badges */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div
+                                  style={{
+                                    width: '38px',
+                                    height: '38px',
+                                    borderRadius: '10px',
+                                    background: 'var(--color-primary-muted)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'var(--color-primary)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <i className="ti ti-building-bank" style={{ fontSize: '20px' }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-foreground)', lineHeight: 1.2 }}>
+                                    {acc.nickname}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                                    {acc.bankName} · {acc.accountNumberMasked}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                                {acc.isDefault && (
+                                  <span
+                                    style={{
+                                      padding: '2px 8px',
+                                      borderRadius: '10px',
+                                      background: 'var(--color-primary-muted)',
+                                      color: 'var(--color-primary)',
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    Default
+                                  </span>
+                                )}
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    background: 'var(--color-success-muted)',
+                                    color: 'var(--color-success)',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  Active
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Details */}
+                            <div
+                              style={{
+                                marginTop: '12px',
+                                padding: '10px',
+                                borderRadius: '8px',
+                                background: 'var(--color-surface-raised)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                fontSize: '11px',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--color-foreground-subtle)' }}>Holder:</span>
+                                <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>{acc.accountHolder}</span>
+                              </div>
+                              {acc.ifsc && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--color-foreground-subtle)' }}>IFSC:</span>
+                                  <span style={{ fontFamily: 'monospace', color: 'var(--color-foreground)' }}>{acc.ifsc}</span>
+                                </div>
+                              )}
+                              {acc.upiId && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: 'var(--color-foreground-subtle)' }}>UPI:</span>
+                                  <span style={{ color: 'var(--color-foreground)' }}>{acc.upiId}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* KPI numbers */}
+                            <div
+                              style={{
+                                marginTop: '12px',
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1fr',
+                                gap: '8px',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '8px',
+                                  background: 'var(--color-surface-raised)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                }}
+                              >
+                                <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                                  This Month
+                                </span>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-success)', marginTop: '2px' }}>
+                                  +{formatINR(thisMonthInflow)}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '8px',
+                                  background: 'var(--color-surface-raised)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                }}
+                              >
+                                <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                                  Total Inflow
+                                </span>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '2px' }}>
+                                  {formatINR(totalBalance)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card Actions */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              borderTop: '0.5px solid var(--color-border)',
+                              paddingTop: '10px',
+                              gap: '8px',
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setBankLedgerFilter(
+                                  bankLedgerFilter === acc.bankAccountId ? 'all' : acc.bankAccountId
+                                )
+                              }
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                color: isSelectedInLedger ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: 0,
+                              }}
+                            >
+                              <i className={isSelectedInLedger ? "ti ti-filter-off" : "ti ti-filter"} />
+                              {isSelectedInLedger ? 'Clear Filter' : 'Filter Ledger'}
+                            </button>
+
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditBankAccount(acc.bankAccountId)}
+                                style={{
+                                  border: '0.5px solid var(--color-border)',
+                                  background: 'var(--color-surface-raised)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: '11px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                                title="Edit Account Details"
+                              >
+                                <i className="ti ti-edit" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBankAccount(acc.bankAccountId, acc.nickname)}
+                                style={{
+                                  border: '0.5px solid var(--color-border)',
+                                  background: 'var(--color-surface-raised)',
+                                  color: 'var(--color-danger)',
+                                  fontSize: '11px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                                title="Delete Account"
+                              >
+                                <i className="ti ti-trash" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. BANK COLLECTIONS & DEPOSIT INFLOW LEDGER */}
+              <div
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '18px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div>
+                    <h4 style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)', margin: 0 }}>
+                      Bank Collections & Inflow Ledger
+                    </h4>
+                    <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                      Client booking payments and installments attributed to each deposit account
+                    </span>
+                  </div>
+
+                  {/* Filter & Action Controls */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {/* Search */}
+                    <div style={{ position: 'relative' }}>
+                      <i
+                        className="ti ti-search"
+                        style={{
+                          position: 'absolute',
+                          left: '8px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '12px',
+                          color: 'var(--color-foreground-subtle)',
+                        }}
+                      />
+                      <Input
+                        placeholder="Search client, ref..."
+                        value={bankLedgerSearch}
+                        onChange={(e) => setBankLedgerSearch(e.target.value)}
+                        style={{
+                          height: '30px',
+                          width: '160px',
+                          paddingLeft: '26px',
+                          fontSize: '11px',
+                        }}
+                      />
+                    </div>
+
+                    {/* Account Filter Dropdown */}
+                    <select
+                      value={bankLedgerFilter}
+                      onChange={(e) => setBankLedgerFilter(e.target.value)}
+                      style={{
+                        height: '30px',
+                        background: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '6px',
+                        padding: '0 8px',
+                        fontSize: '11px',
+                        color: 'var(--color-foreground)',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="all">All Accounts</option>
+                      {bankAccounts.map((b) => (
+                        <option key={b.bankAccountId} value={b.bankAccountId}>
+                          {b.nickname}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Page Size & Pagination in Header */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-foreground-muted)' }}>
+                        <span>Show</span>
+                        <select
+                          value={bankLedgerPageSize}
+                          onChange={(e) => {
+                            setBankLedgerPageSize(Number(e.target.value))
+                            setBankLedgerPage(1)
+                          }}
+                          style={{
+                            height: '30px',
+                            background: 'var(--color-surface-raised)',
+                            border: '0.5px solid var(--color-border)',
+                            borderRadius: '6px',
+                            padding: '0 6px',
+                            fontSize: '11px',
+                            color: 'var(--color-foreground)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={9999}>All</option>
+                        </select>
+                      </label>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setBankLedgerPage((p) => Math.max(1, p - 1))}
+                          disabled={safeBankLedgerPage <= 1}
+                          style={{
+                            border: '0.5px solid var(--color-border)',
+                            background: safeBankLedgerPage <= 1 ? 'transparent' : 'var(--color-surface-raised)',
+                            color: safeBankLedgerPage <= 1 ? 'var(--color-foreground-subtle)' : 'var(--color-foreground)',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: safeBankLedgerPage <= 1 ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '2px',
+                            opacity: safeBankLedgerPage <= 1 ? 0.5 : 1,
+                          }}
+                        >
+                          <i className="ti ti-chevron-left" /> Prev
+                        </button>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)', padding: '0 4px' }}>
+                          {safeBankLedgerPage} / {totalBankLedgerPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBankLedgerPage((p) => Math.min(totalBankLedgerPages, p + 1))}
+                          disabled={safeBankLedgerPage >= totalBankLedgerPages}
+                          style={{
+                            border: '0.5px solid var(--color-border)',
+                            background: safeBankLedgerPage >= totalBankLedgerPages ? 'transparent' : 'var(--color-surface-raised)',
+                            color: safeBankLedgerPage >= totalBankLedgerPages ? 'var(--color-foreground-subtle)' : 'var(--color-foreground)',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: safeBankLedgerPage >= totalBankLedgerPages ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '2px',
+                            opacity: safeBankLedgerPage >= totalBankLedgerPages ? 0.5 : 1,
+                          }}
+                        >
+                          Next <i className="ti ti-chevron-right" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter Count & Total Badge */}
+                    <span
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        background: 'var(--color-surface-raised)',
+                        fontSize: '11px',
+                        color: 'var(--color-foreground-muted)',
+                      }}
+                    >
+                      {bankLedgerPayments.length} entries ·{' '}
+                      <strong style={{ color: 'var(--color-success)' }}>{formatINR(totalFilteredBankAmount)}</strong>
+                    </span>
+
+                    {/* Export Statement CSV */}
+                    <button
+                      type="button"
+                      onClick={handleExportBankStatement}
+                      style={{
+                        border: '0.5px solid var(--color-border)',
+                        background: 'var(--color-surface-raised)',
+                        color: 'var(--color-foreground)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="Export statement of current filtered ledger"
+                    >
+                      <i className="ti ti-download" style={{ fontSize: '13px' }} />
+                      <span>Export CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--text-xs)' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '0.5px solid var(--color-border-strong)', color: 'var(--color-foreground-subtle)' }}>
+                        <th style={{ padding: '8px 10px', fontWeight: 600 }}>Date</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 600 }}>Client & Project</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 600 }}>Instalment</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 600 }}>Method</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 600 }}>Deposit Account</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 600 }}>Txn / UTR Ref</th>
+                        <th style={{ padding: '8px 10px', fontWeight: 600, textAlign: 'right' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedBankLedgerPayments.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--color-foreground-subtle)' }}>
+                            No client payment records found matching the current filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedBankLedgerPayments.map((p) => {
+                          const dateFormatted =
+                            p.date instanceof Date
+                              ? p.date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                              : '—'
+                          const c = clients.find((cl) => cl.clientId === p.clientId)
+
+                          return (
+                            <tr
+                              key={p.paymentId}
+                              style={{
+                                borderBottom: '0.5px solid var(--color-border)',
+                                transition: 'background 0.15s ease',
+                              }}
+                            >
+                              <td style={{ padding: '10px', color: 'var(--color-foreground-muted)', whiteSpace: 'nowrap' }}>
+                                {dateFormatted}
+                              </td>
+                              <td style={{ padding: '10px' }}>
+                                <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                                  {c?.name || 'Client'}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                                  {c?.eventName || 'Booking'}
+                                </div>
+                              </td>
+                              <td style={{ padding: '10px', color: 'var(--color-foreground)' }}>
+                                {p.instalment || 'Payment'}
+                              </td>
+                              <td style={{ padding: '10px' }}>
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    background: 'var(--color-surface-raised)',
+                                    fontSize: '11px',
+                                    color: 'var(--color-foreground-muted)',
+                                  }}
+                                >
+                                  {p.method}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px' }}>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: 'var(--color-surface-raised)',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: 'var(--color-foreground)'
+                                  }}
+                                >
+                                  <i className="ti ti-building-bank" style={{ color: 'var(--color-primary)' }} />
+                                  {p.bankAccountName || 'Direct / Studio'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px', fontFamily: 'monospace', fontSize: '11px', color: 'var(--color-foreground-muted)' }}>
+                                {p.transactionId || '—'}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-success)', whiteSpace: 'nowrap' }}>
+                                +{formatINR(p.amount || 0)}
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Compact Cards View (< 768px) - Uses financials-mobile-cards to prevent desktop merging */}
+                <div className="financials-mobile-cards">
+                  {paginatedBankLedgerPayments.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--color-foreground-subtle)', fontSize: '12px' }}>
+                      No payment records found.
+                    </div>
+                  ) : (
+                    paginatedBankLedgerPayments.map((p) => {
+                      const dateFormatted =
+                        p.date instanceof Date
+                          ? p.date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                          : '—'
+                      const c = clients.find((cl) => cl.clientId === p.clientId)
+
+                      return (
+                        <div
+                          key={p.paymentId}
+                          style={{
+                            background: 'var(--color-surface-raised)',
+                            border: '0.5px solid var(--color-border)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                              {dateFormatted} · {p.method}
+                            </span>
+                            <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-success)' }}>
+                              +{formatINR(p.amount || 0)}
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--color-foreground)' }}>
+                            {c?.name || 'Client'} {c?.eventName ? `(${c.eventName})` : ''}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                            <span style={{ color: 'var(--color-foreground-subtle)' }}>{p.instalment || 'Payment'}</span>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: 'var(--color-primary)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <i className="ti ti-building-bank" />
+                              {p.bankAccountName || 'Direct'}
+                            </span>
+                          </div>
+                          {p.transactionId && (
+                            <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--color-foreground-subtle)' }}>
+                              Ref: {p.transactionId}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Pagination Footer Bar */}
+                {bankLedgerPayments.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderTop: '0.5px solid var(--color-border)',
+                      paddingTop: '12px',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                      fontSize: '11px',
+                      color: 'var(--color-foreground-subtle)',
+                    }}
+                  >
+                    <div>
+                      Showing{' '}
+                      <strong style={{ color: 'var(--color-foreground)' }}>
+                        {(safeBankLedgerPage - 1) * bankLedgerPageSize + 1}
+                      </strong>
+                      –
+                      <strong style={{ color: 'var(--color-foreground)' }}>
+                        {Math.min(safeBankLedgerPage * bankLedgerPageSize, bankLedgerPayments.length)}
+                      </strong>{' '}
+                      of <strong style={{ color: 'var(--color-foreground)' }}>{bankLedgerPayments.length}</strong> transactions
+                    </div>
+
+                    {totalBankLedgerPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setBankLedgerPage((p) => Math.max(1, p - 1))}
+                          disabled={safeBankLedgerPage <= 1}
+                          style={{
+                            border: '0.5px solid var(--color-border)',
+                            background: safeBankLedgerPage <= 1 ? 'transparent' : 'var(--color-surface-raised)',
+                            color: safeBankLedgerPage <= 1 ? 'var(--color-foreground-subtle)' : 'var(--color-foreground)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: safeBankLedgerPage <= 1 ? 'not-allowed' : 'pointer',
+                            opacity: safeBankLedgerPage <= 1 ? 0.5 : 1,
+                          }}
+                        >
+                          &larr; Previous
+                        </button>
+                        <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                          Page {safeBankLedgerPage} of {totalBankLedgerPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBankLedgerPage((p) => Math.min(totalBankLedgerPages, p + 1))}
+                          disabled={safeBankLedgerPage >= totalBankLedgerPages}
+                          style={{
+                            border: '0.5px solid var(--color-border)',
+                            background: safeBankLedgerPage >= totalBankLedgerPages ? 'transparent' : 'var(--color-surface-raised)',
+                            color: safeBankLedgerPage >= totalBankLedgerPages ? 'var(--color-foreground-subtle)' : 'var(--color-foreground)',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: safeBankLedgerPage >= totalBankLedgerPages ? 'not-allowed' : 'pointer',
+                            opacity: safeBankLedgerPage >= totalBankLedgerPages ? 0.5 : 1,
+                          }}
+                        >
+                          Next &rarr;
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Two-Column Grid: Budget vs Actuals & Receivables/Payables */
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr)',
+                gap: '16px',
+                width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
+                boxSizing: 'border-box',
+              }}
+              className="accounts-tables-grid"
+            >
             {/* 1. Budget vs Actuals Card */}
             <div
               style={{
@@ -4169,8 +5309,9 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* ─── TAB 3: PROJECT-WISE PROFITABILITY LEDGER ──────────────────────── */}
       {(activeTab === 'profitability' || activeTab === 'executive') && (
@@ -4205,7 +5346,10 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                     type="text"
                     placeholder="Search project / client..."
                     value={profitabilitySearch}
-                    onChange={(e) => setProfitabilitySearch(e.target.value)}
+                    onChange={(e) => {
+                      setProfitabilitySearch(e.target.value)
+                      setProfitabilityPage(1)
+                    }}
                     style={{
                       width: '100%',
                       height: '30px',
@@ -4223,7 +5367,10 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 {/* Sort */}
                 <select
                   value={profitabilitySort}
-                  onChange={(e) => setProfitabilitySort(e.target.value as 'revenue' | 'profit' | 'margin')}
+                  onChange={(e) => {
+                    setProfitabilitySort(e.target.value as 'revenue' | 'profit' | 'margin')
+                    setProfitabilityPage(1)
+                  }}
                   style={{
                     height: '30px',
                     padding: '0 8px',
@@ -4276,7 +5423,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                       </td>
                     </tr>
                   ) : (
-                    projectProfitabilityList.map((p) => {
+                    paginatedProfitabilityList.map((p) => {
                       let badgeBg = 'var(--color-success-muted)'
                       let badgeFg = 'var(--color-success)'
                       let badgeLabel = `${p.marginPct}% High`
@@ -4367,7 +5514,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                   No project records found.
                 </div>
               ) : (
-                projectProfitabilityList.map((p) => {
+                paginatedProfitabilityList.map((p) => {
                   let badgeBg = 'var(--color-success-muted)'
                   let badgeFg = 'var(--color-success)'
                   let badgeLabel = `${p.marginPct}% High`
@@ -4463,6 +5610,115 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 })
               )}
             </div>
+
+            {/* Project Profitability Pagination Controls */}
+            {projectProfitabilityList.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  fontSize: 'var(--text-xs)',
+                  paddingTop: '10px',
+                  borderTop: '0.5px solid var(--color-border)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-foreground-muted)' }}>
+                  <span>
+                    Showing{' '}
+                    <strong style={{ color: 'var(--color-foreground)' }}>
+                      {projectProfitabilityList.length === 0 ? 0 : (safeProfitabilityPage - 1) * profitabilityPageSize + 1}
+                    </strong>
+                    –
+                    <strong style={{ color: 'var(--color-foreground)' }}>
+                      {Math.min(safeProfitabilityPage * profitabilityPageSize, projectProfitabilityList.length)}
+                    </strong>{' '}
+                    of{' '}
+                    <strong style={{ color: 'var(--color-foreground)' }}>
+                      {projectProfitabilityList.length}
+                    </strong>
+                  </span>
+                  <span style={{ color: 'var(--color-border)' }}>|</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
+                    Show:
+                    <select
+                      value={profitabilityPageSize}
+                      onChange={(e) => {
+                        setProfitabilityPageSize(Number(e.target.value))
+                        setProfitabilityPage(1)
+                      }}
+                      style={{
+                        height: '24px',
+                        padding: '0 4px',
+                        borderRadius: '4px',
+                        background: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        color: 'var(--color-foreground)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={9999}>All</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setProfitabilityPage((p) => Math.max(1, p - 1))}
+                    disabled={safeProfitabilityPage <= 1}
+                    style={{
+                      border: '0.5px solid var(--color-border)',
+                      background: safeProfitabilityPage <= 1 ? 'transparent' : 'var(--color-surface-raised)',
+                      color: safeProfitabilityPage <= 1 ? 'var(--color-foreground-subtle)' : 'var(--color-foreground)',
+                      padding: '3px 8px',
+                      borderRadius: '5px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: safeProfitabilityPage <= 1 ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '2px',
+                    }}
+                  >
+                    <i className="ti ti-chevron-left" /> Prev
+                  </button>
+
+                  <span style={{ color: 'var(--color-foreground-muted)', fontSize: '11px', padding: '0 4px' }}>
+                    Page {safeProfitabilityPage} of {totalProfitabilityPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setProfitabilityPage((p) => Math.min(totalProfitabilityPages, p + 1))}
+                    disabled={safeProfitabilityPage >= totalProfitabilityPages}
+                    style={{
+                      border: '0.5px solid var(--color-border)',
+                      background: safeProfitabilityPage >= totalProfitabilityPages ? 'transparent' : 'var(--color-surface-raised)',
+                      color: safeProfitabilityPage >= totalProfitabilityPages ? 'var(--color-foreground-subtle)' : 'var(--color-foreground)',
+                      padding: '3px 8px',
+                      borderRadius: '5px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: safeProfitabilityPage >= totalProfitabilityPages ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '2px',
+                    }}
+                  >
+                    Next <i className="ti ti-chevron-right" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -5536,7 +6792,34 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Bank Accounts Balance (₹)</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>Bank Accounts Balance (₹)</label>
+                {cashPosition.bankAccountsBreakdown && cashPosition.bankAccountsBreakdown.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sum = cashPosition.bankAccountsBreakdown?.reduce((acc, b) => acc + b.balance, 0) || 0
+                      setBaselineBank(String(sum))
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--color-primary)',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Recalculate sum of all bank accounts"
+                  >
+                    <i className="ti ti-refresh" style={{ fontSize: '11px' }} />
+                    Sync from Accounts ({formatCompactINR(cashPosition.bankAccountsBreakdown.reduce((acc, b) => acc + b.balance, 0))})
+                  </button>
+                )}
+              </div>
               <Input
                 type="number"
                 placeholder="e.g. 850000"
@@ -5544,6 +6827,16 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 onChange={(e) => setBaselineBank(e.target.value)}
                 style={{ height: '36px', fontSize: '12px', fontWeight: 600 }}
               />
+              {cashPosition.bankAccountsBreakdown && cashPosition.bankAccountsBreakdown.length > 0 && (
+                <div style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)', lineHeight: 1.4, marginTop: '2px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  <span>Sum of {cashPosition.bankAccountsBreakdown.length} accounts:</span>
+                  {cashPosition.bankAccountsBreakdown.map((b) => (
+                    <span key={b.bankAccountId} style={{ color: 'var(--color-foreground)' }}>
+                      {b.nickname}: <strong>{formatCompactINR(b.balance)}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="financials-modal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
@@ -6360,6 +7653,241 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 style={{ height: '34px', fontSize: '11px' }}
               >
                 Close Ledger
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: ADD / EDIT BANK ACCOUNT MODAL ───────────────────────── */}
+      {isAddBankAccountOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={() => setIsAddBankAccountOpen(false)}
+        >
+          <div
+            className="financials-modal-dialog"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              background: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '14px',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: 'var(--color-primary-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-primary)',
+                  }}
+                >
+                  <i className="ti ti-building-bank" style={{ fontSize: '18px' }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+                    {editingBankAccount ? 'Edit Bank Account' : 'Add Bank Account'}
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                    Configure settlement bank account for client payment receipts
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddBankAccountOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-foreground-subtle)', cursor: 'pointer', fontSize: '18px' }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {bankModalError && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'var(--color-danger-muted)',
+                  color: 'var(--color-danger)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                }}
+              >
+                {bankModalError}
+              </div>
+            )}
+
+            {/* Form Fields */}
+            <div className="financials-modal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  Nickname *
+                </label>
+                <Input
+                  placeholder="e.g. Studio HDFC / Father's SBI"
+                  value={bankModalNickname}
+                  onChange={(e) => setBankModalNickname(e.target.value)}
+                  style={{ height: '36px', fontSize: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  Bank Name *
+                </label>
+                <Input
+                  placeholder="e.g. HDFC Bank / State Bank of India"
+                  value={bankModalName}
+                  onChange={(e) => setBankModalName(e.target.value)}
+                  style={{ height: '36px', fontSize: '12px' }}
+                />
+              </div>
+            </div>
+
+            <div className="financials-modal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  Account Holder *
+                </label>
+                <Input
+                  placeholder="e.g. Studio Zoom LLP / Father Name"
+                  value={bankModalHolder}
+                  onChange={(e) => setBankModalHolder(e.target.value)}
+                  style={{ height: '36px', fontSize: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  Masked A/C Number
+                </label>
+                <Input
+                  placeholder="e.g. •••• 4892"
+                  value={bankModalMasked}
+                  onChange={(e) => setBankModalMasked(e.target.value)}
+                  style={{ height: '36px', fontSize: '12px' }}
+                />
+              </div>
+            </div>
+
+            <div className="financials-modal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  UPI ID (Optional)
+                </label>
+                <Input
+                  placeholder="e.g. studio@okaxis"
+                  value={bankModalUpi}
+                  onChange={(e) => setBankModalUpi(e.target.value)}
+                  style={{ height: '36px', fontSize: '12px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  IFSC Code (Optional)
+                </label>
+                <Input
+                  placeholder="e.g. HDFC0001234"
+                  value={bankModalIfsc}
+                  onChange={(e) => setBankModalIfsc(e.target.value)}
+                  style={{ height: '36px', fontSize: '12px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-foreground-muted)' }}>
+                  Opening Balance (₹) (Optional)
+                </label>
+                <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                  Default: ₹0
+                </span>
+              </div>
+              <Input
+                type="number"
+                placeholder="0"
+                value={bankModalOpening}
+                onChange={(e) => setBankModalOpening(e.target.value)}
+                style={{ height: '36px', fontSize: '12px' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)', lineHeight: 1.3 }}>
+                Leave 0 if you manage your studio&apos;s overall treasury balances via the Liquid Cash Position card (Baseline Set).
+              </span>
+            </div>
+
+            {/* Default toggle */}
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                color: 'var(--color-foreground)',
+                padding: '6px 0',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={bankModalIsDefault}
+                onChange={(e) => setBankModalIsDefault(e.target.checked)}
+                style={{ width: '16px', height: '16px', accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+              />
+              <span>Set as default account for electronic receipts (GPay, Transfer, Cheque)</span>
+            </label>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setIsAddBankAccountOpen(false)}
+                disabled={savingBankAccount}
+                style={{ height: '36px', fontSize: '12px' }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveBankAccountSubmit}
+                disabled={savingBankAccount}
+                style={{
+                  height: '36px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  background: 'var(--color-primary)',
+                  color: '#ffffff',
+                }}
+              >
+                {savingBankAccount ? 'Saving...' : editingBankAccount ? 'Update Account' : 'Save Account'}
               </Button>
             </div>
           </div>
