@@ -1,29 +1,15 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { TimeField } from '@/components/shared/TimeField'
 import { LocationAutocomplete } from '@/components/shared/LocationAutocomplete'
-import { EventType } from '@/types'
+import { EventType, EventTypeOption } from '@/types'
 import { BookingWizardState, BookingAction } from '../bookingReducer'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
-
-const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
-  { value: 'wedding',     label: 'Wedding' },
-  { value: 'reception',   label: 'Reception' },
-  { value: 'preWedding',  label: 'Pre-Wedding' },
-  { value: 'engagement',  label: 'Engagement' },
-  { value: 'birthday',    label: 'Birthday' },
-  { value: 'babyShower',  label: 'Baby Shower' },
-  { value: 'puberty',     label: 'Puberty' },
-  { value: 'corporate',   label: 'Corporate' },
-  { value: 'schoolEvent', label: 'School Event' },
-  { value: 'portrait',    label: 'Portrait' },
-  { value: 'studio',      label: 'Studio' },
-  { value: 'other',       label: 'Other' },
-]
+import { subscribeToEventTypes, DEFAULT_EVENT_TYPES } from '@/lib/firebase/queries/eventTypes'
 
 const SELECT_STYLE: React.CSSProperties = {
   fontFamily: 'var(--font-inter)',
@@ -47,6 +33,32 @@ interface StepEventDetailsProps {
 export default function StepEventDetails({ state, dispatch }: StepEventDetailsProps): React.JSX.Element {
   const isMultiDate = state.bookingType === 'multiDate'
   const isRecurring = state.bookingType === 'recurring'
+
+  const [eventTypesList, setEventTypesList] = useState<EventTypeOption[]>(DEFAULT_EVENT_TYPES)
+
+  useEffect(() => {
+    return subscribeToEventTypes(items => {
+      setEventTypesList(items)
+    })
+  }, [])
+
+  const activeEventTypes = useMemo(() => {
+    const list = eventTypesList.filter(t => t.isActive)
+    if (state.eventType && !list.some(t => t.id === state.eventType)) {
+      const existing = eventTypesList.find(t => t.id === state.eventType)
+      if (existing) {
+        list.push(existing)
+      } else {
+        list.push({
+          id: state.eventType,
+          label: state.customEventType || state.eventType,
+          isSystem: false,
+          isActive: true,
+        })
+      }
+    }
+    return list
+  }, [eventTypesList, state.eventType, state.customEventType])
 
   // Computed recurring session dates
   const recurringSessions = useMemo(() => {
@@ -180,10 +192,21 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
           <select
             style={SELECT_STYLE}
             value={state.eventType}
-            onChange={e => dispatch({ type: 'SET_EVENT_TYPE', payload: e.target.value as EventType })}
+            onChange={e => {
+              const val = e.target.value as EventType
+              const match = activeEventTypes.find(t => t.id === val)
+              dispatch({ type: 'SET_EVENT_TYPE', payload: val })
+              if (val === 'other') {
+                // Keep customEventType or let user fill it
+              } else if (match && !match.isSystem) {
+                dispatch({ type: 'SET_FIELD', field: 'customEventType', value: match.label })
+              } else {
+                dispatch({ type: 'SET_FIELD', field: 'customEventType', value: '' })
+              }
+            }}
           >
-            {EVENT_TYPES.map(et => (
-              <option key={et.value} value={et.value}>{et.label}</option>
+            {activeEventTypes.map(et => (
+              <option key={et.id} value={et.id}>{et.label}</option>
             ))}
           </select>
         </div>

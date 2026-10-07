@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/shared/Badge'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { getLeadById, createLead, updateLead, softDeleteLead } from '@/lib/firebase/queries/leads'
+import { subscribeToEventTypes, DEFAULT_EVENT_TYPES } from '@/lib/firebase/queries/eventTypes'
 import { useAuthStore } from '@/store/authStore'
-import { Lead } from '@/types'
+import { Lead, EventTypeOption } from '@/types'
 import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { PhoneNumberInput, parsePhoneNumber } from './PhoneNumberInput'
 import { DateField } from './DateField'
@@ -59,6 +60,25 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
   const [phoneError, setPhoneError] = useState<string | undefined>()
   const [packageError, setPackageError] = useState<string | undefined>()
 
+  const [eventTypesList, setEventTypesList] = useState<EventTypeOption[]>(DEFAULT_EVENT_TYPES)
+
+  useEffect(() => {
+    return subscribeToEventTypes(setEventTypesList)
+  }, [])
+
+  const activeEventTypes = useMemo(() => {
+    const list = eventTypesList.filter(t => t.isActive)
+    if (eventType && !list.some(t => t.label.toLowerCase() === eventType.toLowerCase())) {
+      list.push({
+        id: eventType.toLowerCase(),
+        label: eventType,
+        isSystem: false,
+        isActive: true,
+      })
+    }
+    return list
+  }, [eventTypesList, eventType])
+
   // Load existing lead data in edit mode
   useEffect(() => {
     if (mode === 'edit' && leadId) {
@@ -79,12 +99,12 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
 
           // Parse Event Type without prefix duplication
           const rawEventType = lead.eventType || 'Wedding'
-          if (['Wedding', 'Prewedding', 'Engagement', 'Birthday'].includes(rawEventType)) {
+          if (/^Other\s*[—–-]?\s*/i.test(rawEventType) && rawEventType.trim().toLowerCase() !== 'other') {
+            setEventType('Other')
+            setCustomEventType(rawEventType.replace(/^Other\s*[—–-]?\s*/i, ''))
+          } else {
             setEventType(rawEventType)
             setCustomEventType('')
-          } else {
-            setEventType('Other')
-            setCustomEventType(rawEventType.replace(/^(Other)\s*[—–-]?\s*/i, ''))
           }
 
           // Parse Source without prefix duplication (e.g. "Other — Shalin")
@@ -291,11 +311,9 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
               onChange={e => handleEventTypeChange(e.target.value)}
               style={SELECT_STYLE}
             >
-              <option value="Wedding">Wedding</option>
-              <option value="Prewedding">Prewedding</option>
-              <option value="Engagement">Engagement</option>
-              <option value="Birthday">Birthday</option>
-              <option value="Other">Other</option>
+              {activeEventTypes.map(et => (
+                <option key={et.id} value={et.label}>{et.label}</option>
+              ))}
             </select>
 
             {eventType === 'Other' && (

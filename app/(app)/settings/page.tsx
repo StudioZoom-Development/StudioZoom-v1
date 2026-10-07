@@ -31,13 +31,20 @@ import {
   saveSavedAddress,
   deleteSavedAddress,
 } from '@/lib/firebase/queries/savedAddresses'
-import type { SavedAddress } from '@/types'
+import {
+  subscribeToEventTypes,
+  saveEventType,
+  deleteEventType,
+  toggleEventTypeStatus,
+} from '@/lib/firebase/queries/eventTypes'
+import type { SavedAddress, EventTypeOption } from '@/types'
+import { Badge } from '@/components/shared/Badge'
 
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
 
-type Page = 'Studio branding' | 'Packages' | 'Numbering' | 'Saved Address' | 'User management'
+type Page = 'Studio branding' | 'Packages' | 'Numbering' | 'Saved Address' | 'Event Types' | 'User management'
 
 const SETTINGS_SECTIONS: Array<{
   label: Page
@@ -64,6 +71,11 @@ const SETTINGS_SECTIONS: Array<{
     label: 'Saved Address',
     icon: 'ti-map-pin',
     description: 'Frequently used wedding venues & studio addresses',
+  },
+  {
+    label: 'Event Types',
+    icon: 'ti-calendar-event',
+    description: 'Booking & lead event categories (System & Custom)',
   },
   {
     label: 'User management',
@@ -772,6 +784,187 @@ function AddressModal({ address, onSave, onClose }: AddressModalProps) {
 }
 
 // ─────────────────────────────────────────────
+// Event Type Modal — Add / Edit Event Type
+// ─────────────────────────────────────────────
+
+interface EventTypeModalProps {
+  eventType: EventTypeOption | null
+  onSave:  (data: { id?: string; label: string; isActive?: boolean }) => Promise<void>
+  onClose: () => void
+}
+
+function EventTypeModal({ eventType, onSave, onClose }: EventTypeModalProps) {
+  const [label,    setLabel]    = useState(eventType?.label ?? '')
+  const [isActive, setIsActive] = useState(eventType ? eventType.isActive : true)
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+
+  const handleSave = async () => {
+    const trimmed = label.trim()
+    if (!trimmed) {
+      setError('Event type name is required')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await onSave({
+        id: eventType?.id,
+        label: trimmed,
+        isActive,
+      })
+      onClose()
+    } catch (err) {
+      console.error('Failed to save event type:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save event type. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'var(--font-inter)',
+        padding: '16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: '460px',
+          background: 'var(--color-surface-overlay)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '16px',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
+            {eventType ? 'Edit event type' : 'Add custom event type'}
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-foreground-muted)',
+              cursor: 'pointer',
+              fontSize: '18px',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <i className="ti ti-x" />
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-danger)',
+            background: 'var(--color-danger-muted)',
+            border: '0.5px solid var(--color-danger)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
+              Category Name *
+            </label>
+            <Input
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder="e.g. Haldi Ceremony, Sangeet, Housewarming…"
+              className="h-10"
+              autoFocus
+            />
+            <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+              This event category will appear in the New Booking wizard and Leads event type selector.
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 14px',
+              background: 'var(--color-surface-raised)',
+              borderRadius: '8px',
+              border: '0.5px solid var(--color-border)',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
+                Active in booking forms
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                Enable or disable this category from form dropdowns
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsActive(!isActive)}
+              style={{
+                background: isActive ? 'var(--color-primary)' : 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                color: isActive ? '#ffffff' : 'var(--color-foreground-muted)',
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '4px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              {isActive ? 'Active' : 'Disabled'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 border-t border-[var(--color-border)]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full md:w-auto h-10 md:h-9 px-4 rounded-lg cursor-pointer bg-transparent border border-[var(--color-border)] text-[var(--color-foreground)] text-sm font-sans"
+          >
+            Cancel
+          </button>
+          <Button
+            className="w-full md:w-auto h-10 md:h-9 font-medium"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : (eventType ? 'Save changes' : 'Add event type')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
 // Edit User Modal — updates /users/{uid} in Firestore
 // ─────────────────────────────────────────────
 
@@ -993,6 +1186,7 @@ export default function SettingsPage() {
     if (tabParam === 'packages') return 'Packages'
     if (tabParam === 'numbering') return 'Numbering'
     if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') return 'Saved Address'
+    if (tabParam === 'events' || tabParam === 'event-types' || tabParam === 'eventtypes') return 'Event Types'
     if (tabParam === 'branding') return 'Studio branding'
     return null
   })
@@ -1035,6 +1229,7 @@ export default function SettingsPage() {
     if (tabParam === 'packages') return 'Packages'
     if (tabParam === 'numbering') return 'Numbering'
     if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') return 'Saved Address'
+    if (tabParam === 'events' || tabParam === 'event-types' || tabParam === 'eventtypes') return 'Event Types'
     if (tabParam === 'branding') return 'Studio branding'
     return 'Studio branding'
   })
@@ -1054,6 +1249,9 @@ export default function SettingsPage() {
     } else if (tabParam === 'address' || tabParam === 'saved-address' || tabParam === 'addresses') {
       setPage('Saved Address')
       setMobileSection('Saved Address')
+    } else if (tabParam === 'events' || tabParam === 'event-types' || tabParam === 'eventtypes') {
+      setPage('Event Types')
+      setMobileSection('Event Types')
     } else if (tabParam === 'branding') {
       setPage('Studio branding')
       setMobileSection('Studio branding')
@@ -1100,6 +1298,13 @@ export default function SettingsPage() {
   const [addressSaving,    setAddressSaving]    = useState(false)
   const [deleteAddress,    setDeleteAddress]    = useState<SavedAddress | null>(null)
 
+  // Event types
+  const [eventTypes,          setEventTypes]          = useState<EventTypeOption[]>([])
+  const [editEventType,       setEditEventType]       = useState<EventTypeOption | null | 'new'>('new')
+  const [showEventTypeModal,  setShowEventTypeModal]  = useState(false)
+  const [deleteEventTypeItem, setDeleteEventTypeItem] = useState<EventTypeOption | null>(null)
+  const [eventTypeSaving,     setEventTypeSaving]     = useState(false)
+
   // User management
   const [editUser,       setEditUser]       = useState<UserRow | null>(null)
   const [resetUser,         setResetUser]         = useState<UserRow | null>(null)
@@ -1134,6 +1339,44 @@ export default function SettingsPage() {
       setDeleteAddress(null)
     } finally {
       setAddressSaving(false)
+    }
+  }
+
+  // event_types
+  useEffect(() => {
+    return subscribeToEventTypes(setEventTypes)
+  }, [])
+
+  const handleSaveEventType = async (data: { id?: string; label: string; isActive?: boolean }) => {
+    setEventTypeSaving(true)
+    try {
+      await saveEventType(data)
+      setShowEventTypeModal(false)
+      setEditEventType('new')
+    } catch (err) {
+      console.error('Failed to save event type:', err)
+    } finally {
+      setEventTypeSaving(false)
+    }
+  }
+
+  const handleDeleteEventType = async (id: string) => {
+    setEventTypeSaving(true)
+    try {
+      await deleteEventType(id)
+      setDeleteEventTypeItem(null)
+    } catch (err) {
+      console.error('Failed to delete event type:', err)
+    } finally {
+      setEventTypeSaving(false)
+    }
+  }
+
+  const handleToggleEventTypeActive = async (item: EventTypeOption) => {
+    try {
+      await toggleEventTypeStatus(item.id, !item.isActive)
+    } catch (err) {
+      console.error('Failed to toggle event type:', err)
     }
   }
 
@@ -1397,6 +1640,7 @@ export default function SettingsPage() {
                     'Packages': 'packages',
                     'Numbering': 'numbering',
                     'Saved Address': 'address',
+                    'Event Types': 'events',
                     'User management': 'users',
                   }
                   const slug = tabMap[section.label]
@@ -1943,7 +2187,167 @@ export default function SettingsPage() {
         )}
 
         {/* ═══════════════════════════════════════
-            E — USER MANAGEMENT
+            E — EVENT TYPES
+        ═══════════════════════════════════════ */}
+        {page === 'Event Types' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
+                  Event Types ({eventTypes.length})
+                </h3>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  Standard and custom categories available in New Booking wizards, Leads forms and client records.
+                </span>
+              </div>
+              <Button
+                className="h-9 font-medium"
+                onClick={() => { setEditEventType('new'); setShowEventTypeModal(true) }}
+                disabled={eventTypeSaving}
+              >
+                + Add event type
+              </Button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {eventTypes.map(item => (
+                <div
+                  key={item.id}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '14px',
+                    transition: 'border-color 0.15s',
+                    opacity: item.isActive ? 1 : 0.6,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-border-strong)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        flexShrink: 0,
+                        background: item.isSystem ? 'var(--color-surface-raised)' : 'var(--color-primary-muted)',
+                        color: item.isSystem ? 'var(--color-accent)' : 'var(--color-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <i className={`ti ${item.isSystem ? 'ti-bookmark' : 'ti-sparkles'}`} style={{ fontSize: '18px' }} />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                          {item.label}
+                        </span>
+                        <Badge
+                          variant={item.isSystem ? 'inquiry' : 'planning'}
+                          label={item.isSystem ? 'System' : 'Custom'}
+                        />
+                        {!item.isActive && (
+                          <Badge variant="unpaid" label="Disabled" />
+                        )}
+                      </div>
+                      <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                        ID: {item.id} · {item.isSystem ? 'Built-in category' : 'Custom added'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleEventTypeActive(item)}
+                      style={{
+                        background: item.isActive ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        color: item.isActive ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title={item.isActive ? 'Visible in Booking & Lead forms' : 'Hidden from Booking & Lead forms'}
+                    >
+                      <i className={`ti ${item.isActive ? 'ti-check' : 'ti-eye-off'}`} style={{ fontSize: '12px' }} />
+                      <span>{item.isActive ? 'Active' : 'Disabled'}</span>
+                    </button>
+
+                    {!item.isSystem && (
+                      <>
+                        <span
+                          onClick={() => {
+                            setEditEventType(item)
+                            setShowEventTypeModal(true)
+                          }}
+                          style={{
+                            fontSize: 'var(--text-xs)',
+                            color: 'var(--color-accent)',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <i className="ti ti-pencil" style={{ fontSize: '14px' }} />
+                          Edit
+                        </span>
+
+                        <span
+                          onClick={() => setDeleteEventTypeItem(item)}
+                          style={{
+                            fontSize: 'var(--text-xs)',
+                            color: 'var(--color-danger)',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <i className="ti ti-trash" style={{ fontSize: '14px' }} />
+                          Delete
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {eventTypes.length === 0 && (
+                <div style={{
+                  background: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '40px',
+                  textAlign: 'center',
+                  color: 'var(--color-foreground-muted)',
+                  fontSize: 'var(--text-sm)',
+                }}>
+                  No event types configured yet.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════
+            F — USER MANAGEMENT
         ═══════════════════════════════════════ */}
         {page === 'User management' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2230,6 +2634,32 @@ export default function SettingsPage() {
       />
 
 
+
+      {showEventTypeModal && (
+        <EventTypeModal
+          eventType={editEventType === 'new' ? null : editEventType}
+          onSave={handleSaveEventType}
+          onClose={() => {
+            setShowEventTypeModal(false)
+            setEditEventType('new')
+          }}
+        />
+      )}
+
+      <ConfirmModal
+        open={Boolean(deleteEventTypeItem)}
+        title="Delete custom event type?"
+        description={`Are you sure you want to delete "${deleteEventTypeItem?.label ?? 'this event type'}"? Existing bookings will retain this record, but it will be removed from new selection options.`}
+        confirmLabel="Delete event type"
+        variant="danger"
+        loading={eventTypeSaving}
+        onConfirm={() => {
+          if (deleteEventTypeItem) {
+            handleDeleteEventType(deleteEventTypeItem.id)
+          }
+        }}
+        onCancel={() => setDeleteEventTypeItem(null)}
+      />
 
       {editUser && (
         <EditUserModal user={editUser} onClose={() => setEditUser(null)} />
