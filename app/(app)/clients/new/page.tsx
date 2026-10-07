@@ -311,7 +311,9 @@ function NewBookingPageContent(): React.JSX.Element {
       const bookingPayload = {
         eventName:       state.eventName.trim() || state.clientName.trim(),
         eventType:       state.eventType,
-        customEventType: state.eventType === 'other' ? state.customEventType.trim() : undefined,
+        customEventType: (state.eventType === 'other' || String(state.eventType).startsWith('custom_'))
+          ? (state.customEventType?.trim() || undefined)
+          : undefined,
         eventDate,
         startTime:       state.startTime,
         endTime:         state.endTime,

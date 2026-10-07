@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, addMonths } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { TimeField } from '@/components/shared/TimeField'
-import { Client, EventType, BookingType } from '@/types'
+import { Client, EventType, BookingType, EventTypeOption } from '@/types'
 import { updateClient } from '@/lib/firebase/queries/clients'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
 import { useAuthStore } from '@/store/authStore'
+import { subscribeToEventTypes, DEFAULT_EVENT_TYPES } from '@/lib/firebase/queries/eventTypes'
 
 interface EditClientModalProps {
   open: boolean
@@ -17,21 +18,6 @@ interface EditClientModalProps {
   onClose: () => void
   onSuccess?: () => void
 }
-
-const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
-  { value: 'wedding', label: 'Wedding' },
-  { value: 'reception', label: 'Reception' },
-  { value: 'preWedding', label: 'Pre-Wedding' },
-  { value: 'engagement', label: 'Engagement' },
-  { value: 'birthday', label: 'Birthday' },
-  { value: 'babyShower', label: 'Baby Shower' },
-  { value: 'puberty', label: 'Puberty' },
-  { value: 'corporate', label: 'Corporate' },
-  { value: 'schoolEvent', label: 'School Event' },
-  { value: 'portrait', label: 'Portrait' },
-  { value: 'studio', label: 'Studio' },
-  { value: 'other', label: 'Other' },
-]
 
 export function EditClientModal({ open, client, onClose, onSuccess }: EditClientModalProps) {
   if (!open || !client) return null
@@ -63,6 +49,30 @@ function EditClientModalInner({
   const [eventName, setEventName] = useState(client.eventName || '')
   const [eventType, setEventType] = useState<EventType>(client.eventType || 'wedding')
   const [customEventType, setCustomEventType] = useState(client.customEventType || '')
+
+  const [eventTypesList, setEventTypesList] = useState<EventTypeOption[]>(DEFAULT_EVENT_TYPES)
+
+  useEffect(() => {
+    return subscribeToEventTypes(setEventTypesList)
+  }, [])
+
+  const activeEventTypes = useMemo(() => {
+    const list = eventTypesList.filter(t => t.isActive)
+    if (eventType && !list.some(t => t.id === eventType)) {
+      const existing = eventTypesList.find(t => t.id === eventType)
+      if (existing) {
+        list.push(existing)
+      } else {
+        list.push({
+          id: eventType,
+          label: customEventType || eventType,
+          isSystem: false,
+          isActive: true,
+        })
+      }
+    }
+    return list
+  }, [eventTypesList, eventType, customEventType])
   const [startTime, setStartTime] = useState(client.startTime || '09:00')
   const [endTime, setEndTime] = useState(client.endTime || '18:00')
   const [location, setLocation] = useState(client.location || '')
@@ -213,7 +223,7 @@ function EditClientModalInner({
           email,
           eventName,
           eventType,
-          customEventType: eventType === 'other' ? customEventType.trim() : '',
+          customEventType: (eventType === 'other' || String(eventType).startsWith('custom_')) ? customEventType.trim() : '',
           startTime: bookingType === 'recurring' ? sessionStartTime : startTime,
           endTime: bookingType === 'recurring' ? sessionEndTime : endTime,
           location,
@@ -349,7 +359,18 @@ function EditClientModalInner({
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Event Type</label>
                 <select
                   value={eventType}
-                  onChange={e => setEventType(e.target.value as EventType)}
+                  onChange={e => {
+                    const val = e.target.value as EventType
+                    const match = activeEventTypes.find(t => t.id === val)
+                    setEventType(val)
+                    if (val === 'other') {
+                      // Keep customEventType or let user specify
+                    } else if (match && !match.isSystem) {
+                      setCustomEventType(match.label)
+                    } else {
+                      setCustomEventType('')
+                    }
+                  }}
                   style={{
                     fontFamily: 'var(--font-inter)',
                     height: '36px',
@@ -365,8 +386,8 @@ function EditClientModalInner({
                     cursor: 'pointer',
                   }}
                 >
-                  {EVENT_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                  {activeEventTypes.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
               </div>

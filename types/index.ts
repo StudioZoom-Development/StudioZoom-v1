@@ -17,6 +17,17 @@ export type EventType =
   | 'birthday' | 'babyShower' | 'puberty'
   | 'corporate' | 'schoolEvent'
   | 'portrait' | 'studio' | 'other'
+  | (string & {})
+
+export interface EventTypeOption {
+  id: string
+  label: string
+  isSystem?: boolean
+  isActive: boolean
+  isDeleted?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+}
 
 export type BookingType = 'oneTime' | 'multiDate' | 'recurring'
 
