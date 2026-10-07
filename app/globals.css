@@ -1,10 +1,63 @@
 /* Tabler icons webfont */
 @import url('https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.1/dist/tabler-icons.min.css');
 
+/* Cursive script font for personalized greeting */
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Alex+Brush&display=swap');
+
 /* Studio Zoom design system — all colour tokens + typography */
 @import '../studio-theme.css';
 
 @import "tailwindcss";
+
+.greeting-name-script {
+  font-family: 'Dancing Script', 'Alex Brush', cursive;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-accent);
+  display: inline-block;
+  font-size: 1.18em;
+  line-height: 1;
+  transform: translateY(1px);
+}
+
+/* Dashboard responsive grids — guaranteed desktop multi-column alignment */
+.dashboard-ops-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 768px) {
+  .dashboard-ops-grid {
+    grid-template-columns: 3fr 2fr;
+  }
+}
+
+.dashboard-radars-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .dashboard-radars-grid-3 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (min-width: 1024px) {
+  .dashboard-radars-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dashboard-radars-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 768px) {
+  .dashboard-radars-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
 
 /* Global resets */
 *, *::before, *::after {
