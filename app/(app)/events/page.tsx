@@ -1069,9 +1069,11 @@ function EventsBoardContent() {
   // ─── FILTERED CONTRACT GROUPS & TIME BUCKETS ─────────────────────────────
   const filteredGroups = useMemo(() => {
     return contractGroups.filter(g => {
-      if (railFilter === 'active' && !g.isOngoing) return false
-      if (railFilter === 'done' && !g.isDone) return false
-      if (railFilter === 'overdue' && !g.isOverdue) return false
+      const isCurrentlySelected = Boolean(selectedProjectId && g.sessions.some(s => s.projectId === selectedProjectId))
+
+      if (railFilter === 'active' && !g.isOngoing && !isCurrentlySelected) return false
+      if (railFilter === 'done' && !g.isDone && !isCurrentlySelected) return false
+      if (railFilter === 'overdue' && !g.isOverdue && !isCurrentlySelected) return false
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
@@ -1090,7 +1092,7 @@ function EventsBoardContent() {
 
       return true
     })
-  }, [contractGroups, railFilter, searchQuery])
+  }, [contractGroups, railFilter, searchQuery, selectedProjectId])
 
   // Automatically expand Delivered / Completed Archive when navigating to a finished project (e.g. from client page)
   useEffect(() => {
