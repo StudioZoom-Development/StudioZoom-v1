@@ -45,7 +45,6 @@ import {
   createBankAccount,
   updateBankAccount,
   deleteBankAccount,
-  seedDefaultBankAccountsIfEmpty,
 } from '@/lib/firebase/queries/bankAccounts'
 import type { Expense, Client, Budget, AccountPayable, ExpenseCategory, CashOpeningBalances, CustomExpenseCategory, BankAccount } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -280,10 +279,6 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
 
     const unsubBankAccounts = subscribeToBankAccounts((items) => {
       if (mounted) setBankAccounts(items)
-    })
-
-    seedDefaultBankAccountsIfEmpty(appUser?.uid || 'admin').catch((err) => {
-      console.warn('[BankAccounts] Auto-seed warning:', err)
     })
 
     return () => {
@@ -1388,12 +1383,17 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
           }
           .cashflow-chart-drill-grid {
             display: grid !important;
-            grid-template-columns: minmax(0, 1fr) 380px !important;
+            grid-template-columns: minmax(0, 1.35fr) minmax(360px, 420px) !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
             gap: 16px !important;
             align-items: stretch !important;
+          }
+          @media (max-width: 1080px) {
+            .cashflow-chart-drill-grid {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
           }
           .cashflow-chart-drill-grid > div {
             min-width: 0 !important;
@@ -1402,7 +1402,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
             height: 100% !important;
           }
           .cashflow-chart-drill-grid > div:last-child {
-            max-height: 480px !important;
+            max-height: 520px !important;
             overflow: hidden !important;
           }
           .cashflow-drilldown-list::-webkit-scrollbar {
@@ -2421,7 +2421,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) 380px',
+              gridTemplateColumns: 'minmax(0, 1.35fr) minmax(360px, 420px)',
               gap: '16px',
               width: '100%',
               maxWidth: '100%',
@@ -2892,19 +2892,76 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                 overflow: 'hidden',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <h4 style={{ fontSize: 'var(--text-base)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
-                    Payment & Expense Records
-                  </h4>
-                  <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
-                    {currentMonthSummary.fullMonthLabel} · {filteredLineItems.length} transactions
-                  </span>
+              {/* Header: Title + Primary Action Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <h4 style={{ fontSize: 'var(--text-base)', fontWeight: 600, margin: 0, color: 'var(--color-foreground)' }}>
+                      Payment & Expense Records
+                    </h4>
+                    <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)' }}>
+                      {currentMonthSummary.fullMonthLabel} · {filteredLineItems.length} transactions
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    {/* Export CSV Button */}
+                    <button
+                      type="button"
+                      onClick={() => exportCashflowTransactionsCSV(filteredLineItems, currentMonthSummary.fullMonthLabel)}
+                      style={{
+                        border: '0.5px solid var(--color-border)',
+                        background: 'var(--color-surface-raised)',
+                        color: 'var(--color-foreground)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="Export current month's transactions to CSV"
+                    >
+                      <i className="ti ti-download" style={{ fontSize: '13px' }} />
+                      <span>CSV</span>
+                    </button>
+
+                    {/* Full View Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFullLedgerScope('month')
+                        setIsFullTransactionsModalOpen(true)
+                      }}
+                      style={{
+                        border: '0.5px solid var(--color-primary)',
+                        background: 'var(--color-primary-muted)',
+                        color: 'var(--color-primary)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="View full-width ledger with all payment and expense details"
+                    >
+                      <i className="ti ti-arrows-maximize" style={{ fontSize: '12px' }} />
+                      <span>Full Ledger</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {/* Sub-toolbar: In/Out Filter & Bank Account Selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {/* In/Out Filter */}
-                  <div style={{ display: 'flex', gap: '2px', background: 'var(--color-surface-raised)', padding: '2px', borderRadius: '6px' }}>
+                  <div style={{ display: 'inline-flex', gap: '2px', background: 'var(--color-surface-raised)', padding: '2px', borderRadius: '6px', flexShrink: 0 }}>
                     <button
                       type="button"
                       onClick={() => setDrillTypeFilter('all')}
@@ -2914,7 +2971,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                         color: drillTypeFilter === 'all' ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
                         fontSize: '11px',
                         fontWeight: 600,
-                        padding: '2px 6px',
+                        padding: '3px 8px',
                         borderRadius: '4px',
                         cursor: 'pointer',
                       }}
@@ -2930,7 +2987,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                         color: drillTypeFilter === 'income' ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
                         fontSize: '11px',
                         fontWeight: 600,
-                        padding: '2px 6px',
+                        padding: '3px 8px',
                         borderRadius: '4px',
                         cursor: 'pointer',
                       }}
@@ -2946,7 +3003,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                         color: drillTypeFilter === 'expense' ? 'var(--color-danger)' : 'var(--color-foreground-subtle)',
                         fontSize: '11px',
                         fontWeight: 600,
-                        padding: '2px 6px',
+                        padding: '3px 8px',
                         borderRadius: '4px',
                         cursor: 'pointer',
                       }}
@@ -2960,7 +3017,9 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                     value={drillBankFilter}
                     onChange={(e) => setDrillBankFilter(e.target.value)}
                     style={{
-                      height: '24px',
+                      flex: 1,
+                      minWidth: '120px',
+                      height: '26px',
                       background: 'var(--color-surface-raised)',
                       border: '0.5px solid var(--color-border)',
                       borderRadius: '6px',
@@ -2979,57 +3038,6 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                       </option>
                     ))}
                   </select>
-
-                  {/* Export CSV Button */}
-                  <button
-                    type="button"
-                    onClick={() => exportCashflowTransactionsCSV(filteredLineItems, currentMonthSummary.fullMonthLabel)}
-                    style={{
-                      border: '0.5px solid var(--color-border)',
-                      background: 'var(--color-surface-raised)',
-                      color: 'var(--color-foreground)',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.15s ease',
-                    }}
-                    title="Export current month's transactions to CSV"
-                  >
-                    <i className="ti ti-download" style={{ fontSize: '13px' }} />
-                    <span>CSV</span>
-                  </button>
-
-                  {/* Full View Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFullLedgerScope('month')
-                      setIsFullTransactionsModalOpen(true)
-                    }}
-                    style={{
-                      border: '0.5px solid var(--color-primary)',
-                      background: 'var(--color-primary-muted)',
-                      color: 'var(--color-primary)',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.15s ease',
-                    }}
-                    title="View full-width ledger with all payment and expense details"
-                  >
-                    <i className="ti ti-arrows-maximize" style={{ fontSize: '12px' }} />
-                    <span>Full Ledger</span>
-                  </button>
                 </div>
               </div>
 
@@ -3075,7 +3083,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                   overflowY: 'auto',
                   flex: 1,
                   minHeight: 0,
-                  paddingRight: '6px',
+                  paddingRight: '8px',
                   WebkitOverflowScrolling: 'touch',
                   scrollbarWidth: 'thin',
                   scrollbarColor: 'var(--color-border-strong) transparent',
@@ -3122,7 +3130,7 @@ export function FinancialsHub({ initialTab = 'cashflow' }: FinancialsHubProps) {
                         </span>
                       </div>
 
-                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: item.amtColor, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: item.amtColor, whiteSpace: 'nowrap', flexShrink: 0, paddingRight: '6px' }}>
                         {item.type === 'income' ? `+${formatINR(item.amount)}` : `−${formatINR(item.amount)}`}
                       </span>
                     </div>

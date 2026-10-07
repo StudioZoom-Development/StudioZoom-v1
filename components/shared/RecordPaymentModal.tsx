@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { useAuthStore } from '@/store/authStore'
 import { recordPayment, subscribeToPayments } from '@/lib/firebase/queries/clients'
-import { subscribeToBankAccounts, seedDefaultBankAccountsIfEmpty } from '@/lib/firebase/queries/bankAccounts'
+import { subscribeToBankAccounts } from '@/lib/firebase/queries/bankAccounts'
 import type { BankAccount } from '@/types'
 
 interface PaymentDoc {
@@ -56,17 +56,12 @@ export function RecordPaymentModal({
   const [transactionId, setTransactionId] = useState<string>('')
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [submittingPayment, setSubmittingPayment] = useState<boolean>(false)
-
-  // Listen to bank accounts
   useEffect(() => {
-    seedDefaultBankAccountsIfEmpty(appUser?.uid || 'system').catch(err => {
-      console.warn('Bank seed check error:', err)
-    })
     const unsub = subscribeToBankAccounts((list) => {
       setBankAccounts(list)
     })
     return () => unsub()
-  }, [appUser?.uid])
+  }, [])
 
   // Listen to existing payments
   useEffect(() => {

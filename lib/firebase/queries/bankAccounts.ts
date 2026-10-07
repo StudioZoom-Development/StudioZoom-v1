@@ -177,62 +177,10 @@ export async function deleteBankAccount(
 }
 
 /**
- * Automatically seeds initial bank accounts if none exist in Firestore:
- * 1. Studio HDFC Bank (Primary)
- * 2. Father's SBI Account
- * 3. Studio Cash in Hand
+ * Previously seeded mock bank accounts.
+ * Disabled: Bank accounts must be explicitly created by users/admins and not seeded with mock data.
  */
-export async function seedDefaultBankAccountsIfEmpty(adminUid: string = 'system'): Promise<void> {
-  const colRef = collection(db, 'bankAccounts')
-  const snap = await getDocs(colRef)
-  const nonDeleted = snap.docs.filter((d) => !d.data().isDeleted)
-
-  if (nonDeleted.length > 0) return
-
-  const defaults = [
-    {
-      bankName: 'HDFC Bank',
-      accountHolder: 'Studio Zoom (Owner)',
-      nickname: 'Studio HDFC (Primary)',
-      accountNumberMasked: '•••• 4821',
-      upiId: 'studiozoom@hdfcbank',
-      ifsc: 'HDFC0001892',
-      isDefault: true,
-      isActive: true,
-      openingBalance: 450000,
-    },
-    {
-      bankName: 'State Bank of India (SBI)',
-      accountHolder: "Father's Account",
-      nickname: "Father's SBI Account",
-      accountNumberMasked: '•••• 1092',
-      upiId: 'family@sbi',
-      ifsc: 'SBIN0004123',
-      isDefault: false,
-      isActive: true,
-      openingBalance: 150000,
-    },
-    {
-      bankName: 'Cash in Hand',
-      accountHolder: 'Studio Cash Drawer',
-      nickname: 'Studio Cash in Hand',
-      accountNumberMasked: 'Cash Ledger',
-      upiId: '',
-      ifsc: '',
-      isDefault: false,
-      isActive: true,
-      openingBalance: 50000,
-    },
-  ]
-
-  for (const item of defaults) {
-    const newDoc = doc(colRef)
-    await setDoc(newDoc, {
-      bankAccountId: newDoc.id,
-      ...item,
-      createdBy: adminUid,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-  }
+export async function seedDefaultBankAccountsIfEmpty(_adminUid: string = 'system'): Promise<void> {
+  // No-op: Do not auto-seed dummy bank accounts.
+  return Promise.resolve()
 }
