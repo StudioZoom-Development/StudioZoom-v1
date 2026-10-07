@@ -11,6 +11,7 @@ import {
   writeBatch,
   serverTimestamp,
   Timestamp,
+  documentId,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import type { AppNotification, CreateNotificationInput, LeaveRequest, LeaveRequestType } from '@/types'
@@ -129,7 +130,7 @@ export async function fetchReferencedLeaveRequestsBatch(
       try {
         const q = query(
           collection(db, 'leaveRequests'),
-          where('__name__', 'in', chunk)
+          where(documentId(), 'in', chunk)
         )
         const snap = await getDocs(q)
         for (const docSnap of snap.docs) {

@@ -163,6 +163,10 @@ service cloud.firestore {
       allow write: if isAdminOrManager();
     }
 
+    match /bankAccounts/{bankAccountId} {
+      allow read, write: if isSignedIn();
+    }
+
     match /notifications/{notificationId} {
       allow read, write: if isSignedIn();
     }
