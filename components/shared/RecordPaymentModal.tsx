@@ -107,23 +107,27 @@ export function RecordPaymentModal({
   useEffect(() => {
     if (bankAccounts.length === 0) return
 
-    if (paymentMethod === 'cash') {
-      const cashAcc = bankAccounts.find(b => b.nickname.toLowerCase().includes('cash') || b.bankName.toLowerCase().includes('cash'))
-      if (cashAcc) {
-        setSelectedBankAccountId(cashAcc.bankAccountId)
-        return
+    const timer = setTimeout(() => {
+      if (paymentMethod === 'cash') {
+        const cashAcc = bankAccounts.find(b => b.nickname.toLowerCase().includes('cash') || b.bankName.toLowerCase().includes('cash'))
+        if (cashAcc) {
+          setSelectedBankAccountId(cashAcc.bankAccountId)
+          return
+        }
       }
-    }
 
-    // For non-cash (or if no cash account found), pick default bank account or first non-cash
-    if (!selectedBankAccountId || bankAccounts.find(b => b.bankAccountId === selectedBankAccountId)?.nickname.toLowerCase().includes('cash')) {
-      const defaultAcc = bankAccounts.find(b => b.isDefault && !b.nickname.toLowerCase().includes('cash')) 
-        || bankAccounts.find(b => !b.nickname.toLowerCase().includes('cash'))
-        || bankAccounts[0]
-      if (defaultAcc) {
-        setSelectedBankAccountId(defaultAcc.bankAccountId)
+      // For non-cash (or if no cash account found), pick default bank account or first non-cash
+      if (!selectedBankAccountId || bankAccounts.find(b => b.bankAccountId === selectedBankAccountId)?.nickname.toLowerCase().includes('cash')) {
+        const defaultAcc = bankAccounts.find(b => b.isDefault && !b.nickname.toLowerCase().includes('cash')) 
+          || bankAccounts.find(b => !b.nickname.toLowerCase().includes('cash'))
+          || bankAccounts[0]
+        if (defaultAcc) {
+          setSelectedBankAccountId(defaultAcc.bankAccountId)
+        }
       }
-    }
+    }, 0)
+
+    return () => clearTimeout(timer)
   }, [bankAccounts, paymentMethod, selectedBankAccountId])
 
   if (!isOpen) return null
