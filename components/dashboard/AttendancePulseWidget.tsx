@@ -165,7 +165,7 @@ export function AttendancePulseWidget({ attendance }: AttendancePulseWidgetProps
                     flexShrink: 0,
                   }}
                 >
-                  {st.time}
+                  {st.time && st.time !== 'Invalid Date' ? st.time : isPresent ? 'Checked in' : 'Not in yet'}
                 </span>
 
                 {/* Status Dot */}
