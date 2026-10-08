@@ -1,6 +1,5 @@
 import {
   collection,
-  query,
   onSnapshot,
   collectionGroup,
 } from 'firebase/firestore'
@@ -14,6 +13,7 @@ import type {
   TimeLog,
   Checkout,
 } from '@/types'
+import { getTodayDateString, subscribeToAllTodayTimeLogs } from './timeLogs'
 
 export interface DashboardEventItem {
   id: string
@@ -291,8 +291,22 @@ export function subscribeToDashboardData(
         let checkInTimeStr = 'Not in yet'
 
         if (tl?.checkInAt) {
-          const d = tl.checkInAt instanceof Date ? tl.checkInAt : new Date(tl.checkInAt)
-          checkInTimeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+          let d: Date | null = null
+          const raw = tl.checkInAt as unknown
+          if (raw instanceof Date) {
+            d = raw
+          } else if (typeof (raw as { toDate?: () => Date })?.toDate === 'function') {
+            d = (raw as { toDate: () => Date }).toDate()
+          } else if (typeof raw === 'object' && raw !== null && 'seconds' in raw && typeof (raw as { seconds: number }).seconds === 'number') {
+            d = new Date((raw as { seconds: number }).seconds * 1000)
+          } else if (typeof raw === 'string' || typeof raw === 'number') {
+            const parsed = new Date(raw)
+            if (!isNaN(parsed.getTime())) d = parsed
+          }
+
+          if (d && !isNaN(d.getTime())) {
+            checkInTimeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+          }
         }
 
         return {
@@ -438,13 +452,11 @@ export function subscribeToDashboardData(
     computeAndEmit()
   }, () => {})
 
-  const todayStr = new Date().toISOString().split('T')[0]
-  const unsubTimeLogs = onSnapshot(query(collection(db, 'timeLogs')), (snap) => {
-    todayTimeLogs = snap.docs
-      .map(d => ({ logId: d.id, ...(d.data() as object) } as TimeLog))
-      .filter(tl => tl.date === todayStr)
+  const todayStr = getTodayDateString()
+  const unsubTimeLogs = subscribeToAllTodayTimeLogs(todayStr, (logs) => {
+    todayTimeLogs = logs
     computeAndEmit()
-  }, () => {})
+  })
 
   const unsubCheckouts = onSnapshot(collection(db, 'checkouts'), (snap) => {
     activeCheckouts = snap.docs
