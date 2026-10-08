@@ -21,6 +21,7 @@ import { useUIStore } from '@/store/uiStore'
 import { Project, Client, ProjectStage } from '@/types'
 import { type StaffMember } from '@/lib/firebase/queries/staff'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 
 // ─── Stage Styling & Labels ──────────────────────────────────────────────────
 
@@ -536,19 +537,61 @@ export default function CalendarPage() {
 
   const selectedDayHeaderLabel = format(selectedDateObj, 'd MMMM yyyy')
 
+  // ─── Mobile Calendar State & Memos ──────────────────────────────────────────
+  const [mobileDrawerEvent, setMobileDrawerEvent] = useState<CalendarEventItem | null>(null)
+  const { backSwipeHandlers } = useBackSwipe()
+
+  // Sticky 7-day week glance bar around current week
+  const mobileWeekDays = useMemo(() => {
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 })
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      const dStr = format(d, 'yyyy-MM-dd')
+      return {
+        date: d,
+        dateStr: dStr,
+        dayName: format(d, 'EEE'),
+        dayNum: format(d, 'd'),
+        isToday: dStr === format(new Date(), 'yyyy-MM-dd'),
+        isSelected: dStr === selectedDateStr,
+        hasEvents: (eventsByDay[dStr] || []).length > 0,
+        count: (eventsByDay[dStr] || []).length,
+      }
+    })
+  }, [currentDate, selectedDateStr, eventsByDay])
+
+  // Chronological agenda for active month
+  const mobileAgendaDays = useMemo(() => {
+    const dates = Object.keys(eventsByDay).sort()
+    const monthPrefix = format(currentDate, 'yyyy-MM')
+    return dates
+      .filter(d => d.startsWith(monthPrefix) && (eventsByDay[d] || []).length > 0)
+      .map(d => ({
+        dateStr: d,
+        dateLabel: format(new Date(d + 'T00:00:00'), 'EEEE, d MMMM'),
+        isToday: d === format(new Date(), 'yyyy-MM-dd'),
+        isSelected: d === selectedDateStr,
+        events: eventsByDay[d] || [],
+      }))
+  }, [eventsByDay, currentDate, selectedDateStr])
+
   return (
-    <div
-      style={{
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '24px',
-        display: 'flex',
-        gap: '16px',
-        alignItems: 'start',
-        fontFamily: 'var(--font-inter)',
-        boxSizing: 'border-box',
-      }}
-    >
+    <>
+      {/* ── DESKTOP VIEW (≥768px): 100% Invariant ── */}
+      <div
+        className="hidden md:flex"
+        style={{
+          maxWidth: '1280px',
+          margin: '0 auto',
+          padding: '24px',
+          gap: '16px',
+          alignItems: 'start',
+          fontFamily: 'var(--font-inter)',
+          boxSizing: 'border-box',
+          width: '100%',
+        }}
+      >
       {/* ── Left: Calendar Card ── */}
       <div
         style={{
@@ -1313,6 +1356,684 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+      {/* ── END DESKTOP VIEW ── */}
+
+      {/* ── MOBILE VIEW (<768px): Sticky Week Glance + Vertical Agenda ── */}
+      <div
+        className="block md:hidden"
+        {...backSwipeHandlers}
+        style={{
+          padding: '14px 14px 90px 14px',
+          fontFamily: 'var(--font-inter)',
+          minHeight: '100vh',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* Mobile Header: Month title, Prev/Next, Today */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '14px',
+          }}
+        >
+          <div>
+            <h1
+              style={{
+                fontSize: 'var(--text-xl)',
+                fontWeight: 700,
+                color: 'var(--color-foreground)',
+                margin: 0,
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {format(currentDate, 'MMMM yyyy')}
+            </h1>
+            <p
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-foreground-muted)',
+                margin: '2px 0 0 0',
+              }}
+            >
+              Swipe or tap dates to inspect shoots
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              onClick={handleToday}
+              style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 600,
+                padding: '6px 12px',
+                borderRadius: '8px',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                color: 'var(--color-foreground)',
+                minHeight: '40px',
+                minWidth: '40px',
+                cursor: 'pointer',
+              }}
+            >
+              Today
+            </button>
+            <button
+              onClick={handlePrev}
+              title="Previous Month"
+              style={{
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '8px',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                color: 'var(--color-foreground-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              <i className="ti ti-chevron-left" style={{ fontSize: '18px' }} />
+            </button>
+            <button
+              onClick={handleNext}
+              title="Next Month"
+              style={{
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '8px',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                color: 'var(--color-foreground-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              <i className="ti ti-chevron-right" style={{ fontSize: '18px' }} />
+            </button>
+          </div>
+        </div>
+
+        {/* 15.7.1 Sticky Week Glance Bar */}
+        <div
+          style={{
+            position: 'sticky',
+            top: '56px',
+            zIndex: 30,
+            background: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '10px 8px',
+            marginBottom: '16px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              gap: '4px',
+              textAlign: 'center',
+            }}
+          >
+            {mobileWeekDays.map(day => {
+              const active = day.isSelected
+              return (
+                <div
+                  key={day.dateStr}
+                  onClick={() => setSelectedDateStr(day.dateStr)}
+                  style={{
+                    padding: '8px 2px',
+                    borderRadius: '8px',
+                    background: active ? 'var(--color-primary)' : 'transparent',
+                    color: active
+                      ? '#ffffff'
+                      : day.isToday
+                      ? 'var(--color-primary)'
+                      : 'var(--color-foreground)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    minHeight: '44px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      opacity: active ? 0.9 : 0.7,
+                    }}
+                  >
+                    {day.dayName}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 'var(--text-sm)',
+                      fontWeight: active || day.isToday ? 700 : 500,
+                    }}
+                  >
+                    {day.dayNum}
+                  </span>
+                  {day.hasEvents && (
+                    <div
+                      style={{
+                        width: '4px',
+                        height: '4px',
+                        borderRadius: '50%',
+                        background: active ? '#ffffff' : 'var(--color-secondary)',
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Selected Date Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '12px',
+            padding: '0 2px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                fontSize: 'var(--text-sm)',
+                fontWeight: 600,
+                color: 'var(--color-foreground)',
+              }}
+            >
+              {selectedDayHeaderLabel}
+            </span>
+            {selectedDayEvents.length > 0 && (
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  background: 'var(--color-primary-muted)',
+                  color: 'var(--color-primary)',
+                }}
+              >
+                {selectedDayEvents.length} shoot{selectedDayEvents.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Selected Day Event Cards */}
+        {selectedDayEvents.length === 0 ? (
+          <div
+            style={{
+              padding: '20px',
+              borderRadius: '12px',
+              background: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              textAlign: 'center',
+              marginBottom: '20px',
+            }}
+          >
+            <i
+              className="ti ti-calendar-off"
+              style={{ fontSize: '24px', color: 'var(--color-foreground-subtle)', marginBottom: '6px' }}
+            />
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
+              No events scheduled for this day
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+            {selectedDayEvents.map(ev => {
+              const stageConf = getStageConfig(ev.stage)
+              return (
+                <div
+                  key={ev.id}
+                  onClick={() => setMobileDrawerEvent(ev)}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          background: 'var(--color-primary-muted)',
+                          color: 'var(--color-primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <i className={`ti ${getEventTypeIcon(ev.eventType)}`} style={{ fontSize: '16px' }} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 'var(--text-sm)',
+                            fontWeight: 600,
+                            color: 'var(--color-foreground)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {ev.name}
+                        </div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                          {ev.clientName}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: stageConf.bg,
+                        color: stageConf.fg,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {stageConf.label}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      marginTop: '12px',
+                      paddingTop: '10px',
+                      borderTop: '0.5px solid var(--color-border)',
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-foreground-muted)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <i className="ti ti-clock" />
+                      <span>{ev.startTime || '09:00'} - {ev.endTime || '18:00'}</span>
+                    </div>
+                    {ev.location && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <i className="ti ti-map-pin" />
+                        <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {ev.location}
+                        </span>
+                      </div>
+                    )}
+                    {ev.team && ev.team.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                        <i className="ti ti-users" />
+                        <span>{ev.team.length} crew</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* 15.7.1 Infinite Chronological Agenda for Month */}
+        <div style={{ marginTop: '20px' }}>
+          <div
+            style={{
+              fontSize: 'var(--text-xs)',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: 'var(--color-foreground-subtle)',
+              marginBottom: '12px',
+              paddingLeft: '2px',
+            }}
+          >
+            All Events in {format(currentDate, 'MMMM yyyy')} ({mobileAgendaDays.reduce((acc, d) => acc + d.events.length, 0)})
+          </div>
+
+          {mobileAgendaDays.length === 0 ? (
+            <div
+              style={{
+                padding: '24px',
+                borderRadius: '12px',
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                textAlign: 'center',
+              }}
+            >
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
+                No events recorded for this entire month.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {mobileAgendaDays.map(agendaDay => (
+                <div key={agendaDay.dateStr}>
+                  {/* Date section subheader */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '8px',
+                      paddingLeft: '4px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: agendaDay.isToday ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                      }}
+                    >
+                      {agendaDay.dateLabel}
+                    </span>
+                    {agendaDay.isToday && (
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          background: 'var(--color-primary)',
+                          color: '#ffffff',
+                        }}
+                      >
+                        TODAY
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Day Events */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {agendaDay.events.map(ev => {
+                      const stageConf = getStageConfig(ev.stage)
+                      return (
+                        <div
+                          key={ev.id}
+                          onClick={() => setMobileDrawerEvent(ev)}
+                          style={{
+                            background: 'var(--color-surface)',
+                            border: '0.5px solid var(--color-border)',
+                            borderRadius: '10px',
+                            padding: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: 'var(--text-sm)',
+                                  fontWeight: 600,
+                                  color: 'var(--color-foreground)',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {ev.name}
+                              </div>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                                {ev.clientName} • {ev.startTime || '09:00'}
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: stageConf.bg,
+                                color: stageConf.fg,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {stageConf.label}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 15.3 & 15.8 Mobile Event Detail Bottom Sheet Drawer */}
+      {mobileDrawerEvent && (
+        <>
+          {/* Backdrop Scrim */}
+          <div
+            onClick={() => setMobileDrawerEvent(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.7)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 9990,
+            }}
+          />
+
+          {/* Drawer Panel */}
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: 'var(--color-surface-overlay)',
+              borderTop: '0.5px solid var(--color-border)',
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
+              padding: '16px 20px 32px 20px',
+              zIndex: 9995,
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              fontFamily: 'var(--font-inter)',
+            }}
+          >
+            {/* Grabber handle */}
+            <div
+              style={{
+                width: '36px',
+                height: '4px',
+                background: 'var(--color-border-strong)',
+                borderRadius: '2px',
+                margin: '0 auto 16px auto',
+              }}
+            />
+
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+              <div>
+                <h3
+                  style={{
+                    fontSize: 'var(--text-lg)',
+                    fontWeight: 700,
+                    color: 'var(--color-foreground)',
+                    margin: 0,
+                  }}
+                >
+                  {mobileDrawerEvent.name}
+                </h3>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
+                  {mobileDrawerEvent.clientName}
+                </p>
+              </div>
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  background: getStageConfig(mobileDrawerEvent.stage).bg,
+                  color: getStageConfig(mobileDrawerEvent.stage).fg,
+                }}
+              >
+                {getStageConfig(mobileDrawerEvent.stage).label}
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                marginTop: '18px',
+                padding: '14px',
+                borderRadius: '10px',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', display: 'block' }}>DATE</span>
+                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  {mobileDrawerEvent.dateStr}
+                </span>
+              </div>
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', display: 'block' }}>TIMINGS</span>
+                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  {mobileDrawerEvent.startTime || '09:00'} - {mobileDrawerEvent.endTime || '18:00'}
+                </span>
+              </div>
+              {mobileDrawerEvent.callTime && (
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', display: 'block' }}>CALL TIME</span>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    {mobileDrawerEvent.callTime}
+                  </span>
+                </div>
+              )}
+              {mobileDrawerEvent.location && (
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', display: 'block' }}>LOCATION</span>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    {mobileDrawerEvent.location}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Crew assigned */}
+            {mobileDrawerEvent.team && mobileDrawerEvent.team.length > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-foreground-subtle)', display: 'block', marginBottom: '8px' }}>
+                  ASSIGNED CREW ({mobileDrawerEvent.team.length})
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {mobileDrawerEvent.team.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        background: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-foreground)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary-muted)',
+                          color: 'var(--color-primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '8px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {m.init}
+                      </div>
+                      <span>{m.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+              {(mobileDrawerEvent.projectId || mobileDrawerEvent.clientId) && (
+                <button
+                  onClick={() => {
+                    if (mobileDrawerEvent.clientId) {
+                      router.push(`/clients/${mobileDrawerEvent.clientId}`)
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    height: '44px',
+                    borderRadius: '8px',
+                    background: 'var(--color-primary)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: 'var(--text-sm)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  View Client Record
+                </button>
+              )}
+              <button
+                onClick={() => setMobileDrawerEvent(null)}
+                style={{
+                  height: '44px',
+                  padding: '0 18px',
+                  borderRadius: '8px',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-foreground)',
+                  border: '0.5px solid var(--color-border)',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-sm)',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   )
 }

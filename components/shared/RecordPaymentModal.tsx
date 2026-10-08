@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { useAuthStore } from '@/store/authStore'
 import { recordPayment, subscribeToPayments } from '@/lib/firebase/queries/clients'
+import { subscribeToBankAccounts } from '@/lib/firebase/queries/bankAccounts'
+import type { BankAccount } from '@/types'
 
 interface PaymentDoc {
   paymentId: string
@@ -15,6 +17,8 @@ interface PaymentDoc {
   date: Date
   method: string
   transactionId?: string
+  bankAccountId?: string
+  bankAccountName?: string
   recordedBy: string
   recordedByName?: string
 }
@@ -43,6 +47,8 @@ export function RecordPaymentModal({
   const appUser = useAuthStore(s => s.appUser)
 
   const [payments, setPayments] = useState<PaymentDoc[]>([])
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('')
   const [instalment, setInstalment] = useState<'1st' | '2nd' | '3rd' | 'settlement'>('1st')
   const [paymentAmount, setPaymentAmount] = useState<string>('')
   const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
@@ -50,6 +56,12 @@ export function RecordPaymentModal({
   const [transactionId, setTransactionId] = useState<string>('')
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [submittingPayment, setSubmittingPayment] = useState<boolean>(false)
+  useEffect(() => {
+    const unsub = subscribeToBankAccounts((list) => {
+      setBankAccounts(list)
+    })
+    return () => unsub()
+  }, [])
 
   // Listen to existing payments
   useEffect(() => {
@@ -86,6 +98,33 @@ export function RecordPaymentModal({
     return () => clearTimeout(timer)
   }, [isOpen, balanceDue, receivedInstalments])
 
+  // Synchronize bank account selection when bank accounts or payment method changes
+  useEffect(() => {
+    if (bankAccounts.length === 0) return
+
+    const timer = setTimeout(() => {
+      if (paymentMethod === 'cash') {
+        const cashAcc = bankAccounts.find(b => b.nickname.toLowerCase().includes('cash') || b.bankName.toLowerCase().includes('cash'))
+        if (cashAcc) {
+          setSelectedBankAccountId(cashAcc.bankAccountId)
+          return
+        }
+      }
+
+      // For non-cash (or if no cash account found), pick default bank account or first non-cash
+      if (!selectedBankAccountId || bankAccounts.find(b => b.bankAccountId === selectedBankAccountId)?.nickname.toLowerCase().includes('cash')) {
+        const defaultAcc = bankAccounts.find(b => b.isDefault && !b.nickname.toLowerCase().includes('cash')) 
+          || bankAccounts.find(b => !b.nickname.toLowerCase().includes('cash'))
+          || bankAccounts[0]
+        if (defaultAcc) {
+          setSelectedBankAccountId(defaultAcc.bankAccountId)
+        }
+      }
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [bankAccounts, paymentMethod, selectedBankAccountId])
+
   if (!isOpen) return null
 
   const handleRecordPaymentSubmit = async () => {
@@ -106,6 +145,8 @@ export function RecordPaymentModal({
     setSubmittingPayment(true)
     try {
       const instalmentLabel = instalment === 'settlement' ? 'Final Settlement' : `${instalment} Instalment`
+      const targetBank = bankAccounts.find(b => b.bankAccountId === selectedBankAccountId)
+
       await recordPayment(
         clientId,
         {
@@ -114,6 +155,8 @@ export function RecordPaymentModal({
           date: new Date(paymentDate),
           method: paymentMethod,
           transactionId: transactionId.trim() || undefined,
+          bankAccountId: targetBank?.bankAccountId,
+          bankAccountName: targetBank?.nickname || targetBank?.bankName,
         },
         appUser?.uid || 'system',
         appUser?.name || 'Studio Admin'
@@ -129,13 +172,14 @@ export function RecordPaymentModal({
     }
   }
 
+
   return (
     <div
       onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 100,
+        zIndex: 9995,
         background: 'rgba(0, 0, 0, 0.7)',
         display: 'flex',
         alignItems: 'center',
@@ -146,17 +190,10 @@ export function RecordPaymentModal({
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="w-full max-w-[440px] max-h-[90dvh] overflow-y-auto rounded-2xl flex flex-col gap-4 shadow-2xl p-5 md:p-6"
         style={{
-          width: '100%',
-          maxWidth: '440px',
           background: 'var(--color-surface-overlay)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -289,6 +326,48 @@ export function RecordPaymentModal({
             </select>
           </div>
 
+          {/* Deposit Target Bank Account */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
+                {paymentMethod === 'cash' ? 'Deposit / Target Ledger' : 'Deposit To Bank Account'}
+              </label>
+              {selectedBankAccountId && (
+                <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 500 }}>
+                  {bankAccounts.find(b => b.bankAccountId === selectedBankAccountId)?.accountHolder || ''}
+                </span>
+              )}
+            </div>
+            <select
+              value={selectedBankAccountId}
+              onChange={e => setSelectedBankAccountId(e.target.value)}
+              style={{
+                fontFamily: 'var(--font-inter)',
+                height: '36px',
+                width: '100%',
+                background: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '8px',
+                padding: '0 10px',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-foreground)',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {bankAccounts.length === 0 ? (
+                <option value="">No bank accounts configured</option>
+              ) : (
+                bankAccounts.map(b => (
+                  <option key={b.bankAccountId} value={b.bankAccountId}>
+                    {b.nickname} {b.accountNumberMasked ? `(${b.accountNumberMasked})` : ''} {b.isDefault ? '— Primary' : ''}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+
           {paymentMethod !== 'cash' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>
@@ -305,23 +384,16 @@ export function RecordPaymentModal({
           )}
         </div>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '10px',
-          borderTop: '0.5px solid var(--color-border)',
-          paddingTop: '16px',
-          marginTop: '4px',
-        }}>
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 mt-1 border-t border-[var(--color-border)]">
           <Button
             variant="outline"
-            className="h-9"
+            className="w-full md:w-auto h-10 md:h-9"
             onClick={onClose}
           >
             Cancel
           </Button>
           <Button
-            className="h-9 font-medium"
+            className="w-full md:w-auto h-10 md:h-9 font-medium"
             onClick={handleRecordPaymentSubmit}
             disabled={submittingPayment}
           >

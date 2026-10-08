@@ -2,12 +2,12 @@
 
 import { motion } from 'framer-motion'
 
-interface StepDef {
+export interface StepDef {
   label: string
   icon:  string
 }
 
-const STEPS: StepDef[] = [
+export const STEPS: StepDef[] = [
   { label: 'Booking Type', icon: 'ti-layout-grid' },
   { label: 'Client',       icon: 'ti-user' },
   { label: 'Event',        icon: 'ti-calendar-event' },

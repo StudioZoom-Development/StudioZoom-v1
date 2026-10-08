@@ -17,6 +17,17 @@ export type EventType =
   | 'birthday' | 'babyShower' | 'puberty'
   | 'corporate' | 'schoolEvent'
   | 'portrait' | 'studio' | 'other'
+  | (string & {})
+
+export interface EventTypeOption {
+  id: string
+  label: string
+  isSystem?: boolean
+  isActive: boolean
+  isDeleted?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+}
 
 export type BookingType = 'oneTime' | 'multiDate' | 'recurring'
 
@@ -74,18 +85,38 @@ export interface Client {
   recurringSchedule?:  RecurringSchedule
   bookingGroupId?:     string
   projectIds?:         string[]          // IDs of all sibling session projects for recurring bookings
+  lastRemindedAt?:     Date
+  reminderCount?:      number
   createdBy:           string
   createdAt:           Date
   updatedAt:           Date
 }
 
+export interface BankAccount {
+  bankAccountId:       string
+  bankName:            string              // e.g. "HDFC Bank", "State Bank of India (SBI)"
+  accountHolder:       string              // e.g. "Studio Zoom (Owner)", "Father's Account"
+  nickname:            string              // e.g. "Studio HDFC (Primary)", "Father's SBI"
+  accountNumberMasked: string              // e.g. "•••• 4821" (last 4 digits)
+  upiId?:              string              // e.g. "studiozoom@hdfcbank"
+  ifsc?:               string              // e.g. "HDFC0001234"
+  isDefault?:          boolean             // Auto-selected by default in payment modals
+  isActive?:           boolean             // Set to false if account is retired
+  openingBalance?:     number              // Baseline starting balance for reconciliation
+  createdAt?:          Date
+  updatedAt?:          Date
+  isDeleted?:          boolean
+}
+
 export interface Payment {
   paymentId:       string
-  instalment:      '1st' | '2nd' | '3rd'
+  instalment:      '1st' | '2nd' | '3rd' | string
   amount:          number
   date:            Date
   method:          'cash' | 'gpay' | 'bankTransfer' | 'cheque'
   transactionId?:  string
+  bankAccountId?:  string
+  bankAccountName?: string
   recordedBy:      string
   recordedByName?: string
 }
@@ -321,30 +352,67 @@ export interface WorkItem {
 
 // ─── EQUIPMENT ────────────────────────────────────────────────────────────
 export type EquipmentCategory =
-  | 'cameraBody' | 'lens' | 'camcorder' | 'drone' | 'flash'
-  | 'gimbal' | 'light' | 'sdCard' | 'battery' | 'charger' | 'wire' | 'other'
+  | 'cameraBody' | 'camera' | 'lens' | 'camcorder' | 'drone' | 'flash'
+  | 'gimbal' | 'light' | 'tripod' | 'backdrop' | 'sdCard' | 'memoryCard'
+  | 'battery' | 'charger' | 'wire' | 'other'
+  | (string & {})
 
-export type EquipmentCondition = 'good' | 'excellent' | 'canUse' | 'service'
-export type EquipmentStatus    = 'available' | 'out' | 'service'
+export type EquipmentCondition = 'excellent' | 'good' | 'canUse' | 'service' | 'damaged'
+export type EquipmentStatus    = 'available' | 'out' | 'service' | 'maintenance' | 'repair' | 'damaged' | 'lost' | 'retired'
 
 export interface Equipment {
   itemId:               string
-  itemCode:             string      // "001"–"057"
+  itemCode:             string      // "CAM-001", "LEN-002", "EQ-001", etc.
   name:                 string
   category:             EquipmentCategory
   brand:                string
   model:                string
   serialNumber:         string
+  purchaseDate?:        Date
   purchasePrice:        number
+  vendor?:              string
+  warrantyExpiry?:      Date
   condition:            EquipmentCondition
   location:             string
+  photoUrl?:            string
   status:               EquipmentStatus    // CACHED — source of truth is checkouts
   assignedToUid?:       string             // CACHED current holder
+  assignedToName?:      string             // CACHED current holder name
   currentCheckoutId?:   string             // CACHED current checkout doc id
+  dueBackDate?:         Date
   lastUsedDate?:        Date
   nextMaintenanceDate?: Date
+  notes?:               string
+  qrCode?:              string
+  barcode?:             string
+  kitId?:               string
+  parentItemId?:        string
+  retiredReason?:       string
+  retiredAt?:           Date
   isDeleted?:           boolean
   createdAt:            Date
+  updatedAt?:           Date
+}
+
+export interface EquipmentKit {
+  kitId:        string
+  name:         string
+  description?: string
+  itemIds:      string[]
+  isDeleted?:   boolean
+  createdAt:    Date
+  updatedAt?:   Date
+}
+
+export interface EquipmentStatusLog {
+  logId:        string
+  itemId:       string
+  fromStatus:   EquipmentStatus
+  toStatus:     EquipmentStatus
+  changedByUid: string
+  changedByName:string
+  reason?:      string
+  timestamp:    Date
 }
 
 // ─── CHECKOUTS — key collection for equipment conflict detection ──────────
@@ -365,6 +433,7 @@ export interface Checkout {
   dueBack:          Date
   checkedInAt?:     Date             // null while still out
   returnCondition?: string
+  notes?:           string
   status:           CheckoutStatus
 }
 
@@ -399,10 +468,29 @@ export interface TimeLog {
   workedMinutes?:    number
   standardMinutes:   540            // 9 hours — constant
   variance?:         number         // positive = overtime, negative = shortfall
-  status:            'open' | 'closed' | 'flagged'
+  status:            'open' | 'closed' | 'flagged' | 'corrected'
   overrideStatus?:   'In' | 'Late' | 'Not in'
+  isCorrected?:      boolean
+  originalCheckInAt?: Date
+  originalCheckOutAt?: Date
   correctedBy?:      string
   correctionReason?: string
+  correctedAt?:      Date
+}
+
+export interface TimeLogCorrection {
+  correctionId:     string
+  logId?:           string
+  staffUid:         string
+  date:             string          // "YYYY-MM-DD"
+  oldCheckIn:       Date | null
+  oldCheckOut:      Date | null
+  newCheckIn:       Date
+  newCheckOut:      Date
+  reason:           string
+  correctedBy:      string          // Admin/Manager UID
+  correctedByName?: string
+  correctedAt:      Date
 }
 
 // ─── LEAVE REQUESTS ───────────────────────────────────────────────────────────
@@ -415,23 +503,31 @@ export interface LeaveRequest {
   date:        string               // "YYYY-MM-DD"
   type:        LeaveRequestType
   status:      LeaveRequestStatus
+  reason?:     string
   createdAt:   Date
   reviewedBy?: string
   reviewedAt?: Date
 }
 
 // ─── SALARY ───────────────────────────────────────────────────────────────
+export interface SalaryAdvanceEntry {
+  amount: number
+  date?: string
+}
+
 export interface Salary {
   salaryId:       string
   staffUid:       string
   year:           number
   month:          number
-  baseSalary:     number
-  advance1?:      { amount: number; date: Date }
-  advance2?:      { amount: number; date: Date }
-  advance3?:      { amount: number; date: Date }
-  totalAdvances:  number
-  salaryPending:  number
+  baseSalary?:    number
+  advance1?:      SalaryAdvanceEntry
+  advance2?:      SalaryAdvanceEntry
+  advance3?:      SalaryAdvanceEntry
+  totalAdvances?: number
+  salaryPending?: number
+  createdAt?:     Date
+  updatedAt?:     Date
 }
 
 export interface Payslip {
@@ -480,21 +576,51 @@ export interface FreelancerPayout {
 
 // ─── EXPENSES ─────────────────────────────────────────────────────────────
 export type ExpenseCategory =
-  | 'equipment' | 'travel' | 'freelancer' | 'outsourcing'
-  | 'rent' | 'utilities' | 'marketing' | 'misc'
+  | 'equipment'
+  | 'travel'
+  | 'freelancer'
+  | 'studioRent'
+  | 'rent'
+  | 'utilities'
+  | 'propsSets'
+  | 'props'
+  | 'marketing'
+  | 'misc'
+  | 'salaries'
+  | string
+
+export interface CustomExpenseCategory {
+  id: string
+  key: string
+  label: string
+  icon: string
+  defaultBudget?: number
+  isDeleted?: boolean
+  createdAt?: Date
+}
 
 export interface Expense {
-  expenseId:  string
-  date:       Date
-  category:   ExpenseCategory
-  amount:     number
-  method:     string
-  vendor?:    string
-  note?:      string
-  projectId?: string
-  source:     'manual' | 'freelancerPayout' | 'salary'
-  createdBy:  string
-  createdAt:  Date
+  expenseId:      string
+  code?:          string
+  date:           Date
+  category:       ExpenseCategory
+  amount:         number
+  method:         string
+  vendor?:        string
+  note?:          string
+  description?:   string
+  projectId?:     string
+  projectName?:   string
+  source:         'manual' | 'freelancerPayout' | 'salary' | 'autoPayout' | 'payable' | string
+  payableId?:     string
+  hrmsPayoutId?:  string
+  gstAmount?:     number
+  gstRate?:       number
+  vendorGstin?:   string
+  isGstClaimable?: boolean
+  createdBy:      string
+  createdAt:      Date
+  isDeleted?:     boolean
 }
 
 export interface Budget {
@@ -504,6 +630,36 @@ export interface Budget {
   year:           number
   month?:         number
   budgetedAmount: number
+}
+
+export interface AccountPayable {
+  payableId:      string
+  vendorName:     string
+  vendorGstin?:   string
+  category:       ExpenseCategory | string
+  billNumber?:    string
+  amount:         number
+  gstAmount?:     number
+  gstRate?:       number
+  dueDate:        Date
+  status:         'pending' | 'overdue' | 'paid'
+  note?:          string
+  projectId?:     string
+  projectName?:   string
+  paidDate?:      Date
+  paymentMethod?: string
+  expenseId?:     string
+  createdAt:      Date
+  isDeleted?:     boolean
+}
+
+export interface CashOpeningBalances {
+  cashInBank:     number
+  cashInUPI:      number
+  cashInHand:     number
+  asOfDate:       Date
+  updatedAt?:     Date
+  updatedBy?:     string
 }
 
 // ─── QUOTATION & INVOICE ──────────────────────────────────────────────────
@@ -630,3 +786,38 @@ export interface StudioSettings {
   quotationStartNumber:  number
   packages:              PackageTemplate[]
 }
+
+// ─── SAVED ADDRESSES ───────────────────────────────────────────────────────
+export interface SavedAddress {
+  id:         string
+  name:       string
+  address:    string
+  createdAt?: Date
+  updatedAt?: Date
+  isDeleted?: boolean
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+export type NotificationType = 'leave_applied' | 'leave_approved' | 'leave_rejected'
+
+export interface AppNotification {
+  notificationId:      string
+  recipient:           string               // 'admin' | 'manager' | staffUid (user UID)
+  recipientRole?:      'admin' | 'manager' | 'staff'
+  type:                NotificationType
+  referenceId:         string               // ID in referenceCollection (e.g. leaveRequest requestId)
+  referenceCollection: 'leaveRequests'
+  isRead:              boolean
+  createdAt:           Date
+  readAt?:             Date
+  isDeleted?:          boolean
+}
+
+export interface CreateNotificationInput {
+  recipient:           string
+  recipientRole?:      'admin' | 'manager' | 'staff'
+  type:                NotificationType
+  referenceId:         string
+  referenceCollection: 'leaveRequests'
+}
+

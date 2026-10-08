@@ -1,28 +1,15 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { TimeField } from '@/components/shared/TimeField'
-import { EventType } from '@/types'
+import { LocationAutocomplete } from '@/components/shared/LocationAutocomplete'
+import { EventType, EventTypeOption } from '@/types'
 import { BookingWizardState, BookingAction } from '../bookingReducer'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
-
-const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
-  { value: 'wedding',     label: 'Wedding' },
-  { value: 'reception',   label: 'Reception' },
-  { value: 'preWedding',  label: 'Pre-Wedding' },
-  { value: 'engagement',  label: 'Engagement' },
-  { value: 'birthday',    label: 'Birthday' },
-  { value: 'babyShower',  label: 'Baby Shower' },
-  { value: 'puberty',     label: 'Puberty' },
-  { value: 'corporate',   label: 'Corporate' },
-  { value: 'schoolEvent', label: 'School Event' },
-  { value: 'portrait',    label: 'Portrait' },
-  { value: 'studio',      label: 'Studio' },
-  { value: 'other',       label: 'Other' },
-]
+import { subscribeToEventTypes, DEFAULT_EVENT_TYPES } from '@/lib/firebase/queries/eventTypes'
 
 const SELECT_STYLE: React.CSSProperties = {
   fontFamily: 'var(--font-inter)',
@@ -46,6 +33,32 @@ interface StepEventDetailsProps {
 export default function StepEventDetails({ state, dispatch }: StepEventDetailsProps): React.JSX.Element {
   const isMultiDate = state.bookingType === 'multiDate'
   const isRecurring = state.bookingType === 'recurring'
+
+  const [eventTypesList, setEventTypesList] = useState<EventTypeOption[]>(DEFAULT_EVENT_TYPES)
+
+  useEffect(() => {
+    return subscribeToEventTypes(items => {
+      setEventTypesList(items)
+    })
+  }, [])
+
+  const activeEventTypes = useMemo(() => {
+    const list = eventTypesList.filter(t => t.isActive)
+    if (state.eventType && !list.some(t => t.id === state.eventType)) {
+      const existing = eventTypesList.find(t => t.id === state.eventType)
+      if (existing) {
+        list.push(existing)
+      } else {
+        list.push({
+          id: state.eventType,
+          label: state.customEventType || state.eventType,
+          isSystem: false,
+          isActive: true,
+        })
+      }
+    }
+    return list
+  }, [eventTypesList, state.eventType, state.customEventType])
 
   // Computed recurring session dates
   const recurringSessions = useMemo(() => {
@@ -166,7 +179,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
       </div>
 
       {/* Event Type + Location (always shown) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{
             fontSize: 'var(--text-sm)',
@@ -179,10 +192,21 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
           <select
             style={SELECT_STYLE}
             value={state.eventType}
-            onChange={e => dispatch({ type: 'SET_EVENT_TYPE', payload: e.target.value as EventType })}
+            onChange={e => {
+              const val = e.target.value as EventType
+              const match = activeEventTypes.find(t => t.id === val)
+              dispatch({ type: 'SET_EVENT_TYPE', payload: val })
+              if (val === 'other') {
+                // Keep customEventType or let user fill it
+              } else if (match && !match.isSystem) {
+                dispatch({ type: 'SET_FIELD', field: 'customEventType', value: match.label })
+              } else {
+                dispatch({ type: 'SET_FIELD', field: 'customEventType', value: '' })
+              }
+            }}
           >
-            {EVENT_TYPES.map(et => (
-              <option key={et.value} value={et.value}>{et.label}</option>
+            {activeEventTypes.map(et => (
+              <option key={et.id} value={et.id}>{et.label}</option>
             ))}
           </select>
         </div>
@@ -195,10 +219,10 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
           }}>
             Location
           </label>
-          <Input
-            placeholder="Venue, city"
+          <LocationAutocomplete
+            placeholder="Venue, city or saved address"
             value={state.location}
-            onChange={e => dispatch({ type: 'SET_FIELD', field: 'location', value: e.target.value })}
+            onChange={val => dispatch({ type: 'SET_FIELD', field: 'location', value: val })}
             className="h-9"
           />
         </div>
@@ -226,7 +250,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
 
       {/* ──── ONE-TIME: Single date & timings ──── */}
       {!isMultiDate && !isRecurring && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+        <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr] gap-3">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{
               fontSize: 'var(--text-sm)',
@@ -303,13 +327,16 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                   zIndex: state.eventDates.length - idx + 10,
                 }}
               >
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 150px 125px 125px 1fr 36px',
-                  gap: '8px',
-                  alignItems: 'end',
-                  paddingBottom: '8px',
-                }}>
+                {/* Desktop 6-column grid view (>= 768px) */}
+                <div
+                  className="hidden md:grid"
+                  style={{
+                    gridTemplateColumns: '1.2fr 150px 125px 125px 1fr 36px',
+                    gap: '8px',
+                    alignItems: 'end',
+                    paddingBottom: '8px',
+                  }}
+                >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {idx === 0 && (
                       <label style={{
@@ -415,14 +442,14 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                         Location
                       </label>
                     )}
-                    <Input
+                    <LocationAutocomplete
                       placeholder="Venue (optional)"
                       value={ed.location}
-                      onChange={e => dispatch({
+                      onChange={val => dispatch({
                         type: 'UPDATE_EVENT_DATE',
                         id: ed.id,
                         field: 'location',
-                        value: e.target.value,
+                        value: val,
                       })}
                       className="h-9"
                     />
@@ -452,6 +479,76 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
                   >
                     <i className="ti ti-trash" />
                   </motion.button>
+                </div>
+
+                {/* Mobile stacked card view (< 768px) */}
+                <div className="flex md:hidden flex-col gap-2.5 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] mb-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Input
+                      placeholder={`Event ${idx + 1} Label`}
+                      value={ed.label}
+                      onChange={e => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'label',
+                        value: e.target.value,
+                      })}
+                      className="h-9 font-medium flex-1"
+                    />
+                    {state.eventDates.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'REMOVE_EVENT_DATE', id: ed.id })}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-danger)] hover:bg-[var(--color-danger-muted)] transition-colors"
+                      >
+                        <i className="ti ti-trash text-base" />
+                      </button>
+                    )}
+                  </div>
+                  <DateField
+                    value={ed.date}
+                    onChange={val => dispatch({
+                      type: 'UPDATE_EVENT_DATE',
+                      id: ed.id,
+                      field: 'date',
+                      value: val,
+                    })}
+                    className="h-9 w-full"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <TimeField
+                      value={ed.startTime || '09:00'}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'startTime',
+                        value: val,
+                      })}
+                      className="h-9 w-full"
+                    />
+                    <TimeField
+                      value={ed.endTime || '18:00'}
+                      onChange={val => dispatch({
+                        type: 'UPDATE_EVENT_DATE',
+                        id: ed.id,
+                        field: 'endTime',
+                        value: val,
+                      })}
+                      className="h-9 w-full"
+                      align="right"
+                    />
+                  </div>
+                  <LocationAutocomplete
+                    placeholder="Venue (optional)"
+                    value={ed.location}
+                    onChange={val => dispatch({
+                      type: 'UPDATE_EVENT_DATE',
+                      id: ed.id,
+                      field: 'location',
+                      value: val,
+                    })}
+                    className="h-9 w-full"
+                  />
                 </div>
               </motion.div>
             ))}
@@ -506,7 +603,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             Recurring schedule &amp; timings
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{
                 fontSize: 'var(--text-sm)',
@@ -561,7 +658,7 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{
                 fontSize: 'var(--text-sm)',

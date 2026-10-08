@@ -23,6 +23,12 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   available:       { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
   out:             { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   service:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  maintenance:     { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
+  repair:          { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  underRepair:     { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  damaged:         { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  lost:            { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  retired:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-subtle)' },
   // Work board
   free:            { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
   occupied:        { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
@@ -40,11 +46,27 @@ const STYLES: Record<string, { bg: string; fg: string }> = {
   present:         { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
   late:            { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   halfDay:         { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
-  leave:           { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
+  leave:           { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
   absent:          { bg: 'var(--color-danger-muted)',    fg: 'var(--color-danger)' },
   pending:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
   weekOff:         { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
   permission:      { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
+  // Time Logs
+  flagged:         { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  clean:           { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  corrected:       { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
+  // Expenses Categories
+  equipment:       { bg: 'var(--color-accent-muted)',    fg: 'var(--color-accent)' },
+  freelancer:      { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  travel:          { bg: 'var(--color-purple-muted)',    fg: 'var(--color-purple)' },
+  studioRent:      { bg: 'var(--color-primary-muted)',   fg: 'var(--color-primary)' },
+  rent:            { bg: 'var(--color-primary-muted)',   fg: 'var(--color-primary)' },
+  utilities:       { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  propsSets:       { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  props:           { bg: 'var(--color-success-muted)',   fg: 'var(--color-success)' },
+  marketing:       { bg: 'var(--color-secondary-muted)', fg: 'var(--color-secondary)' },
+  misc:            { bg: 'var(--color-surface-raised)',  fg: 'var(--color-foreground-muted)' },
+  salaries:        { bg: 'var(--color-primary-muted)',   fg: 'var(--color-primary)' },
 }
 
 const LABELS: Record<string, string> = {
@@ -58,6 +80,20 @@ const LABELS: Record<string, string> = {
   done:           'Done',
   in:             'In',
   notIn:          'Not in',
+  // Equipment
+  available:      'Available',
+  out:            'Out',
+  service:        'Service',
+  maintenance:    'Maintenance',
+  repair:         'Under Repair',
+  underRepair:    'Under Repair',
+  damaged:        'Damaged',
+  lost:           'Lost',
+  retired:        'Retired',
+  // Time Logs
+  flagged:        'Flagged',
+  clean:          'Clean',
+  corrected:      'Corrected',
   // Attendance
   present:        'P',
   late:           'L',
@@ -67,6 +103,18 @@ const LABELS: Record<string, string> = {
   pending:        'Pending',
   weekOff:        'WO',
   permission:     'PR',
+  // Expenses Categories
+  equipment:      'Equipment',
+  freelancer:     'Freelancer',
+  travel:         'Travel',
+  studioRent:     'Studio rent',
+  rent:           'Studio rent',
+  utilities:      'Utilities',
+  propsSets:      'Props & sets',
+  props:          'Props & sets',
+  marketing:      'Marketing',
+  misc:           'Misc',
+  salaries:       'Salaries',
 }
 
 export function Badge({ variant, label }: BadgeProps) {

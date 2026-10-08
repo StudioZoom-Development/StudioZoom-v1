@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/shared/Badge'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { getLeadById, createLead, updateLead, softDeleteLead } from '@/lib/firebase/queries/leads'
+import { subscribeToEventTypes, DEFAULT_EVENT_TYPES } from '@/lib/firebase/queries/eventTypes'
 import { useAuthStore } from '@/store/authStore'
-import { Lead } from '@/types'
+import { Lead, EventTypeOption } from '@/types'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { PhoneNumberInput, parsePhoneNumber } from './PhoneNumberInput'
 import { DateField } from './DateField'
 import { PackageSelector, parsePackageName, getDefaultPrice } from './PackageSelector'
@@ -35,6 +37,7 @@ interface LeadFormProps {
 export function LeadForm({ mode, leadId }: LeadFormProps) {
   const router = useRouter()
   const appUser = useAuthStore(s => s.appUser)
+  const { backSwipeHandlers } = useBackSwipe()
 
   const [loading, setLoading] = useState(mode === 'edit')
   const [saving, setSaving] = useState(false)
@@ -57,6 +60,25 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
   const [phoneError, setPhoneError] = useState<string | undefined>()
   const [packageError, setPackageError] = useState<string | undefined>()
 
+  const [eventTypesList, setEventTypesList] = useState<EventTypeOption[]>(DEFAULT_EVENT_TYPES)
+
+  useEffect(() => {
+    return subscribeToEventTypes(setEventTypesList)
+  }, [])
+
+  const activeEventTypes = useMemo(() => {
+    const list = eventTypesList.filter(t => t.isActive)
+    if (eventType && !list.some(t => t.label.toLowerCase() === eventType.toLowerCase())) {
+      list.push({
+        id: eventType.toLowerCase(),
+        label: eventType,
+        isSystem: false,
+        isActive: true,
+      })
+    }
+    return list
+  }, [eventTypesList, eventType])
+
   // Load existing lead data in edit mode
   useEffect(() => {
     if (mode === 'edit' && leadId) {
@@ -77,12 +99,12 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
 
           // Parse Event Type without prefix duplication
           const rawEventType = lead.eventType || 'Wedding'
-          if (['Wedding', 'Prewedding', 'Engagement', 'Birthday'].includes(rawEventType)) {
+          if (/^Other\s*[—–-]?\s*/i.test(rawEventType) && rawEventType.trim().toLowerCase() !== 'other') {
+            setEventType('Other')
+            setCustomEventType(rawEventType.replace(/^Other\s*[—–-]?\s*/i, ''))
+          } else {
             setEventType(rawEventType)
             setCustomEventType('')
-          } else {
-            setEventType('Other')
-            setCustomEventType(rawEventType.replace(/^(Other)\s*[—–-]?\s*/i, ''))
           }
 
           // Parse Source without prefix duplication (e.g. "Other — Shalin")
@@ -209,12 +231,23 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
   }
 
   return (
-    <div style={{ maxWidth: '640px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'var(--font-inter)' }}>
+    <div
+      {...backSwipeHandlers}
+      style={{
+        maxWidth: '640px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        fontFamily: 'var(--font-inter)',
+        padding: '0 12px 90px 12px',
+      }}
+    >
       {/* ── Page Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <span
           onClick={() => router.push('/leads')}
-          style={{ cursor: 'pointer', color: 'var(--color-foreground-muted)', display: 'flex' }}
+          className="hidden md:flex items-center cursor-pointer text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] transition-colors"
         >
           <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
         </span>
@@ -245,7 +278,7 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
           gap: '14px',
         }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: '12px' }}>
           {/* Full name */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Full name</label>
@@ -278,11 +311,9 @@ export function LeadForm({ mode, leadId }: LeadFormProps) {
               onChange={e => handleEventTypeChange(e.target.value)}
               style={SELECT_STYLE}
             >
-              <option value="Wedding">Wedding</option>
-              <option value="Prewedding">Prewedding</option>
-              <option value="Engagement">Engagement</option>
-              <option value="Birthday">Birthday</option>
-              <option value="Other">Other</option>
+              {activeEventTypes.map(et => (
+                <option key={et.id} value={et.label}>{et.label}</option>
+              ))}
             </select>
 
             {eventType === 'Other' && (

@@ -203,11 +203,7 @@ export default function StepPackage({ state, dispatch }: StepPackageProps): Reac
         {isRecurring ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* Mode selector */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '10px',
-            }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div
                 onClick={() => {
                   dispatch({ type: 'SET_FIELD', field: 'recurringPaymentType', value: 'perSession' })
@@ -284,7 +280,7 @@ export default function StepPackage({ state, dispatch }: StepPackageProps): Reac
 
             {/* Inputs based on selected mode */}
             {state.recurringPaymentType === 'perSession' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{
                     fontSize: 'var(--text-sm)',
@@ -332,7 +328,7 @@ export default function StepPackage({ state, dispatch }: StepPackageProps): Reac
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-3">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{
                     fontSize: 'var(--text-sm)',
@@ -400,8 +396,7 @@ export default function StepPackage({ state, dispatch }: StepPackageProps): Reac
               placeholder="0"
               value={state.totalAmount > 0 ? String(state.totalAmount) : ''}
               onChange={e => dispatch({ type: 'SET_FIELD', field: 'totalAmount', value: parseFloat(e.target.value) || 0 })}
-              className="h-9"
-              style={{ maxWidth: '220px' }}
+              className="h-9 w-full md:max-w-[220px]"
               disabled={state.selectedPackageId !== 'custom' && state.selectedPackageId !== ''}
             />
           </div>

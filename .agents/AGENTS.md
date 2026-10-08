@@ -274,7 +274,7 @@ All queries must filter soft-deleted documents with `.filter(c => !c.isDeleted)`
 ```
 ☐ npx tsc --noEmit → zero errors
 ☐ npm run build    → clean build
-☐ No hardcoded hex colours
+☐ No hardcoded hex colours (strict theme tokens only)
 ☐ No inline Firestore queries in component files
 ☐ data-theme is on root layout wrapper
 ☐ Component tested in dark mode → looks correct
@@ -282,27 +282,30 @@ All queries must filter soft-deleted documents with `.filter(c => !c.isDeleted)`
 ☐ All badge variants use /components/shared/Badge.tsx
 ☐ All soft-deletes use isDeleted:true pattern
 ☐ No any TypeScript types
-☐ Design file comparison: side-by-side with .dc.html → matches
+☐ UI/UX verified: responsive on mobile (< 768px) and robust on desktop (> 768px)
 ```
 
 ---
 
-## 11. Design File Reference
+## 11. Design Reference (.dc.html)
 
-When building any screen, open the corresponding design file and match it exactly:
+The `.dc.html` files serve as **reference only** for business logic, data models, and screen flow. You do **NOT** need to match `.dc.html` pixel-for-pixel:
+- **Design Freedom**: You are encouraged to design your own modern, intuitive, and polished UI/UX tailored for optimal user workflows.
+- **Theme Constraint (Strict & Invariant)**: All designs must strictly use the design system tokens from `studio-theme.css` (`var(--color-...)`, typography, radii) with full support for both dark and light modes. Never hardcode hex colours.
+- **Responsive Standard**: Desktop views (`> 768px`) must be spacious, ergonomic, and multi-column; mobile views (`< 768px`) must be touch-friendly, single-column for forms, and cleanly aligned.
 
 ```
-design-components/Studio Zoom.dc.html      → login, sidebar, topbar, shell
-design-components/ScreenClients_dc.html    → clients list, detail, new booking
-design-components/ScreenDashboards_dc.html → all 3 dashboards
-design-components/ScreenEvents_dc.html     → events canvas, calendar, work board
-design-components/ScreenCRM2_dc.html       → project detail, work items
-design-components/ScreenHRMS_dc.html       → attendance, time clock
-design-components/ScreenHRMS2_dc.html      → staff, salary, payslips, freelancers
-design-components/ScreenERP_dc.html        → equipment, quotations
-design-components/ScreenERP2_dc.html       → equipment checkout, held view
-design-components/ScreenSettings_dc.html   → settings
-design-components/studio-theme.css         → ALL colour tokens
+design-components/Studio Zoom.dc.html      → reference for login, sidebar, topbar, shell
+design-components/ScreenClients_dc.html    → reference for clients list, detail, new booking
+design-components/ScreenDashboards_dc.html → reference for all 3 dashboards
+design-components/ScreenEvents_dc.html     → reference for events canvas, calendar, work board
+design-components/ScreenCRM2_dc.html       → reference for project detail, work items
+design-components/ScreenHRMS_dc.html       → reference for attendance, time clock
+design-components/ScreenHRMS2_dc.html      → reference for staff, salary, payslips, freelancers
+design-components/ScreenERP_dc.html        → reference for equipment, quotations
+design-components/ScreenERP2_dc.html       → reference for equipment checkout, held view
+design-components/ScreenSettings_dc.html   → reference for settings
+design-components/studio-theme.css         → THE ABSOLUTE SOURCE OF TRUTH FOR ALL TOKENS
 ```
 
 ---
@@ -347,3 +350,203 @@ import { Timeline }        from '@/components/ui/timeline'           // events c
 - Kanban cards → plain `<div>` with `var(--color-surface)` and `var(--color-border)`
 - Calendar grid → hand-built with `var(--color-surface-raised)` cells
 - Attendance grid → hand-built table with token colours
+
+---
+
+## 15. Mobile View & Responsive Architecture Rules
+
+These rules govern all responsive design, mobile-first conversions, and touch-interaction patterns. They are strict constraints that ensure high-performance, native-feeling mobile UX while guaranteeing zero regressions on desktop.
+
+---
+
+### 15.1 Desktop View Preservation & UX Standard (Screen Width > 768px)
+- **STRICT NON-NEGOTIABLE RULE — NEVER break, collapse, or degrade desktop views (`> 768px` / `md:` breakpoint)** when designing or optimizing mobile views.
+- **Design Freedom with Desktop Integrity**: You do not need to mimic `.dc.html` pixel-for-pixel; you have full creative freedom to design clean, modern, and ergonomic desktop UI/UX without affecting themes:
+  - 2-column detail layouts (e.g. 65% / 35% on Client Details page) MUST remain side-by-side grids.
+  - Multi-column form fields, multi-option role pickers, and filter bars MUST remain in appropriate desktop multi-column orientations. Never collapse desktop forms into a single cramped column.
+  - Desktop headers, breadcrumbs, search inputs, and action buttons must be prominent, polished, and easily accessible.
+- **Implementation Constraints**:
+  - Never replace desktop layout styles with unverified arbitrary Tailwind classes (e.g. `md:grid-cols-[65fr_35fr]`) that fail to evaluate or cause desktop to fall back to stacked flex columns.
+  - When using media queries or responsive classes, ALWAYS guarantee that desktop (`≥ 768px` / `> 768px`) retains `display: grid !important; grid-template-columns: ... !important;` or `flex-direction: row !important;`.
+  - Mobile views must be added strictly using responsive boundary branching (`hidden md:block` / `block md:hidden` or `hidden md:flex` / `flex md:hidden`), scoped `@media (min-width: 768px)` rules, or responsive utility prefixes (`md:`). Never modify desktop layout to fit mobile at the expense of desktop.
+
+---
+
+### 15.1.1 Mobile Form Responsiveness (`< 768px`)
+All input forms across the application MUST be fully responsive and touch-friendly on mobile viewports (`< 768px` / 375px–480px):
+1. **Single-Column Stacking on Mobile**:
+   - Multi-column form rows (e.g. `Email & Password`, `Job Title & Phone`, `Date & Salary`) that sit in 2 or 3 columns on desktop MUST collapse cleanly to a single column (`grid-template-columns: 1fr` / 100% width) on mobile (`< 768px`).
+   - Squeezing complex inputs (such as `PhoneNumberInput` with country code selector, date pickers, or password fields with toggle buttons) into half-width columns on mobile is strictly forbidden.
+2. **Role & Option Selectors**:
+   - Multi-card selectors (e.g. Staff / Manager / Admin) that sit in a horizontal row on desktop must stack vertically into full-width tap targets with unclipped descriptions on mobile.
+3. **Form Action Footers**:
+   - Primary submit buttons (e.g. "Create User", "Save Changes") must expand to full-width or comfortable touch targets on mobile, with secondary actions (e.g. "Cancel") stacking cleanly below (`flex-direction: column-reverse`).
+4. **Desktop Invariance on Forms**:
+   - Every single form field, grid column, and button row must revert to its exact multi-column desktop layout on screens `≥ 768px`.
+
+---
+
+### 15.1.2 Edit Forms & Modal Popups on Mobile (`< 768px`)
+All modal popups, edit forms, and dialog overlays (e.g. `EditClientModal`, `RecordPaymentModal`, `EditUserModal`, `PackageModal`, `AddressModal`, etc.) MUST be fully optimized for mobile:
+1. **Viewport & Container Containment**:
+   - On mobile (`< 768px`), modal containers must NEVER overflow screen edges. Use `width: 100%`, `max-width: min(calc(100vw - 24px), 540px)`, or slide-up bottom sheets with `max-height: 90dvh` / `max-height: 90vh` and smooth touch scrolling (`overflow-y: auto`, `-webkit-overflow-scrolling: touch`).
+   - Modal backdrops must remain `rgba(0,0,0,0.7)` with `z-index: 9990+`.
+2. **Form Layout Inside Modals**:
+   - All 2-column or 3-column input grids inside edit modals MUST collapse to a single column (`grid-template-columns: 1fr`) on mobile (`< 768px`), ensuring inputs, date pickers (`DateField`), time fields (`TimeField`), and phone numbers have full width and zero horizontal clipping.
+3. **Modal Action Buttons**:
+   - Modal action footers on mobile must stack vertically or provide full-width touch targets (min 40px height) with the primary action (Save / Update / Create) on top and secondary (Cancel / Close) below.
+4. **Desktop Invariance for Modals (`≥ 768px`)**:
+   - On screens `≥ 768px`, all modals MUST retain their centered desktop popup position, fixed desktop widths (e.g. 480px, 520px, 640px), multi-column internal grids, and side-by-side right-aligned footer buttons without any visual changes.
+
+---
+
+### 15.2 Data Table Adaptations (Compact Cards)
+Desktop tables with 4+ horizontal columns must NEVER scroll horizontally as a raw table on mobile. They must be transformed using one of three approved mobile patterns:
+
+1. **The Card Transformation (Primary Standard)**:
+   - Dissolve `<tr>` and `<td>` table structures entirely on mobile (`hidden md:block`).
+   - Render vertical, self-contained compact cards (`block md:hidden`) using `var(--color-surface)` and `0.5px solid var(--color-border)`.
+   - Card architecture:
+     - **Header**: Zero-padded identifier (`#01`), primary title, badge status pills (`<Badge variant="..." />`), and stage pill.
+     - **Metadata row**: Icons with labels for date, event type, or secondary fields.
+     - **Embedded info pill / row**: High-contrast block for financial totals, payment status, or crew assignments.
+     - **Card action footer**: Quick action buttons (`Edit`, `Delete`, `Details >`) with explicit touch targets.
+2. **The Frozen Column Method (For Quick-Edit Grids & Spreadsheets)**:
+   - When table structure is mandatory (e.g. daily mark sheets), freeze the identity column (e.g. Employee Name) on the left using CSS `position: sticky; left: 0; z-index: 2`.
+   - Allow the remaining columns to scroll horizontally (`overflow-x: auto`) with touch momentum.
+   - Status indicators must be large, tap-friendly colored chips (e.g. Green "P", Red "A").
+3. **The Accordion Collapse (For Dense Technical Records)**:
+   - Display only the 2 most critical columns (e.g., Name and Primary Metric).
+   - Provide an expand icon (`ti-chevron-down`) that expands downward to reveal the remaining technical specifications and metadata without leaving the list.
+
+---
+
+### 15.3 Touch-Friendly Interaction & Gutter Guidelines
+1. **Safe Scroll Zones**:
+   - Always maintain a clear gutter margin of at least **12px–16px** on the left and right edges of the screen where cards do not bleed edge-to-edge.
+   - This provides safe thumb resting zones where users can scroll the viewport without accidentally triggering card clicks or opening detail sheets.
+2. **Swipe-to-Dismiss Bottom Sheets**:
+   - Filter, sort, and modal panels on mobile must NEVER open as desktop-style dropdown menus, context popovers, or floating modal dialogs.
+   - They must open as a **Bottom Sheet Drawer** (`position: fixed; bottom: 0; left: 0; right: 0; borderTopLeftRadius: 20px; borderTopRightRadius: 20px; z-index: 9995`).
+   - Must feature:
+     - Top centered grabber handle (`width: 36px; height: 4px; background: var(--color-border-strong)`).
+     - Semi-transparent backdrop (`rgba(0,0,0,0.7)`) with backdrop blur.
+     - Sticky bottom action bar housing a secondary **Reset** button and a full-width primary **Apply** button (`var(--color-primary)`).
+     - Downward swipe or tap-outside dismissal.
+3. **Touch Targets**:
+   - All interactive touch targets must have a minimum tap area of **40px × 40px** (or 36px with 6px padding) to eliminate accidental misclicks.
+
+---
+
+### 15.4 Mobile Infinite Scroll & Lazy Loading (Replacing Pagination)
+On mobile views (`< 768px`), standard desktop pagination (`1 2 3 ... Next`) should be transitioned to high-performance **Infinite Scroll via Lazy Loading**:
+
+1. **Intersection Observer Sentinel (Core Mechanical Standard)**:
+   - NEVER attach lazy loading triggers to `window.onscroll` or container scroll events.
+   - Use the `IntersectionObserver` API attached to a dedicated, transparent sentinel element (`<div ref={sentinelRef} style={{ height: '20px' }} />`) placed directly after the list.
+   - When the sentinel enters the viewport, automatically fetch or slice the next batch.
+2. **Strategic Batch Sizing**:
+   - Mobile batch sizes must be small (10–15 items per batch) to ensure instantaneous initial load and smooth rendering over cellular networks (4G/5G).
+3. **Preserving "Back" Button State**:
+   - When a user taps a card from an infinite list and navigates to a detail page, pressing browser "Back" must NOT reset them to the top of Page 1.
+   - Cache the current scroll position and loaded record count in `sessionStorage` or URL query params so returning users resume exactly where they left off.
+4. **Visual Loading & End-of-Feed Feedback**:
+   - Render animated skeleton cards (`MobileCardSkeleton`) or a clean spinner at the bottom while the next batch is loading.
+   - When the database or filtered dataset is exhausted, display a clean end-of-feed notice:
+     *"You've viewed all {total} records"* with a subtle `ti-check` icon.
+5. **Virtual Footer Integration**:
+   - Because infinite scroll pushes static footers out of reach, all critical footer actions (Help, Settings, Profile) must reside in the persistent mobile TopBar, MobileNav bottom bar, or side drawer.
+6. **DOM Virtualization & Memory Management**:
+   - For datasets expected to scroll past 100+ loaded items on mobile, use DOM window virtualization (`react-window` or virtual recycled nodes) to unmount offscreen elements and protect mobile memory limits.
+
+---
+
+### 15.5 Filters, Search, & Comparison Engines
+1. **Desktop Sidebar Filters → Mobile Sticky Trigger & Bottom Sheet**:
+   - Desktop sidebar or inline multi-select filter bars collapse into a single mobile top row:
+     `[ Search (flex: 1) ] [ Filter Icon Button (with active count badge) ] [ ＋ Action Button ]`
+   - Active filters display as a horizontally scrollable chip row directly underneath:
+     `[ Stage: Booked × ] [ Type: Wedding × ] [ Clear all ]`
+2. **Comparison Engines (Max 2 Items on Mobile)**:
+   - Desktop allows 4+ side-by-side columns. Mobile comparison is strictly capped at **2 items**.
+   - Tapping "Compare" populates a sticky bottom tray (`z-index: 90`).
+   - Tapping "Compare Now" opens a dedicated 2-column comparison sheet.
+
+---
+
+### 15.6 Direct Component Conversions Matrix
+
+| Desktop Component | Mobile Replacement | UX & Interaction Rule |
+|---|---|---|
+| **Horizontal Tabs** | **Horizontal Scrolling Pills** | Smooth edge fade-out, `scrollbar-width: none`, touch slide swiping. |
+| **Pagination Bar (`1 2 3 ... Next`)** | **Infinite Scroll + Sentinel** | Auto-fetch next 10–15 items via `IntersectionObserver` with end-of-feed message. |
+| **Hover-triggered Tooltips** | **Tap-Activated Info / Bottom Sheet** | Tap triggers a compact popover or sheet; closes via `(×)` or tap-outside. |
+| **Large Mega Menus** | **Slide-Over Drawer / Nested Accordions** | Accessible via TopBar hamburger or left profile icon; clean hierarchical levels. |
+| **Bulk Checkboxes** | **Long-Press Selection Mode** | Long-press a card to enter multi-select; reveals a floating bottom action pill bar. |
+
+---
+
+### 15.7 Calendar & Attendance Transformations
+1. **Calendar Transformation (Grid to Infinite Timeline)**:
+   - Replace standard 7×5 monthly desktop grids on mobile with:
+     - **Sticky Week Glance Bar**: Anchor a 1-row horizontal 7-day strip (`S M T W T F S`) at the top with swipeable week navigation.
+     - **Infinite Vertical Agenda**: Render chronological day cards below the sticky week bar (`Today`, `Tomorrow`, upcoming dates).
+     - **Month Quick Jump**: A compact dropdown or calendar icon button in the header allows jumping directly to any month/year without scrolling.
+2. **Attendance Table Transformation**:
+   - **Manager Feed (Employee Cards)**: Dissolve 31-day table rows into stacked employee summary cards showing monthly present percentage (`75% Present`) and an expandable 7-day status strip (`[P] [P] [A] [P]`).
+   - **Detail Popovers**: Tapping any day opens a bottom sheet showing clock-in/out timestamps, overtime, and location data.
+   - **Quick Filter Swiper**: Filter chips (`[Today] [This Week] [This Month] [Custom]`) pinned directly below the top bar.
+
+---
+
+### 15.8 Touch Gestures & Physics for the Bottom Drawer
+To make the bottom drawer feel like a native mobile application, use fluid touch physics instead of basic click handlers:
+
+1. **Swipe-to-Dismiss (Vertical Velocity)**:
+   - Track touch coordinates (`onTouchStart`, `onTouchMove`, `onTouchEnd`) on the drawer grab handle and header area.
+   - If the user drags downward with a velocity greater than **0.5m/s** or pulls past the downward dismiss threshold, animate the drawer down off-screen completely (`translateY(100%)`) and clear the active node/drawer state.
+2. **The 3-Stage Snapping Mechanism**:
+   - **Stage 1 (Hidden)**: `translateY(100%)` — Completely off-screen.
+   - **Stage 2 (Peek / Default View)**: `translateY(30%)` — Covers ~70% of the viewport when an item or node is tapped.
+   - **Stage 3 (Full Screen)**: `translateY(0%)` — Triggered if the user drags upward on the handle or scrolls content to view extended parameters.
+3. **Background Scrim Click**:
+   - Render a semi-transparent black overlay backdrop (`background: rgba(0, 0, 0, 0.4)` or theme backdrop blur) over the canvas/viewport while the drawer is active.
+   - A simple single-tap anywhere on this backdrop instantly triggers the drawer close animation and clears active drawer state.
+
+---
+
+### 15.9 Native Mobile Gesture System (Navigation, Swipes & Haptics)
+These gesture rules define how touch interactions operate across all mobile views to match native iOS/Android fluidity:
+
+1. **Back Swipe Gesture (Left-Edge Swipe to Navigate Back)**:
+   - **Trigger Zone**: Touch initiated within **0–24px** from the left screen edge (`startX <= 24`).
+   - **Execution Criteria**: Swiping rightward with `deltaX > 80px` or horizontal velocity `> 0.4m/s`, where horizontal movement dominates (`abs(deltaX) > 2 * abs(deltaY)`).
+   - **Behavior**:
+     - Sequentially navigates back to the previous screen or parent list (e.g. from Canvas/Detail view back to the Event/Client List, or calling `router.back()`).
+     - Includes a subtle edge chevron or sliding page preview that follows the user's thumb before snapping back or executing.
+   - **Conflict Protection**: Must NOT trigger during horizontal pill row scrolling or table swiping when the touch origin is outside the 24px left edge margin.
+
+2. **Pull-to-Refresh (Feed & List Refresh)**:
+   - **Trigger Zone**: Viewport scroll position is at the very top (`scrollTop === 0`).
+   - **Execution Criteria**: Dragging downward past an overscroll threshold of **60px–80px**.
+   - **Behavior**:
+     - Reveals a centered spinning refresh indicator (`ti-loader` / circular spinner) with rubber-band resistance.
+     - On release past threshold, re-fetches or triggers Firestore synchronization and smoothly snaps back to `0px`.
+
+3. **Card Swipe Actions (Quick Reveal Actions)**:
+   - **Swipe Left (Destructive / Secondary Actions)**:
+     - Swiping a card leftward reveals trailing action buttons (e.g. `[ Delete ]` in `var(--color-danger)` or `[ Edit ]` in `var(--color-primary)`).
+     - Full swipe (>60% card width) can trigger the primary quick action directly.
+   - **Swipe Right (Positive / Quick Completion Actions)**:
+     - Swiping rightward reveals leading quick action (e.g. `[ Mark Done ]` or `[ Paid ]` in `var(--color-success)`).
+   - **Resistance & Reset**: Releasing below 40px swipe distance snaps the card back to center. Only one card may be swiped open at a time; tapping elsewhere closes open swipe actions.
+
+4. **Long-Press Gestures (Bulk Selection & Context Previews)**:
+   - **Press-and-Hold (500ms Threshold)**:
+     - Holding a card or row for **≥500ms** triggers a subtle scale bounce (`transform: scale(0.97)`) and enters **Multi-Select Mode**.
+     - Reveals check circles on cards and renders a sticky floating bottom action tray (`[ X Selected ] [ Batch Action ] [ Cancel ]`).
+     - Prevents native browser context menus (`onContextMenu={(e) => e.preventDefault()}`) when custom long-press actions are active.
+
+5. **Gesture Conflict Resolution & Scroll Locking**:
+   - **Horizontal vs. Vertical Locking**: On `touchmove`, determine dominant axis within the first 10px of movement. If vertical (`abs(deltaY) > abs(deltaX)`), immediately lock to vertical scrolling and ignore horizontal swipes. If horizontal, call `e.preventDefault()` on non-native drag targets.
+   - **Touch Target Padding**: Never place tiny (<40px) swipeable items inside vertically scrolling lists without at least **12px vertical padding** to prevent accidental swipe captures during fast scrolling.

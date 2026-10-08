@@ -359,6 +359,10 @@ function EventsBoardContent() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [recordPaymentModalOpen, setRecordPaymentModalOpen] = useState(false)
 
+  // ─── MOBILE TWO-SCREEN VIEW STATE ───
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
+  const [mobileBottomSheetExpanded, setMobileBottomSheetExpanded] = useState(false)
+
   // ─── Post-Production Setup & Review State ───
   const [postProdSetupStaff, setPostProdSetupStaff] = useState<Record<string, string>>({})
   const [postProdSetupFreelancer, setPostProdSetupFreelancer] = useState<Record<string, string>>({})
@@ -729,8 +733,13 @@ function EventsBoardContent() {
           const match = projs.find(p => p.projectId === paramProject || p.clientId === paramProject)
           if (match) return match.projectId
         }
-        const firstActive = projs.find(p => p.stage !== 'delivered') || projs[0]
-        return firstActive?.projectId || null
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('studio_zoom_selected_event_id')
+          if (stored && projs.some(p => p.projectId === stored)) {
+            return stored
+          }
+        }
+        return null
       })
     })
 
@@ -764,7 +773,22 @@ function EventsBoardContent() {
     setSelectedProjectId(projectId)
     setSelectedDayTab(0)
     setOverrideReason('')
+    // On mobile, switch to detail view and auto-select the current stage
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setMobileView('detail')
+      setMobileBottomSheetExpanded(false)
+      // Auto-select the project's current stage for the panel
+      const proj = projects.find(p => p.projectId === projectId)
+      if (proj) {
+        setPanelStageKey(proj.stage)
+      }
+    }
     if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('studio_zoom_selected_event_id', projectId)
+      } catch {
+        // ignore localStorage errors
+      }
       const url = new URL(window.location.href)
       url.searchParams.set('project', projectId)
       window.history.replaceState(null, '', url.toString())
@@ -772,7 +796,7 @@ function EventsBoardContent() {
   }
 
   const selectedProject = useMemo((): Project | null => {
-    return projects.find(p => p.projectId === selectedProjectId) || projects[0] || null
+    return projects.find(p => p.projectId === selectedProjectId) || null
   }, [projects, selectedProjectId])
 
   // Real-time client & payment listener for the currently selected project
@@ -849,18 +873,27 @@ function EventsBoardContent() {
 
     const timer = setTimeout(() => {
       let applied = false
+      let match: Project | undefined
+
       if (paramProject) {
-        const match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
-        if (match) {
-          setSelectedProjectId(match.projectId)
-          const isDone = match.stage === 'delivered' || match.status === 'completed'
-          const isOverdue = !isDone && isProjectOverdue(match, now)
-          if (isDone) setRailFilter('done')
-          else if (isOverdue) setRailFilter('overdue')
-          else setRailFilter('active')
-          applied = true
+        match = projects.find(p => p.projectId === paramProject || p.clientId === paramProject)
+      } else if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('studio_zoom_selected_event_id')
+        if (stored) {
+          match = projects.find(p => p.projectId === stored)
         }
       }
+
+      if (match) {
+        setSelectedProjectId(match.projectId)
+        const isDone = match.stage === 'delivered' || match.status === 'completed'
+        const isOverdue = !isDone && isProjectOverdue(match, now)
+        if (isDone) setRailFilter('done')
+        else if (isOverdue) setRailFilter('overdue')
+        else setRailFilter('active')
+        applied = true
+      }
+
       if (paramStage && STAGE_CONFIGS.some(s => s.stageKey === paramStage)) {
         setPanelStageKey(paramStage)
         applied = true
@@ -2814,8 +2847,11 @@ function EventsBoardContent() {
   }
 
   return (
-    <div style={{
-      display: 'flex',
+    <>
+    {/* ═══════════════════════════════════════════════════════════════════════
+        DESKTOP VIEW (≥768px): 100% Invariant — Left Rail + Canvas + Side Panel
+       ═══════════════════════════════════════════════════════════════════════ */}
+    <div className="hidden md:flex" style={{
       height: '100%',
       width: '100%',
       overflow: 'hidden',
@@ -3795,7 +3831,7 @@ function EventsBoardContent() {
               }}
             >
               <i className="ti ti-plus" style={{ fontSize: '16px' }} />
-              Create New Booking
+              Create Booking
             </Button>
           </div>
         ) : (
@@ -7773,126 +7809,3688 @@ function EventsBoardContent() {
         </aside>
       )}
 
-      {selectedProject && (
-        <RecordPaymentModal
-          isOpen={recordPaymentModalOpen}
-          onClose={() => setRecordPaymentModalOpen(false)}
-          clientId={selectedProject.clientId}
-          clientName={
-            isDiscreteSession
-              ? `${selectedProject.clientName || selectedProject.eventName} (Session ${selectedProject.sessionIndex || 1} of ${selectedProject.totalSessions || 1})`
-              : (selectedProject.clientName || selectedProject.eventName)
-          }
-          totalAmount={effectiveTotalAmount}
-          balanceDue={effectiveBalanceDue}
-          maxBalanceDue={clientBalanceDue}
-        />
-      )}
+    </div>
+    {/* ═══════════════════════════════════════════════════════════════════════
+        END DESKTOP VIEW
+       ═══════════════════════════════════════════════════════════════════════ */}
 
-      {/* Client Review Rejection / Revision Modal */}
-      {rejectModalTrack && (
+
+    {/* ═══════════════════════════════════════════════════════════════════════
+        MOBILE VIEW (<768px): Two-Screen Events Board
+        Screen 1 = Event List | Screen 2 = Canvas Map + Bottom Sheet Details
+       ═══════════════════════════════════════════════════════════════════════ */}
+    <div
+      className="block md:hidden"
+      style={{
+        height: '100%',
+        width: '100%',
+        overflow: 'hidden',
+        fontFamily: 'var(--font-inter)',
+        background: 'var(--color-background)',
+        position: 'relative',
+      }}
+    >
+      {/* ─── SCREEN 1: EVENT LIST ─────────────────────────────────────── */}
+      {mobileView === 'list' && (
         <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.7)',
-          zIndex: 9999,
+          height: '100%',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}>
+
+          {/* KPI Filter Chips */}
           <div style={{
-            width: '100%',
-            maxWidth: '480px',
-            background: 'var(--color-surface-overlay)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            padding: '20px',
+            padding: '14px 16px 8px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            gap: '12px',
+            flexShrink: 0,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="ti ti-alert-triangle" style={{ fontSize: '18px', color: 'var(--color-danger)' }} />
-                <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                  Client Revision / Rejection
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {/* Ongoing Chip */}
+              <div
+                onClick={() => setRailFilter(prev => prev === 'active' ? 'all' : 'active')}
+                style={{
+                  flex: 1,
+                  cursor: 'pointer',
+                  background: railFilter === 'active' ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                  border: `0.5px solid ${railFilter === 'active' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  borderRadius: '10px',
+                  padding: '10px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
+                  {ongoingCount}
+                </span>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)', fontWeight: 600 }}>
+                  Ongoing
                 </span>
               </div>
-              <button
-                onClick={() => setRejectModalTrack(null)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--color-foreground-muted)', cursor: 'pointer', fontSize: '18px' }}
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', lineHeight: '1.5' }}>
-              Please enter client feedback or required revisions. The work stage for this track will reset to pending so edits can be performed.
-            </span>
-
-            <textarea
-              value={rejectNotes}
-              onChange={(e) => setRejectNotes(e.target.value)}
-              placeholder="e.g. Client requested color grade adjustments and skin retouching on portraits..."
-              rows={4}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                background: 'var(--color-surface-raised)',
-                border: '0.5px solid var(--color-border)',
-                borderRadius: '8px',
-                color: 'var(--color-foreground)',
-                fontSize: 'var(--text-sm)',
-                resize: 'vertical',
-                outline: 'none',
-                fontFamily: 'var(--font-inter)',
-              }}
-            />
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                onClick={() => setRejectModalTrack(null)}
+              {/* Done Chip */}
+              <div
+                onClick={() => {
+                  setRailFilter(prev => prev === 'done' ? 'all' : 'done')
+                  setCollapsedSections(prev => ({ ...prev, delivered: false, completed: false }))
+                }}
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: '6px',
-                  border: '0.5px solid var(--color-border)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-foreground)',
-                  fontSize: 'var(--text-sm)',
+                  flex: 1,
                   cursor: 'pointer',
+                  background: railFilter === 'done' ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                  border: `0.5px solid ${railFilter === 'done' ? 'var(--color-success)' : 'var(--color-border)'}`,
+                  borderRadius: '10px',
+                  padding: '10px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleClientReviewAction(rejectModalTrack, 'notApproved', rejectNotes)}
-                disabled={isSubmittingReview}
+                <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-success)' }}>
+                  {doneCount}
+                </span>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)', fontWeight: 600 }}>
+                  Done
+                </span>
+              </div>
+              {/* Overdue Chip */}
+              <div
+                onClick={() => {
+                  setRailFilter(prev => prev === 'overdue' ? 'all' : 'overdue')
+                  setCollapsedSections(prev => ({ ...prev, thisWeek: false }))
+                }}
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: 'var(--color-danger)',
-                  color: '#ffffff',
+                  flex: 1,
+                  cursor: 'pointer',
+                  background: railFilter === 'overdue' ? 'var(--color-danger-muted)' : 'var(--color-surface-raised)',
+                  border: `0.5px solid ${railFilter === 'overdue' ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                  borderRadius: '10px',
+                  padding: '10px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-danger)' }}>
+                  {overdueCount}
+                </span>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)', fontWeight: 600 }}>
+                  Overdue
+                </span>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <i
+                className="ti ti-search"
+                style={{
+                  fontSize: '15px',
+                  color: 'var(--color-foreground-subtle)',
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                }}
+              />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search events, clients, sessions…"
+                style={{
+                  fontFamily: 'var(--font-inter)',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  height: '40px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '10px',
+                  padding: '0 12px 0 36px',
                   fontSize: 'var(--text-sm)',
-                  fontWeight: 600,
-                  cursor: isSubmittingReview ? 'not-allowed' : 'pointer',
-                  opacity: isSubmittingReview ? 0.7 : 1,
+                  color: 'var(--color-foreground)',
+                  outline: 'none',
+                }}
+              />
+              {searchQuery && (
+                <span
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    cursor: 'pointer',
+                    color: 'var(--color-foreground-subtle)',
+                  }}
+                >
+                  <i className="ti ti-x" style={{ fontSize: '16px' }} />
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Scrollable Event Cards */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '6px 14px 90px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            {filteredGroups.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '48px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '8px',
+              }}>
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '14px',
+                  background: 'var(--color-surface-raised)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                {isSubmittingReview ? <i className="ti ti-loader rotate" /> : <i className="ti ti-check" />}
-                Confirm Rejection
-              </button>
-            </div>
+                  justifyContent: 'center',
+                  border: '0.5px solid var(--color-border)',
+                }}>
+                  <i className="ti ti-calendar-off" style={{ fontSize: '22px', color: 'var(--color-foreground-muted)' }} />
+                </div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  {projects.length === 0 ? 'No events yet' : 'No events found'}
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', lineHeight: 1.4 }}>
+                  {projects.length === 0 ? 'No bookings in the system' : 'Try adjusting your search or filter'}
+                </div>
+              </div>
+            ) : (
+              ([
+                { key: 'thisWeek', title: 'Active & This Week', icon: 'ti-calendar-event', color: 'var(--color-success)', items: bucketGroups.thisWeek },
+                { key: 'upcoming', title: 'Upcoming Later', icon: 'ti-calendar-time', color: 'var(--color-accent)', items: bucketGroups.upcoming },
+                { key: 'delivered', title: 'Delivered', icon: 'ti-truck-delivery', color: 'var(--color-secondary)', items: bucketGroups.delivered },
+                { key: 'completed', title: 'Completed', icon: 'ti-circle-check', color: 'var(--color-success)', items: bucketGroups.completed },
+              ] as const).map(sec => {
+                if (sec.items.length === 0 && !searchQuery.trim() && railFilter !== 'all') return null
+                const isCollapsed = !searchQuery.trim() && Boolean(collapsedSections[sec.key])
+
+                return (
+                  <div key={sec.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {/* Section Header */}
+                    <div
+                      onClick={() => setCollapsedSections(prev => ({ ...prev, [sec.key]: !prev[sec.key] }))}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 4px',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i className={`ti ${sec.icon}`} style={{ fontSize: '14px', color: sec.color }} />
+                        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-muted)' }}>
+                          {sec.title}
+                        </span>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '1px 6px',
+                          borderRadius: '8px',
+                          background: 'var(--color-surface-raised)',
+                          color: 'var(--color-foreground-subtle)',
+                          border: '0.5px solid var(--color-border)',
+                        }}>
+                          {sec.items.length}
+                        </span>
+                      </div>
+                      <i
+                        className={`ti ti-chevron-${isCollapsed ? 'right' : 'down'}`}
+                        style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)' }}
+                      />
+                    </div>
+
+                    {/* Section Items */}
+                    {!isCollapsed && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {sec.items.length === 0 ? (
+                          <div style={{
+                            padding: '12px',
+                            fontSize: 'var(--text-xs)',
+                            color: 'var(--color-foreground-subtle)',
+                            fontStyle: 'italic',
+                            textAlign: 'center',
+                          }}>
+                            No events in this section
+                          </div>
+                        ) : (
+                          sec.items.map(group => {
+                            const primary = group.primaryProject
+                            const isContractExpanded = Boolean(expandedContracts[group.id])
+                            return (
+                              <div
+                                key={group.id}
+                                onClick={() => handleSelectProject(primary.projectId)}
+                                style={{
+                                  cursor: 'pointer',
+                                  borderRadius: '12px',
+                                  padding: '12px 14px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  borderLeft: `4px solid ${
+                                    group.isOverdue ? 'var(--color-danger)'
+                                    : primary.stage === 'delivered' ? 'var(--color-success)'
+                                    : 'var(--color-primary)'
+                                  }`,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '6px',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                {/* Title Row */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                  <span style={{
+                                    fontSize: 'var(--text-sm)',
+                                    fontWeight: 700,
+                                    color: 'var(--color-foreground)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    flex: 1,
+                                  }}>
+                                    {group.eventName || group.clientName}
+                                  </span>
+                                  {group.isRecurring ? (
+                                    <span style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      textTransform: 'uppercase',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: 'var(--color-purple-muted)',
+                                      color: 'var(--color-purple)',
+                                      whiteSpace: 'nowrap',
+                                      flexShrink: 0,
+                                    }}>
+                                      Session {primary.sessionIndex || 1}/{group.totalSessions}
+                                    </span>
+                                  ) : (primary.eventDates && primary.eventDates.length > 1) || primary.bookingType === 'multiDate' ? (
+                                    <span style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      textTransform: 'uppercase',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: 'var(--color-accent-muted)',
+                                      color: 'var(--color-accent)',
+                                      whiteSpace: 'nowrap',
+                                      flexShrink: 0,
+                                    }}>
+                                      Multi-Day
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                {/* Subtitle Row */}
+                                <div style={{
+                                  fontSize: 'var(--text-xs)',
+                                  color: 'var(--color-foreground-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  <span style={{ textTransform: 'capitalize' }}>
+                                    {group.eventType === 'other' && group.customEventType ? group.customEventType : group.eventType}
+                                  </span>
+                                  <span>·</span>
+                                  <span>{formatShortDate(primary.eventDate)}</span>
+                                </div>
+
+                                {/* Badge Row */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <Badge variant={primary.stage} />
+                                    {group.isOverdue && (
+                                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                        <i className="ti ti-alert-triangle" style={{ fontSize: '12px' }} />
+                                        Overdue
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Recurring Sessions Dropdown Accordion Toggle Button */}
+                                  {group.isRecurring && group.sessions.length > 1 ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setExpandedContracts(prev => ({
+                                          ...prev,
+                                          [group.id]: !prev[group.id],
+                                        }))
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        padding: '4px 6px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        color: 'var(--color-purple)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        touchAction: 'manipulation',
+                                      }}
+                                    >
+                                      <i className={`ti ti-chevron-${isContractExpanded ? 'down' : 'right'}`} style={{ fontSize: '11px' }} />
+                                      <span>{group.sessions.length} Sessions</span>
+                                    </button>
+                                  ) : (
+                                    <i className="ti ti-chevron-right" style={{ fontSize: '14px', color: 'var(--color-foreground-subtle)' }} />
+                                  )}
+                                </div>
+
+                                {/* Expanded Child Sessions */}
+                                {group.isRecurring && isContractExpanded && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      marginTop: '4px',
+                                      paddingTop: '8px',
+                                      borderTop: '0.5px solid var(--color-border)',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '5px',
+                                    }}
+                                  >
+                                    {group.sessions.map(s => {
+                                      const isThisSessSelected = s.projectId === selectedProject?.projectId
+                                      const sessOverdue = isProjectOverdue(s, now)
+
+                                      return (
+                                        <div
+                                          key={s.projectId}
+                                          onClick={() => handleSelectProject(s.projectId)}
+                                          style={{
+                                            padding: '8px 10px',
+                                            borderRadius: '8px',
+                                            background: isThisSessSelected ? 'var(--color-purple-muted)' : 'var(--color-surface-raised)',
+                                            border: `0.5px solid ${isThisSessSelected ? 'var(--color-purple)' : 'var(--color-border)'}`,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            cursor: 'pointer',
+                                            gap: '8px',
+                                            transition: 'all 0.1s ease',
+                                          }}
+                                        >
+                                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                              <span style={{
+                                                fontSize: '12px',
+                                                fontWeight: isThisSessSelected ? 700 : 500,
+                                                color: isThisSessSelected ? 'var(--color-purple)' : 'var(--color-foreground)',
+                                                whiteSpace: 'nowrap',
+                                              }}>
+                                                Session {s.sessionIndex || 1}
+                                              </span>
+                                              {sessOverdue && (
+                                                <i className="ti ti-alert-triangle" style={{ fontSize: '11px', color: 'var(--color-danger)' }} />
+                                              )}
+                                            </div>
+                                            <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                                              {formatShortDate(s.eventDate)} {s.startTime ? `· ${s.startTime}` : ''}
+                                            </span>
+                                          </div>
+                                          <Badge variant={s.stage} />
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       )}
 
+
+      {/* ─── SCREEN 2: EVENT DETAIL — VERTICAL CANVAS + BOTTOM SHEET ───── */}
+      {mobileView === 'detail' && selectedProject && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 70,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          background: 'var(--color-background)',
+          fontFamily: 'var(--font-inter)',
+        }}>
+
+          {/* ─── VERTICAL STAGE NODE CANVAS (dotted grid) ─────────────── */}
+          <div style={{
+            flex: 1,
+            overflow: 'hidden',
+            background: 'var(--color-background)',
+            backgroundImage: 'radial-gradient(var(--color-border) 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+            position: 'relative',
+          }}>
+
+            {/* Floating Close Button — top-left corner */}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileView('list')
+                setPanelStageKey(null)
+                setMobileBottomSheetExpanded(false)
+              }}
+              style={{
+                position: 'absolute',
+                top: 'max(14px, env(safe-area-inset-top, 14px))',
+                left: '14px',
+                zIndex: 60,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+                cursor: 'pointer',
+                color: 'var(--color-foreground)',
+              }}
+              title="Close"
+            >
+              <i className="ti ti-x" style={{ fontSize: '18px' }} />
+            </button>
+
+            {/* Floating Event Title Badge */}
+            <div style={{
+              position: 'absolute',
+              top: 'max(16px, env(safe-area-inset-top, 16px))',
+              left: '60px',
+              right: '16px',
+              zIndex: 55,
+              display: 'flex',
+              alignItems: 'center',
+              pointerEvents: 'none',
+            }}>
+              <span style={{
+                fontSize: 'var(--text-xs)',
+                fontWeight: 700,
+                color: 'var(--color-foreground)',
+                background: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: 'calc(100vw - 85px)',
+                pointerEvents: 'auto',
+              }}>
+                {selectedProject.clientName || selectedProject.eventName}
+              </span>
+            </div>
+
+            {/* Vertical Nodes Canvas Container */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: '68px 16px calc(150px + env(safe-area-inset-bottom, 16px)) 16px',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              height: '100%',
+              WebkitOverflowScrolling: 'touch',
+            }}>
+              {/* Vertical Wire Helper */}
+              {(() => {
+                const renderVerticalWire = (isWireActive: boolean, isWireComplete: boolean, key?: string) => (
+                  <div
+                    key={key}
+                    style={{
+                      width: '2px',
+                      height: '24px',
+                      background: isWireComplete ? 'var(--color-success)' : isWireActive ? 'var(--color-primary)' : 'var(--color-border)',
+                      boxShadow: isWireActive ? '0 0 8px var(--color-primary)' : 'none',
+                      borderRadius: '1px',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isWireActive && (
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: 'var(--color-primary)',
+                        boxShadow: '0 0 6px var(--color-primary)',
+                      }} />
+                    )}
+                  </div>
+                )
+
+                const isDeliveredDone = getStageStatus('delivered') === 'completed'
+
+                return (
+                  <>
+                    {/* ROOT NODE: START PROJECT PILL */}
+                    <div style={{
+                      width: '140px',
+                      background: 'var(--color-surface)',
+                      border: '1.5px solid var(--color-accent)',
+                      borderRadius: '20px',
+                      padding: '8px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                      position: 'relative',
+                      flexShrink: 0,
+                    }}>
+                      <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)' }} />
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-accent)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-accent)' }}>
+                        Start Project
+                      </span>
+                      {/* Output Port */}
+                      <span
+                        data-port-id="mob-start-out"
+                        style={{
+                          position: 'absolute',
+                          bottom: '-6px',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: 'var(--color-surface)',
+                          border: '2px solid var(--color-accent)',
+                          zIndex: 3,
+                        }}
+                      />
+                    </div>
+
+                    {/* Wire 1: Start -> Booked */}
+                    {renderVerticalWire(currentStageIndex === 0, currentStageIndex > 0, 'wire-start-booked')}
+
+                    {/* STAGE 1: BOOKED */}
+                    <StageNodeCard
+                      config={STAGE_CONFIGS[0]}
+                      status={getStageStatus('booked')}
+                      schedule={formatShortDate(selectedProject?.createdAt)}
+                      isSelected={panelStageKey === 'booked'}
+                      onClick={() => {
+                        handleStageCardClick('booked')
+                        setMobileBottomSheetExpanded(true)
+                      }}
+                      style={{ width: 'min(320px, calc(100vw - 32px))' }}
+                      inPortId="mob-booked-in"
+                      outPortId="mob-booked-out"
+                      portOrientation="vertical"
+                      gates={['Advance recorded', 'Quotation accepted']}
+                      assignedNames={[]}
+                    />
+
+                    {/* Wire 2: Booked -> Planning */}
+                    {renderVerticalWire(currentStageIndex === 1, currentStageIndex > 1, 'wire-booked-planning')}
+
+                    {/* STAGE 2: PLANNING */}
+                    <StageNodeCard
+                      config={STAGE_CONFIGS[1]}
+                      status={getStageStatus('planning')}
+                      schedule="2–3 weeks prior"
+                      isSelected={panelStageKey === 'planning'}
+                      onClick={() => {
+                        handleStageCardClick('planning')
+                        setMobileBottomSheetExpanded(true)
+                      }}
+                      style={{ width: 'min(320px, calc(100vw - 32px))' }}
+                      inPortId="mob-planning-in"
+                      outPortId="mob-planning-out"
+                      portOrientation="vertical"
+                      gates={['Shot list approved', 'Core team assigned', 'Venue walkthrough done']}
+                      assignedNames={assignedTeamMembers.map(s => s.name)}
+                    />
+
+                    {/* Wire 3: Planning -> Pre-Prod */}
+                    {renderVerticalWire(currentStageIndex === 2, currentStageIndex > 2, 'wire-planning-preprod')}
+
+                    {/* STAGE 3: PRE-PROD */}
+                    <StageNodeCard
+                      config={STAGE_CONFIGS[2]}
+                      status={getStageStatus('preProduction')}
+                      schedule="3–5 days prior"
+                      isSelected={panelStageKey === 'preProduction'}
+                      onClick={() => {
+                        handleStageCardClick('preProduction')
+                        setMobileBottomSheetExpanded(true)
+                      }}
+                      style={{ width: 'min(320px, calc(100vw - 32px))' }}
+                      inPortId="mob-preprod-in"
+                      outPortId="mob-preprod-out"
+                      portOrientation="vertical"
+                      gates={['Equipment checked out', 'Freelancer crew confirmed']}
+                      assignedNames={[
+                        ...assignedTeamMembers.map(s => s.name),
+                        ...assignedFreelancers.map(f => `${f.name} (FL)`),
+                      ]}
+                    />
+
+                    {/* Wire 4: Pre-Prod -> Event Day(s) */}
+                    {renderVerticalWire(currentStageIndex === 3, currentStageIndex > 3, 'wire-preprod-eventday')}
+
+                    {/* STAGE 4: EVENT DAY(S) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', width: '100%' }}>
+                      {multiEventDays.map((day: EventDateEntry, idx: number) => {
+                        const dayStatus = getDaySessionStatus(day, idx)
+                        const isDaySelected = panelStageKey === 'eventDay' && selectedDayTab === idx
+                        const isRawBackupDone = isDayRawBackupDone(idx)
+                        const dayBorderColor = dayStatus === 'completed' ? 'var(--color-success)' : dayStatus === 'active' ? 'var(--color-primary)' : 'var(--color-border)'
+                        const dayRingColor = dayStatus === 'completed' ? 'var(--color-success)' : dayStatus === 'active' ? 'var(--color-primary)' : 'var(--color-border-strong)'
+
+                        return (
+                          <React.Fragment key={day.id || idx}>
+                            {idx > 0 && renderVerticalWire(dayStatus === 'active', dayStatus === 'completed', `day-wire-${idx}`)}
+                            <div
+                              onClick={() => {
+                                setSelectedDayTab(idx)
+                                handleStageCardClick('eventDay', idx)
+                                setMobileBottomSheetExpanded(true)
+                              }}
+                              style={{
+                                width: 'min(320px, calc(100vw - 32px))',
+                                cursor: 'pointer',
+                                background: isDaySelected ? 'var(--color-surface-raised)' : 'var(--color-surface)',
+                                borderTop: '0.5px solid var(--color-border)',
+                                borderRight: '0.5px solid var(--color-border)',
+                                borderBottom: '0.5px solid var(--color-border)',
+                                borderLeft: `${isDaySelected ? '4px' : '3px'} solid ${dayBorderColor}`,
+                                borderRadius: '12px',
+                                padding: '14px 16px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px',
+                                boxShadow: isDaySelected
+                                  ? `0 0 0 2px ${dayRingColor}, 0 6px 20px rgba(0,0,0,0.22)`
+                                  : '0 2px 8px rgba(0,0,0,0.1)',
+                                position: 'relative',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {/* Top In Port */}
+                              <span
+                                data-port-id={`mob-day-in-${idx}`}
+                                style={{
+                                  position: 'absolute',
+                                  top: '-6px',
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  width: '12px',
+                                  height: '12px',
+                                  borderRadius: '50%',
+                                  background: 'var(--color-surface)',
+                                  border: '2px solid var(--color-accent)',
+                                  zIndex: 3,
+                                }}
+                              />
+                              {/* Bottom Out Port */}
+                              <span
+                                data-port-id={`mob-day-out-${idx}`}
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '-6px',
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  width: '12px',
+                                  height: '12px',
+                                  borderRadius: '50%',
+                                  background: 'var(--color-surface)',
+                                  border: '2px solid var(--color-accent)',
+                                  zIndex: 3,
+                                }}
+                              />
+
+                              {/* Header with track number badge */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)' }} />
+                                  {multiEventDays.length > 1 && (
+                                    <span style={{
+                                      width: '18px',
+                                      height: '18px',
+                                      borderRadius: '50%',
+                                      background: 'var(--color-primary-muted)',
+                                      color: 'var(--color-primary)',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}>
+                                      {idx + 1}
+                                    </span>
+                                  )}
+                                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                                    {day.label || `Event Day ${idx + 1}`}
+                                  </span>
+                                </div>
+                                <StatusPill status={dayStatus} />
+                              </div>
+
+                              {/* Details */}
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <span><i className="ti ti-calendar" style={{ marginRight: '4px' }} />{formatShortDate(day.date)}</span>
+                                {day.location && <span><i className="ti ti-map-pin" style={{ marginRight: '4px' }} />{day.location}</span>}
+                                {day.startTime && <span><i className="ti ti-clock" style={{ marginRight: '4px' }} />{day.startTime} – {day.endTime || 'Wrap'}</span>}
+                              </div>
+
+                              {/* Exit Gate Summary */}
+                              <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <i
+                                  className={isRawBackupDone ? 'ti ti-circle-check' : 'ti ti-circle'}
+                                  style={{
+                                    fontSize: '14px',
+                                    color: isRawBackupDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                                  }}
+                                />
+                                <span style={{ fontSize: '11px', color: isRawBackupDone ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)' }}>
+                                  Dual raw backup verification
+                                </span>
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        )
+                      })}
+                    </div>
+
+                    {/* Wire 5: Event Day -> Post-Prod */}
+                    {renderVerticalWire(currentStageIndex === 4, currentStageIndex > 4, 'wire-eventday-postprod')}
+
+                    {/* STAGE 5: POST-PRODUCTION */}
+                    <StageNodeCard
+                      config={STAGE_CONFIGS[4]}
+                      status={getStageStatus('postProduction')}
+                      schedule="Post-event processing"
+                      isSelected={panelStageKey === 'postProduction'}
+                      onClick={() => {
+                        handleStageCardClick('postProduction')
+                        setMobileBottomSheetExpanded(true)
+                      }}
+                      style={{ width: 'min(320px, calc(100vw - 32px))' }}
+                      inPortId="mob-postprod-in"
+                      outPortId="mob-postprod-out"
+                      portOrientation="vertical"
+                      gates={canvasTracks.length > 0 ? canvasTracks.map(t => `${t.name} completed`) : ['Tracks completed']}
+                      assignedNames={assignedTeamMembers.map(s => s.name)}
+                    />
+
+                    {/* Active Track Nodes (Photo, Album, Highlights, Full Video) */}
+                    {canvasTracks.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', alignItems: 'center', marginTop: '10px' }}>
+                        {canvasTracks.map(track => (
+                          <div
+                            key={track.id}
+                            onClick={() => {
+                              handleStageCardClick('postProduction')
+                              setMobileBottomSheetExpanded(true)
+                            }}
+                            style={{
+                              width: 'min(320px, calc(100vw - 32px))',
+                              background: 'var(--color-surface)',
+                              border: '0.5px solid var(--color-border)',
+                              borderTop: `2.5px solid ${track.color}`,
+                              borderRadius: '10px',
+                              padding: '12px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                              cursor: 'pointer',
+                              boxShadow: panelStageKey === 'postProduction' ? `0 0 0 1px ${track.color}` : 'none',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <i className={`ti ${track.icon}`} style={{ fontSize: '14px', color: track.color }} />
+                                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                                  {track.name}
+                                </span>
+                              </div>
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                padding: '1px 6px',
+                                borderRadius: '10px',
+                                background: track.isComplete ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                                color: track.isComplete ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+                                border: `0.5px solid ${track.isComplete ? 'var(--color-success)' : 'var(--color-border)'}`,
+                              }}>
+                                {track.doneCount}/{track.totalCount}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {track.steps.map(step => (
+                                <div key={step.label} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 4px' }}>
+                                  <i
+                                    className={step.isDone ? 'ti ti-checkbox' : 'ti ti-square'}
+                                    style={{ fontSize: '13px', color: step.isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }}
+                                  />
+                                  <span style={{
+                                    fontSize: '11px',
+                                    color: step.isDone ? 'var(--color-foreground-muted)' : 'var(--color-foreground)',
+                                    textDecoration: step.isDone ? 'line-through' : 'none',
+                                    fontWeight: step.isDone ? 400 : 500,
+                                  }}>
+                                    {step.label}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Wire 6: Post-Prod -> Delivered */}
+                    {renderVerticalWire(currentStageIndex === 5, currentStageIndex >= 5 && selectedProject?.status === 'completed', 'wire-postprod-delivered')}
+
+                    {/* STAGE 6: DELIVERED */}
+                    <StageNodeCard
+                      config={STAGE_CONFIGS[5]}
+                      status={getStageStatus('delivered')}
+                      schedule="Final handover"
+                      isSelected={panelStageKey === 'delivered'}
+                      onClick={() => {
+                        handleStageCardClick('delivered')
+                        setMobileBottomSheetExpanded(true)
+                      }}
+                      style={{ width: 'min(320px, calc(100vw - 32px))' }}
+                      inPortId="mob-delivered-in"
+                      outPortId="mob-delivered-out"
+                      portOrientation="vertical"
+                      gates={['Outstanding balance = ₹0', 'Client sign-off received']}
+                      gateDetails={[
+                        {
+                          label: 'Outstanding balance = ₹0',
+                          done: effectiveBalanceDue <= 0 && !isPaymentPending,
+                          isPaymentGate: true,
+                          dueAmount: effectiveBalanceDue,
+                          onRecordPayment: () => setRecordPaymentModalOpen(true),
+                        },
+                        {
+                          label: 'Client sign-off received',
+                          done: Boolean(gateOverrides[`${selectedProject.projectId}_delivered_Client sign-off received`] || selectedProject.stageGates?.delivered?.['Client sign-off received']),
+                        },
+                      ]}
+                      assignedNames={[]}
+                    />
+
+                    {/* Wire 7: Delivered -> End */}
+                    {renderVerticalWire(selectedProject?.status === 'completed' || isDeliveredDone, selectedProject?.status === 'completed' || isDeliveredDone, 'wire-delivered-end')}
+
+                    {/* END NODE: PROJECT DELIVERED / CONTRACT DONE PILL */}
+                    <div style={{
+                      width: '160px',
+                      background: 'var(--color-surface)',
+                      border: `1.5px solid ${selectedProject?.status === 'completed' || isDeliveredDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                      borderRadius: '20px',
+                      padding: '8px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      position: 'relative',
+                      flexShrink: 0,
+                    }}>
+                      <span
+                        data-port-id="mob-end-in"
+                        style={{
+                          position: 'absolute',
+                          top: '-6px',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: 'var(--color-surface)',
+                          border: `2px solid ${selectedProject?.status === 'completed' || isDeliveredDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                          zIndex: 3,
+                        }}
+                      />
+                      <i className="ti ti-grip-vertical" style={{ fontSize: '13px', color: 'var(--color-foreground-subtle)' }} />
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: selectedProject?.status === 'completed' || isDeliveredDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                      }} />
+                      <span style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        color: selectedProject?.status === 'completed' || isDeliveredDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                      }}>
+                        {isRecurring ? 'Contract Done' : 'Project Delivered'}
+                      </span>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+
+          {/* ─── BOTTOM GRABBER SHEET: Full Desktop Side-Panel Parity ─── */}
+          {panelStageKey && currentPanelConfig && (
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              maxHeight: mobileBottomSheetExpanded ? '85dvh' : '140px',
+              background: 'var(--color-surface)',
+              borderTop: '0.5px solid var(--color-border)',
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              transition: 'max-height 0.3s cubic-bezier(0.4,0,0.2,1)',
+              zIndex: 65,
+              overflow: 'hidden',
+            }}>
+              {/* Grabber Handle */}
+              <div
+                onClick={() => setMobileBottomSheetExpanded(prev => !prev)}
+                style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--color-border-strong)' }} />
+              </div>
+
+              {/* Sheet Header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '2px 16px 12px',
+                borderBottom: mobileBottomSheetExpanded ? '0.5px solid var(--color-border)' : 'none',
+                flexShrink: 0,
+              }}>
+                <i className={`ti ${currentPanelConfig.icon}`} style={{ fontSize: '18px', color: 'var(--color-primary)' }} />
+                <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, flex: 1, color: 'var(--color-foreground)' }}>
+                  {isRecurring && multiEventDays[selectedDayTab]
+                    ? `${currentPanelConfig.name} · ${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`}`
+                    : panelStageKey === 'eventDay' && multiEventDays.length > 1 && multiEventDays[selectedDayTab]
+                    ? `${currentPanelConfig.name} · ${multiEventDays[selectedDayTab].label || `Day ${selectedDayTab + 1}`}`
+                    : currentPanelConfig.name}
+                </span>
+                <StatusPill status={panelStageStatus} />
+                <button
+                  type="button"
+                  onClick={() => setMobileBottomSheetExpanded(prev => !prev)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--color-foreground-muted)', cursor: 'pointer', padding: '4px', display: 'flex' }}
+                  title={mobileBottomSheetExpanded ? 'Collapse' : 'Expand'}
+                >
+                  <i className={`ti ti-chevron-${mobileBottomSheetExpanded ? 'down' : 'up'}`} style={{ fontSize: '18px' }} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPanelStageKey(null); setMobileBottomSheetExpanded(false) }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--color-foreground-muted)', cursor: 'pointer', padding: '4px', display: 'flex' }}
+                  title="Close sheet"
+                >
+                  <i className="ti ti-x" style={{ fontSize: '16px' }} />
+                </button>
+              </div>
+
+              {/* Collapsed preview */}
+              {!mobileBottomSheetExpanded && (
+                <div
+                  onClick={() => setMobileBottomSheetExpanded(true)}
+                  style={{ padding: '4px 16px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
+                >
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', lineHeight: 1.4, flex: 1 }}>
+                    {currentPanelConfig.defaultDesc.split('.')[0]}. Tap ↑ to view all details &amp; checklist.
+                  </span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    Details <i className="ti ti-chevron-up" />
+                  </span>
+                </div>
+              )}
+
+              {/* Full expanded content — Exact Desktop Side-Panel Parity */}
+              {mobileBottomSheetExpanded && (
+                <div style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '16px 16px 40px',
+                  WebkitOverflowScrolling: 'touch',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '18px',
+                }}>
+
+                  {/* Multi-Day Tabs */}
+                  {multiEventDays.length > 1 && (panelStageKey === 'eventDay' || panelStageKey === 'postProduction' || panelStageKey === 'delivered') && (
+                    <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: '2px 0' }}>
+                      {multiEventDays.map((day: EventDateEntry, idx: number) => {
+                        const isCurTab = selectedDayTab === idx
+                        const isDayDone = isDayRawBackupDone(idx)
+                        return (
+                          <button
+                            key={day.id || idx}
+                            type="button"
+                            onClick={() => setSelectedDayTab(idx)}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: '8px',
+                              border: isCurTab ? '1px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+                              background: isCurTab ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                              color: isCurTab ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                              fontSize: 'var(--text-xs)',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            {day.label || `Day ${idx + 1}`}
+                            {isDayDone && <i className="ti ti-circle-check" style={{ fontSize: '13px', color: 'var(--color-success)' }} />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', lineHeight: 1.5 }}>
+                    {currentPanelConfig.defaultDesc}
+                  </div>
+
+                  {/* Schedule */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
+                      Schedule
+                    </span>
+                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-foreground)' }}>
+                      {isRecurring && multiEventDays[selectedDayTab]
+                        ? `${formatShortDate(multiEventDays[selectedDayTab].date)} · ${multiEventDays[selectedDayTab].label || `Session ${selectedDayTab + 1}`}`
+                        : panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                        ? `${formatShortDate(multiEventDays[selectedDayTab].date)} · ${multiEventDays[selectedDayTab].label || 'Shoot day'}`
+                        : `${formatShortDate(selectedProject.eventDate)} · ${currentPanelConfig.whenOffset}`}
+                    </span>
+                    {panelStageKey === 'eventDay' && (() => {
+                      const dayEntry = multiEventDays[selectedDayTab]
+                      const location = dayEntry?.location
+                      const startTime = dayEntry?.startTime || selectedProject.startTime
+                      const endTime = dayEntry?.endTime || selectedProject.endTime
+                      const timeLabel = startTime ? `${startTime}${endTime ? ` – ${endTime}` : ''}` : null
+                      if (!location && !timeLabel) return null
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                          {timeLabel && <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><i className="ti ti-clock" style={{ fontSize: '13px' }} />{timeLabel}</span>}
+                          {location && <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><i className="ti ti-map-pin" style={{ fontSize: '13px' }} />{location}</span>}
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                  {/* Stage completed timestamp */}
+                  {panelStageStatus === 'completed' && (() => {
+                    const compDate = getStageCompletedDate(selectedProject, panelStageKey)
+                    if (!compDate) return null
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>Stage Completed</span>
+                        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="ti ti-circle-check" style={{ fontSize: '15px' }} />{formatDateTime(compDate)}
+                        </span>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Exit Gate Checklist */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
+                        Exit gate checklist
+                      </span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                        {allPanelGatesDone ? '✓ All satisfied' : `${panelGates.filter(g => g.done).length}/${panelGates.length} done`}
+                      </span>
+                    </div>
+
+                    {panelGates.map((gate, gi) => {
+                      const gateLabel = gate.label
+                      const isRawFootageGate = gateLabel.toLowerCase().includes('raw footage')
+                      const isRawLocked = isRawFootageGate && !shootTimingInfo.isCompleted && panelStageKey === 'eventDay'
+                      const isBalanceGate = gateLabel.toLowerCase().includes('balance') || gateLabel.toLowerCase().includes('outstanding')
+                      const isBalancePending = isBalanceGate && effectiveBalanceDue > 0
+
+                      return (
+                        <div
+                          key={`${gateLabel}-${gi}`}
+                          onClick={() => {
+                            if (isRawLocked) {
+                              alert(`Event day shoot is still in progress (ends ${shootTimingInfo.formattedTime || 'later'}). Raw footage backup cannot be checked yet.`)
+                              return
+                            }
+                            if (isBalancePending) { setRecordPaymentModalOpen(true); return }
+                            toggleGate(panelStageKey, gateLabel, gate.done)
+                          }}
+                          style={{
+                            cursor: isRawLocked ? 'not-allowed' : 'pointer',
+                            opacity: isRawLocked ? 0.75 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '10px 12px',
+                            background: isBalancePending ? 'var(--color-secondary-muted)' : gate.done ? 'var(--color-success-muted)' : 'var(--color-surface-raised)',
+                            border: `0.5px solid ${isRawLocked ? 'var(--color-secondary)' : isBalancePending ? 'var(--color-secondary)' : gate.done ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            borderRadius: '10px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <i
+                            className={isRawLocked ? 'ti ti-lock' : isBalancePending ? 'ti ti-alert-circle' : gate.done ? 'ti ti-circle-check-filled' : 'ti ti-circle'}
+                            style={{
+                              fontSize: '18px',
+                              color: isRawLocked ? 'var(--color-secondary)' : isBalancePending ? 'var(--color-secondary)' : gate.done ? 'var(--color-success)' : 'var(--color-foreground-subtle)',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, color: isBalancePending ? 'var(--color-secondary)' : gate.done ? 'var(--color-success)' : 'var(--color-foreground)' }}>
+                            {isBalancePending ? `₹${effectiveBalanceDue.toLocaleString('en-IN')} balance due` : gateLabel}
+                          </span>
+                          {isBalancePending && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setRecordPaymentModalOpen(true) }}
+                              style={{ background: 'var(--color-primary)', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              Pay
+                            </button>
+                          )}
+                          {isRawLocked && (
+                            <span style={{ fontSize: '10px', color: 'var(--color-secondary)', whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 600 }}>
+                              Ends {shootTimingInfo.formattedTime || 'later'}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* ─── DESKTOP SIDE PANEL SECTIONS: REQUIREMENTS, TRACKS & TEAM ─── */}
+            {/* Booked Stage — Post-Production Requirements Configuration */}
+            {panelStageKey === 'booked' && selectedProject && (() => {
+              const reqs = selectedProject.postProdRequirements || {
+                photography: { required: true, clientReviewRequired: true },
+                album: { required: true, clientReviewRequired: true },
+                videoHighlights: { required: true, clientReviewRequired: true },
+                fullVideo: { required: true, clientReviewRequired: true },
+              }
+
+              const servicesList: Array<{
+                key: 'photography' | 'album' | 'videoHighlights' | 'fullVideo'
+                label: string
+                icon: string
+                desc: string
+              }> = [
+                { key: 'photography', label: 'Photography', icon: 'ti-camera', desc: 'Raw delivery, photo selection & designing' },
+                { key: 'album', label: 'Album', icon: 'ti-book', desc: 'Album designing, client review & album printing' },
+                { key: 'videoHighlights', label: 'Video - Highlights', icon: 'ti-sparkles', desc: 'Raw footage backup & cinematic highlights' },
+                { key: 'fullVideo', label: 'Full Video', icon: 'ti-movie', desc: 'Complete multi-cam event film & editing' },
+              ]
+
+              const anyRequired = servicesList.some(s => reqs[s.key]?.required)
+
+              return (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  background: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '10px',
+                  padding: '14px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="ti ti-settings-cog" style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground)' }}>
+                        Post-Production Requirements
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'var(--color-primary-muted)',
+                      color: 'var(--color-primary)',
+                      border: '0.5px solid var(--color-primary)',
+                      textTransform: 'uppercase',
+                    }}>
+                      Source of Truth
+                    </span>
+                  </div>
+
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', lineHeight: '1.4' }}>
+                    Select services included in this booking. The post-production stage will automatically build only the required tracks.
+                  </span>
+
+                  {!anyRequired && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      background: 'var(--color-warning-muted)',
+                      border: '0.5px solid var(--color-warning)',
+                      color: 'var(--color-warning)',
+                      fontSize: 'var(--text-xs)',
+                    }}>
+                      <i className="ti ti-alert-triangle" style={{ fontSize: '14px' }} />
+                      <span>At least one service should be marked Required before advancing.</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {servicesList.map(srv => {
+                      const isReq = reqs[srv.key]?.required ?? true
+                      const isRevReq = reqs[srv.key]?.clientReviewRequired ?? true
+
+                      return (
+                        <div
+                          key={srv.key}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            padding: '10px 12px',
+                            background: 'var(--color-surface)',
+                            border: `0.5px solid ${isReq ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                            borderRadius: '8px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {/* Service Header & Radio */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <i className={`ti ${srv.icon}`} style={{ fontSize: '16px', color: isReq ? 'var(--color-primary)' : 'var(--color-foreground-subtle)' }} />
+                              <div>
+                                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                                  {srv.label}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Service Required / Not Required Radio */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: 'var(--text-xs)', color: isReq ? 'var(--color-primary)' : 'var(--color-foreground-muted)' }}>
+                                <input
+                                  type="radio"
+                                  name={`req_${srv.key}`}
+                                  checked={isReq}
+                                  onChange={() => handleRequirementChange(srv.key, 'required', true)}
+                                  style={{ accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: isReq ? 700 : 400 }}>Required</span>
+                              </label>
+
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: 'var(--text-xs)', color: !isReq ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                                <input
+                                  type="radio"
+                                  name={`req_${srv.key}`}
+                                  checked={!isReq}
+                                  onChange={() => handleRequirementChange(srv.key, 'required', false)}
+                                  style={{ accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: !isReq ? 700 : 400 }}>Not Required</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* Client Review Sub-Option (indented) */}
+                          {isReq && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              paddingLeft: '24px',
+                              paddingTop: '6px',
+                              borderTop: '0.5px dashed var(--color-border)',
+                            }}>
+                              <span style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
+                                Client Review Cycle
+                              </span>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px', color: isRevReq ? 'var(--color-accent)' : 'var(--color-foreground-muted)' }}>
+                                  <input
+                                    type="radio"
+                                    name={`rev_${srv.key}`}
+                                    checked={isRevReq}
+                                    onChange={() => handleRequirementChange(srv.key, 'clientReviewRequired', true)}
+                                    style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontWeight: isRevReq ? 700 : 400 }}>Required</span>
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px', color: !isRevReq ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                                  <input
+                                    type="radio"
+                                    name={`rev_${srv.key}`}
+                                    checked={!isRevReq}
+                                    onChange={() => handleRequirementChange(srv.key, 'clientReviewRequired', false)}
+                                    style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontWeight: !isRevReq ? 700 : 400 }}>Not Required</span>
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Post-Production Parallel Tracks Checklists & Cards */}
+            {panelStageKey === 'postProduction' && selectedProject && (() => {
+              const reqs = selectedProject.postProdRequirements
+              const postProd = selectedProject.postProduction
+              const isConfigured = Boolean(postProd?.isConfigured)
+
+              // Legacy fallback if project has no requirements configured
+              if (!reqs && !postProd) {
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{
+                      padding: '10px 12px',
+                      background: 'var(--color-primary-muted)',
+                      border: '0.5px solid var(--color-primary)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i className="ti ti-sparkles" style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground)' }}>
+                          Enable 4-track post-production system for this event:
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const defaultReqs: PostProdRequirements = {
+                            photography: { required: true, clientReviewRequired: true },
+                            album: { required: true, clientReviewRequired: true },
+                            videoHighlights: { required: true, clientReviewRequired: true },
+                            fullVideo: { required: true, clientReviewRequired: true },
+                          }
+                          savePostProdRequirements(selectedProject.projectId, defaultReqs).catch(console.error)
+                          setProjects(prev => prev.map(p => p.projectId === selectedProject.projectId ? { ...p, postProdRequirements: defaultReqs } : p))
+                        }}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'var(--color-primary)',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Enable Now
+                      </button>
+                    </div>
+
+                    {/* Legacy Photo Track Card */}
+                    <div style={{
+                      background: 'var(--color-surface-raised)',
+                      borderTop: '0.5px solid var(--color-border)',
+                      borderRight: '0.5px solid var(--color-border)',
+                      borderBottom: '0.5px solid var(--color-border)',
+                      borderLeft: '3px solid var(--color-accent)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="ti ti-camera" style={{ fontSize: '15px', color: 'var(--color-accent)' }} />
+                          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                            Photo Track Milestones
+                          </span>
+                        </div>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '2px 6px',
+                          borderRadius: '10px',
+                          background: isPhotoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                          color: isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+                          border: `0.5px solid ${isPhotoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        }}>
+                          {photoTrackDoneCount}/{PHOTO_TRACK_MILESTONES.length} done
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {PHOTO_TRACK_MILESTONES.map(step => {
+                          const isDone = isTrackMilestoneDone('photo', step)
+                          return (
+                            <div
+                              key={step}
+                              onClick={(e) => toggleTrackMilestone('photo', step, e)}
+                              style={{
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                background: isDone ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                                border: `0.5px solid ${isDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                              }}
+                            >
+                              <i className={isDone ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                              <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: isDone ? 'var(--color-foreground)' : 'var(--color-foreground-muted)', textDecoration: isDone ? 'line-through' : 'none' }}>
+                                {step}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Legacy Video Track Card */}
+                    <div style={{
+                      background: 'var(--color-surface-raised)',
+                      borderTop: '0.5px solid var(--color-border)',
+                      borderRight: '0.5px solid var(--color-border)',
+                      borderBottom: '0.5px solid var(--color-border)',
+                      borderLeft: '3px solid var(--color-secondary)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="ti ti-video" style={{ fontSize: '15px', color: 'var(--color-secondary)' }} />
+                          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                            Video Track Milestones
+                          </span>
+                        </div>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '2px 6px',
+                          borderRadius: '10px',
+                          background: isVideoTrackAllDone ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                          color: isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-foreground-muted)',
+                          border: `0.5px solid ${isVideoTrackAllDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        }}>
+                          {videoTrackDoneCount}/{VIDEO_TRACK_MILESTONES.length} done
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {VIDEO_TRACK_MILESTONES.map(step => {
+                          const isDone = isTrackMilestoneDone('video', step)
+                          return (
+                            <div
+                              key={step}
+                              onClick={(e) => toggleTrackMilestone('video', step, e)}
+                              style={{
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                background: isDone ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                                border: `0.5px solid ${isDone ? 'var(--color-success)' : 'var(--color-border)'}`,
+                              }}
+                            >
+                              <i className={isDone ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: isDone ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                              <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: isDone ? 'var(--color-foreground)' : 'var(--color-foreground-muted)', textDecoration: isDone ? 'line-through' : 'none' }}>
+                                {step}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              // CASE A: Post-Production Setup Form (when not configured yet)
+              if (!isConfigured) {
+                const isPhotoReq = reqs?.photography?.required ?? true
+                const isAlbumReq = reqs?.album?.required ?? true
+                const isVideoReq = reqs?.videoHighlights?.required ?? true
+                const isFullVideoReq = reqs?.fullVideo?.required ?? true
+
+                const defaultEventDate = selectedProject.eventDate || new Date()
+                const defaultDateStr = (days: number) => {
+                  const d = new Date(defaultEventDate)
+                  d.setDate(d.getDate() + days)
+                  return d.toISOString().split('T')[0]
+                }
+                const defaultStaffUid = selectedProject.staffUids?.[0] || staffList[0]?.uid || ''
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{
+                      padding: '12px',
+                      background: 'var(--color-primary-muted)',
+                      border: '0.5px solid var(--color-primary)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i className="ti ti-tools" style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
+                        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                          Post-Production Initial Setup
+                        </span>
+                      </div>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                        Configure staff assignments and target due dates for all required tracks to begin work.
+                      </span>
+                    </div>
+
+                    {/* Track Setup Cards */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {/* Photo Track Setup */}
+                      {isPhotoReq && (
+                        <div style={{
+                          padding: '12px',
+                          background: 'var(--color-surface-raised)',
+                          borderTop: '0.5px solid var(--color-border)',
+                          borderRight: '0.5px solid var(--color-border)',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          borderLeft: '3px solid var(--color-accent)',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-camera" style={{ fontSize: '16px', color: 'var(--color-accent)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Photo Track Setup
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Staff Assignee <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <select
+                                value={postProdSetupStaff['photoTrack'] ?? defaultStaffUid}
+                                onChange={(e) => setPostProdSetupStaff(prev => ({ ...prev, photoTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">Select Staff...</option>
+                                {staffList.map(s => (
+                                  <option key={s.uid} value={s.uid}>{s.name} ({s.jobTitle || s.role})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Freelancer (Optional)
+                              </label>
+                              <select
+                                value={postProdSetupFreelancer['photoTrack'] || ''}
+                                onChange={(e) => setPostProdSetupFreelancer(prev => ({ ...prev, photoTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">None</option>
+                                {freelancerList.map(f => (
+                                  <option key={f.freelancerId} value={f.freelancerId}>{f.name} ({f.skill})</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                              Designing Due Date <span style={{ color: 'var(--color-danger)' }}>*</span>
+                            </label>
+                            <DateField
+                              value={postProdSetupDueDates['photo_designing'] || defaultDateStr(10)}
+                              onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, photo_designing: val }))}
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Album Track Setup */}
+                      {isAlbumReq && (
+                        <div style={{
+                          padding: '12px',
+                          background: 'var(--color-surface-raised)',
+                          borderTop: '0.5px solid var(--color-border)',
+                          borderRight: '0.5px solid var(--color-border)',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          borderLeft: '3px solid var(--color-primary)',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-book" style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Album Track Setup
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Staff Assignee <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <select
+                                value={postProdSetupStaff['albumTrack'] ?? defaultStaffUid}
+                                onChange={(e) => setPostProdSetupStaff(prev => ({ ...prev, albumTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">Select Staff...</option>
+                                {staffList.map(s => (
+                                  <option key={s.uid} value={s.uid}>{s.name} ({s.jobTitle || s.role})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Freelancer (Optional)
+                              </label>
+                              <select
+                                value={postProdSetupFreelancer['albumTrack'] || ''}
+                                onChange={(e) => setPostProdSetupFreelancer(prev => ({ ...prev, albumTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">None</option>
+                                {freelancerList.map(f => (
+                                  <option key={f.freelancerId} value={f.freelancerId}>{f.name} ({f.skill})</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Album Designing Due <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <DateField
+                                value={postProdSetupDueDates['album_designing'] || defaultDateStr(14)}
+                                onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, album_designing: val }))}
+                                className="h-8"
+                                align="left"
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Creating Album Due <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <DateField
+                                value={postProdSetupDueDates['album_creating'] || defaultDateStr(21)}
+                                onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, album_creating: val }))}
+                                className="h-8"
+                                align="right"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Video Highlights Track Setup */}
+                      {isVideoReq && (
+                        <div style={{
+                          padding: '12px',
+                          background: 'var(--color-surface-raised)',
+                          borderTop: '0.5px solid var(--color-border)',
+                          borderRight: '0.5px solid var(--color-border)',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          borderLeft: '3px solid var(--color-secondary)',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-sparkles" style={{ fontSize: '16px', color: 'var(--color-secondary)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Video Highlights Track Setup
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Staff Assignee <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <select
+                                value={postProdSetupStaff['videoTrack'] ?? defaultStaffUid}
+                                onChange={(e) => setPostProdSetupStaff(prev => ({ ...prev, videoTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">Select Staff...</option>
+                                {staffList.map(s => (
+                                  <option key={s.uid} value={s.uid}>{s.name} ({s.jobTitle || s.role})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Freelancer (Optional)
+                              </label>
+                              <select
+                                value={postProdSetupFreelancer['videoTrack'] || ''}
+                                onChange={(e) => setPostProdSetupFreelancer(prev => ({ ...prev, videoTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">None</option>
+                                {freelancerList.map(f => (
+                                  <option key={f.freelancerId} value={f.freelancerId}>{f.name} ({f.skill})</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                              Highlights Due Date <span style={{ color: 'var(--color-danger)' }}>*</span>
+                            </label>
+                            <DateField
+                              value={postProdSetupDueDates['video_highlights'] || defaultDateStr(12)}
+                              onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, video_highlights: val }))}
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Full Video Track Setup */}
+                      {isFullVideoReq && (
+                        <div style={{
+                          padding: '12px',
+                          background: 'var(--color-surface-raised)',
+                          borderTop: '0.5px solid var(--color-border)',
+                          borderRight: '0.5px solid var(--color-border)',
+                          borderBottom: '0.5px solid var(--color-border)',
+                          borderLeft: '3px solid var(--color-purple)',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-movie" style={{ fontSize: '16px', color: 'var(--color-purple)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Full Video Track Setup
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Staff Assignee <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <select
+                                value={postProdSetupStaff['fullVideoTrack'] ?? defaultStaffUid}
+                                onChange={(e) => setPostProdSetupStaff(prev => ({ ...prev, fullVideoTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">Select Staff...</option>
+                                {staffList.map(s => (
+                                  <option key={s.uid} value={s.uid}>{s.name} ({s.jobTitle || s.role})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                                Freelancer (Optional)
+                              </label>
+                              <select
+                                value={postProdSetupFreelancer['fullVideoTrack'] || ''}
+                                onChange={(e) => setPostProdSetupFreelancer(prev => ({ ...prev, fullVideoTrack: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  background: 'var(--color-surface)',
+                                  border: '0.5px solid var(--color-border)',
+                                  color: 'var(--color-foreground)',
+                                  fontSize: 'var(--text-xs)',
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="">None</option>
+                                {freelancerList.map(f => (
+                                  <option key={f.freelancerId} value={f.freelancerId}>{f.name} ({f.skill})</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '4px' }}>
+                              Full Video Editing Due Date <span style={{ color: 'var(--color-danger)' }}>*</span>
+                            </label>
+                            <DateField
+                              value={postProdSetupDueDates['full_video_editing'] || defaultDateStr(25)}
+                              onChange={(val) => setPostProdSetupDueDates(prev => ({ ...prev, full_video_editing: val }))}
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Start Post-Production Button */}
+                    <Button
+                      onClick={handleStartPostProduction}
+                      disabled={isSubmittingSetup}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        background: 'var(--color-primary)',
+                        color: '#ffffff',
+                        fontWeight: 600,
+                        fontSize: 'var(--text-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      {isSubmittingSetup ? (
+                        <>
+                          <i className="ti ti-loader rotate" />
+                          <span>Initializing Post-Production...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="ti ti-player-play" />
+                          <span>Save & Start Post-Production</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )
+              }
+
+              // CASE B: Post-Production Configured — 4 Independent Active Tracks
+              if (!postProd) return null
+              const nowTime = new Date().getTime()
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Photo Track Card */}
+                  {postProd.photoTrack && (() => {
+                    const pt = postProd.photoTrack
+                    const overallDue = computeOverallDueDate([pt.designing.dueDate])
+                    const isOverdue = overallDue && nowTime > overallDue.getTime() && !isPhotoTrackComplete(pt)
+                    const isComplete = isPhotoTrackComplete(pt)
+                    const isReviewHistOpen = expandedReviewHistory['photoTrack']
+
+                    return (
+                      <div style={{
+                        background: 'var(--color-surface-raised)',
+                        borderTop: '0.5px solid var(--color-border)',
+                        borderRight: '0.5px solid var(--color-border)',
+                        borderBottom: '0.5px solid var(--color-border)',
+                        borderLeft: `3px solid ${isComplete ? 'var(--color-success)' : 'var(--color-accent)'}`,
+                        borderRadius: '8px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-camera" style={{ fontSize: '16px', color: 'var(--color-accent)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Photo Track
+                            </span>
+                          </div>
+                          <Badge
+                            variant={isComplete ? 'done' : pt.status === 'inProgress' ? 'inProgress' : 'todo'}
+                            label={isComplete ? 'Completed' : pt.status === 'inProgress' ? 'In Progress' : 'Not Started'}
+                          />
+                        </div>
+
+                        {/* Overall Due Date & Assignee */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-foreground-muted)' }}>
+                            <i className="ti ti-user" style={{ fontSize: '13px' }} />
+                            <span>{pt.assignment.staffName}</span>
+                            {pt.assignment.freelancerName && (
+                              <span style={{ color: 'var(--color-secondary)' }}>+ {pt.assignment.freelancerName}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="ti ti-calendar" style={{ fontSize: '13px', color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ fontWeight: 600, color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                              Due {formatDisplayDate(overallDue)}
+                            </span>
+                            {isOverdue && (
+                              <span style={{
+                                fontSize: '9px',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                background: 'var(--color-danger-muted)',
+                                color: 'var(--color-danger)',
+                                fontWeight: 700,
+                              }}>
+                                OVERDUE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Checkboxes */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div
+                            onClick={() => handleTrackCheckboxToggle('photoTrack', 'selectedPhotos', pt.selectedPhotos)}
+                            style={{
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              background: pt.selectedPhotos ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                              border: `0.5px solid ${pt.selectedPhotos ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            }}
+                          >
+                            <i className={pt.selectedPhotos ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: pt.selectedPhotos ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: pt.selectedPhotos ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                              Selected Photos
+                            </span>
+                          </div>
+
+                          <div
+                            onClick={() => handleTrackCheckboxToggle('photoTrack', 'rawDelivered', pt.rawDelivered)}
+                            style={{
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              background: pt.rawDelivered ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                              border: `0.5px solid ${pt.rawDelivered ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            }}
+                          >
+                            <i className={pt.rawDelivered ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: pt.rawDelivered ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: pt.rawDelivered ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                              Raw Photos Delivered
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Designing Stage */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Designing
+                            </span>
+                            <select
+                              value={pt.designing.status}
+                              onChange={(e) => handleTrackStageStatusChange('photoTrack', 'designing', e.target.value as PostProdStageStatus, pt.designing.startDate)}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: pt.designing.status === 'completed' ? 'var(--color-success-muted)' : pt.designing.status === 'inProgress' ? 'var(--color-accent-muted)' : 'var(--color-surface-raised)',
+                                color: pt.designing.status === 'completed' ? 'var(--color-success)' : pt.designing.status === 'inProgress' ? 'var(--color-accent)' : 'var(--color-foreground-muted)',
+                                border: '0.5px solid var(--color-border)',
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="inProgress">In Progress</option>
+                              <option value="waitingClient">Waiting for Client</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            <span>Start: {formatDisplayDate(pt.designing.startDate)}</span>
+                            <span>Due: {formatDisplayDate(pt.designing.dueDate)}</span>
+                          </div>
+                        </div>
+
+                        {/* Client Review */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Client Review
+                            </span>
+                            {!pt.clientReview.required ? (
+                              <span style={{ fontSize: '10px', color: 'var(--color-success)', fontWeight: 600 }}>
+                                <i className="ti ti-check" /> Not Required
+                              </span>
+                            ) : (
+                              <Badge
+                                variant={pt.clientReview.status === 'approved' ? 'done' : pt.clientReview.status === 'notApproved' ? 'overdue' : pt.clientReview.status === 'waitingClient' ? 'review' : 'todo'}
+                                label={pt.clientReview.status === 'approved' ? 'Approved' : pt.clientReview.status === 'notApproved' ? 'Revision Needed' : pt.clientReview.status === 'waitingClient' ? 'Waiting Client' : 'Pending'}
+                              />
+                            )}
+                          </div>
+
+                          {pt.clientReview.required && pt.clientReview.status !== 'approved' && (
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                              <button
+                                onClick={() => handleClientReviewAction('photoTrack', 'approved')}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-success)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-check" /> Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectModalTrack('photoTrack')
+                                  setRejectNotes('')
+                                }}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-danger)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-x" /> Not Approved
+                              </button>
+                            </div>
+                          )}
+
+                          {pt.clientReview.required && pt.clientReview.history && pt.clientReview.history.length > 0 && (
+                            <div>
+                              <button
+                                onClick={() => setExpandedReviewHistory(prev => ({ ...prev, photoTrack: !prev.photoTrack }))}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '0',
+                                  fontSize: '10px',
+                                  color: 'var(--color-accent)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className={isReviewHistOpen ? 'ti ti-chevron-down' : 'ti ti-chevron-right'} />
+                                <span>Review History ({pt.clientReview.history.length})</span>
+                              </button>
+
+                              {isReviewHistOpen && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                                  {pt.clientReview.history.map((h, i) => (
+                                    <div key={i} style={{ padding: '4px 6px', background: 'var(--color-surface-raised)', borderRadius: '4px', fontSize: '10px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: h.decision === 'approved' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                        <span>{h.decision === 'approved' ? '✓ Approved' : '✗ Revision Requested'}</span>
+                                        <span style={{ color: 'var(--color-foreground-subtle)' }}>{formatDisplayDate(h.reviewedAt)}</span>
+                                      </div>
+                                      {h.notes && <div style={{ color: 'var(--color-foreground-muted)', marginTop: '2px' }}>{h.notes}</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Album Track Card */}
+                  {postProd.albumTrack && (() => {
+                    const at = postProd.albumTrack
+                    const overallDue = computeOverallDueDate([at.albumDesigning.dueDate, at.creatingAlbum.dueDate])
+                    const isOverdue = overallDue && nowTime > overallDue.getTime() && !isAlbumTrackComplete(at)
+                    const isComplete = isAlbumTrackComplete(at)
+                    const isReviewHistOpen = expandedReviewHistory['albumTrack']
+
+                    return (
+                      <div style={{
+                        background: 'var(--color-surface-raised)',
+                        borderTop: '0.5px solid var(--color-border)',
+                        borderRight: '0.5px solid var(--color-border)',
+                        borderBottom: '0.5px solid var(--color-border)',
+                        borderLeft: `3px solid ${isComplete ? 'var(--color-success)' : 'var(--color-primary)'}`,
+                        borderRadius: '8px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-book" style={{ fontSize: '16px', color: 'var(--color-primary)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Album Track
+                            </span>
+                          </div>
+                          <Badge
+                            variant={isComplete ? 'done' : at.status === 'inProgress' ? 'inProgress' : 'todo'}
+                            label={isComplete ? 'Completed' : at.status === 'inProgress' ? 'In Progress' : 'Not Started'}
+                          />
+                        </div>
+
+                        {/* Overall Due Date & Assignee */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-foreground-muted)' }}>
+                            <i className="ti ti-user" style={{ fontSize: '13px' }} />
+                            <span>{at.assignment.staffName}</span>
+                            {at.assignment.freelancerName && (
+                              <span style={{ color: 'var(--color-secondary)' }}>+ {at.assignment.freelancerName}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="ti ti-calendar" style={{ fontSize: '13px', color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ fontWeight: 600, color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                              Due {formatDisplayDate(overallDue)}
+                            </span>
+                            {isOverdue && (
+                              <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: 'var(--color-danger-muted)', color: 'var(--color-danger)', fontWeight: 700 }}>
+                                OVERDUE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stage 1: Album Designing */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Album Designing
+                            </span>
+                            <select
+                              value={at.albumDesigning.status}
+                              onChange={(e) => handleTrackStageStatusChange('albumTrack', 'albumDesigning', e.target.value as PostProdStageStatus, at.albumDesigning.startDate)}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: at.albumDesigning.status === 'completed' ? 'var(--color-success-muted)' : at.albumDesigning.status === 'inProgress' ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                                color: at.albumDesigning.status === 'completed' ? 'var(--color-success)' : at.albumDesigning.status === 'inProgress' ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                                border: '0.5px solid var(--color-border)',
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="inProgress">In Progress</option>
+                              <option value="waitingClient">Waiting for Client</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            <span>Start: {formatDisplayDate(at.albumDesigning.startDate)}</span>
+                            <span>Due: {formatDisplayDate(at.albumDesigning.dueDate)}</span>
+                          </div>
+                        </div>
+
+                        {/* Stage 2: Album Client Review */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Album Client Review
+                            </span>
+                            {!at.clientReview.required ? (
+                              <span style={{ fontSize: '10px', color: 'var(--color-success)', fontWeight: 600 }}>
+                                <i className="ti ti-check" /> Not Required
+                              </span>
+                            ) : (
+                              <Badge
+                                variant={at.clientReview.status === 'approved' ? 'done' : at.clientReview.status === 'notApproved' ? 'overdue' : at.clientReview.status === 'waitingClient' ? 'review' : 'todo'}
+                                label={at.clientReview.status === 'approved' ? 'Approved' : at.clientReview.status === 'notApproved' ? 'Revision Needed' : at.clientReview.status === 'waitingClient' ? 'Waiting Client' : 'Pending'}
+                              />
+                            )}
+                          </div>
+
+                          {at.clientReview.required && at.clientReview.status !== 'approved' && (
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                              <button
+                                onClick={() => handleClientReviewAction('albumTrack', 'approved')}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-success)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-check" /> Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectModalTrack('albumTrack')
+                                  setRejectNotes('')
+                                }}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-danger)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-x" /> Not Approved
+                              </button>
+                            </div>
+                          )}
+
+                          {at.clientReview.required && at.clientReview.history && at.clientReview.history.length > 0 && (
+                            <div>
+                              <button
+                                onClick={() => setExpandedReviewHistory(prev => ({ ...prev, albumTrack: !prev.albumTrack }))}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '0',
+                                  fontSize: '10px',
+                                  color: 'var(--color-accent)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className={isReviewHistOpen ? 'ti ti-chevron-down' : 'ti ti-chevron-right'} />
+                                <span>Review History ({at.clientReview.history.length})</span>
+                              </button>
+
+                              {isReviewHistOpen && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                                  {at.clientReview.history.map((h, i) => (
+                                    <div key={i} style={{ padding: '4px 6px', background: 'var(--color-surface-raised)', borderRadius: '4px', fontSize: '10px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: h.decision === 'approved' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                        <span>{h.decision === 'approved' ? '✓ Approved' : '✗ Revision Requested'}</span>
+                                        <span style={{ color: 'var(--color-foreground-subtle)' }}>{formatDisplayDate(h.reviewedAt)}</span>
+                                      </div>
+                                      {h.notes && <div style={{ color: 'var(--color-foreground-muted)', marginTop: '2px' }}>{h.notes}</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Stage 3: Creating Album */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Creating Album
+                            </span>
+                            <select
+                              value={at.creatingAlbum.status}
+                              onChange={(e) => handleTrackStageStatusChange('albumTrack', 'creatingAlbum', e.target.value as PostProdStageStatus, at.creatingAlbum.startDate)}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: at.creatingAlbum.status === 'completed' ? 'var(--color-success-muted)' : at.creatingAlbum.status === 'inProgress' ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                                color: at.creatingAlbum.status === 'completed' ? 'var(--color-success)' : at.creatingAlbum.status === 'inProgress' ? 'var(--color-primary)' : 'var(--color-foreground-muted)',
+                                border: '0.5px solid var(--color-border)',
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="inProgress">In Progress</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            <span>Start: {formatDisplayDate(at.creatingAlbum.startDate)}</span>
+                            <span>Due: {formatDisplayDate(at.creatingAlbum.dueDate)}</span>
+                          </div>
+                        </div>
+
+                        {/* Delivered Checkbox */}
+                        <div
+                          onClick={() => handleTrackCheckboxToggle('albumTrack', 'delivered', at.delivered)}
+                          style={{
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            background: at.delivered ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                            border: `0.5px solid ${at.delivered ? 'var(--color-success)' : 'var(--color-border)'}`,
+                          }}
+                        >
+                          <i className={at.delivered ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: at.delivered ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                          <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: at.delivered ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                            Physical Album Delivered
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Video Highlights Track Card */}
+                  {postProd.videoTrack && (() => {
+                    const vt = postProd.videoTrack
+                    const overallDue = computeOverallDueDate([vt.highlights.dueDate])
+                    const isOverdue = overallDue && nowTime > overallDue.getTime() && !isVideoTrackComplete(vt)
+                    const isComplete = isVideoTrackComplete(vt)
+                    const isReviewHistOpen = expandedReviewHistory['videoTrack']
+
+                    return (
+                      <div style={{
+                        background: 'var(--color-surface-raised)',
+                        borderTop: '0.5px solid var(--color-border)',
+                        borderRight: '0.5px solid var(--color-border)',
+                        borderBottom: '0.5px solid var(--color-border)',
+                        borderLeft: `3px solid ${isComplete ? 'var(--color-success)' : 'var(--color-secondary)'}`,
+                        borderRadius: '8px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-sparkles" style={{ fontSize: '16px', color: 'var(--color-secondary)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Video Highlights Track
+                            </span>
+                          </div>
+                          <Badge
+                            variant={isComplete ? 'done' : vt.status === 'inProgress' ? 'inProgress' : 'todo'}
+                            label={isComplete ? 'Completed' : vt.status === 'inProgress' ? 'In Progress' : 'Not Started'}
+                          />
+                        </div>
+
+                        {/* Overall Due Date & Assignee */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-foreground-muted)' }}>
+                            <i className="ti ti-user" style={{ fontSize: '13px' }} />
+                            <span>{vt.assignment.staffName}</span>
+                            {vt.assignment.freelancerName && (
+                              <span style={{ color: 'var(--color-secondary)' }}>+ {vt.assignment.freelancerName}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="ti ti-calendar" style={{ fontSize: '13px', color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ fontWeight: 600, color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                              Due {formatDisplayDate(overallDue)}
+                            </span>
+                            {isOverdue && (
+                              <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: 'var(--color-danger-muted)', color: 'var(--color-danger)', fontWeight: 700 }}>
+                                OVERDUE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Checkboxes */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div
+                            onClick={() => handleTrackCheckboxToggle('videoTrack', 'selectedVideo', vt.selectedVideo)}
+                            style={{
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              background: vt.selectedVideo ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                              border: `0.5px solid ${vt.selectedVideo ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            }}
+                          >
+                            <i className={vt.selectedVideo ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: vt.selectedVideo ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: vt.selectedVideo ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                              Selected Video
+                            </span>
+                          </div>
+
+                          <div
+                            onClick={() => handleTrackCheckboxToggle('videoTrack', 'rawVideoDelivered', vt.rawVideoDelivered)}
+                            style={{
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              background: vt.rawVideoDelivered ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                              border: `0.5px solid ${vt.rawVideoDelivered ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            }}
+                          >
+                            <i className={vt.rawVideoDelivered ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: vt.rawVideoDelivered ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: vt.rawVideoDelivered ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                              Raw Video Delivered
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Highlights Stage */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Highlights Editing
+                            </span>
+                            <select
+                              value={vt.highlights.status}
+                              onChange={(e) => handleTrackStageStatusChange('videoTrack', 'highlights', e.target.value as PostProdStageStatus, vt.highlights.startDate)}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: vt.highlights.status === 'completed' ? 'var(--color-success-muted)' : vt.highlights.status === 'inProgress' ? 'var(--color-secondary-muted)' : 'var(--color-surface-raised)',
+                                color: vt.highlights.status === 'completed' ? 'var(--color-success)' : vt.highlights.status === 'inProgress' ? 'var(--color-secondary)' : 'var(--color-foreground-muted)',
+                                border: '0.5px solid var(--color-border)',
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="inProgress">In Progress</option>
+                              <option value="waitingClient">Waiting for Client</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            <span>Start: {formatDisplayDate(vt.highlights.startDate)}</span>
+                            <span>Due: {formatDisplayDate(vt.highlights.dueDate)}</span>
+                          </div>
+                        </div>
+
+                        {/* Client Review */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Highlights Client Review
+                            </span>
+                            {!vt.clientReview.required ? (
+                              <span style={{ fontSize: '10px', color: 'var(--color-success)', fontWeight: 600 }}>
+                                <i className="ti ti-check" /> Not Required
+                              </span>
+                            ) : (
+                              <Badge
+                                variant={vt.clientReview.status === 'approved' ? 'done' : vt.clientReview.status === 'notApproved' ? 'overdue' : vt.clientReview.status === 'waitingClient' ? 'review' : 'todo'}
+                                label={vt.clientReview.status === 'approved' ? 'Approved' : vt.clientReview.status === 'notApproved' ? 'Revision Needed' : vt.clientReview.status === 'waitingClient' ? 'Waiting Client' : 'Pending'}
+                              />
+                            )}
+                          </div>
+
+                          {vt.clientReview.required && vt.clientReview.status !== 'approved' && (
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                              <button
+                                onClick={() => handleClientReviewAction('videoTrack', 'approved')}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-success)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-check" /> Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectModalTrack('videoTrack')
+                                  setRejectNotes('')
+                                }}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-danger)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-x" /> Not Approved
+                              </button>
+                            </div>
+                          )}
+
+                          {vt.clientReview.required && vt.clientReview.history && vt.clientReview.history.length > 0 && (
+                            <div>
+                              <button
+                                onClick={() => setExpandedReviewHistory(prev => ({ ...prev, videoTrack: !prev.videoTrack }))}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '0',
+                                  fontSize: '10px',
+                                  color: 'var(--color-accent)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className={isReviewHistOpen ? 'ti ti-chevron-down' : 'ti ti-chevron-right'} />
+                                <span>Review History ({vt.clientReview.history.length})</span>
+                              </button>
+
+                              {isReviewHistOpen && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                                  {vt.clientReview.history.map((h, i) => (
+                                    <div key={i} style={{ padding: '4px 6px', background: 'var(--color-surface-raised)', borderRadius: '4px', fontSize: '10px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: h.decision === 'approved' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                        <span>{h.decision === 'approved' ? '✓ Approved' : '✗ Revision Requested'}</span>
+                                        <span style={{ color: 'var(--color-foreground-subtle)' }}>{formatDisplayDate(h.reviewedAt)}</span>
+                                      </div>
+                                      {h.notes && <div style={{ color: 'var(--color-foreground-muted)', marginTop: '2px' }}>{h.notes}</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Full Video Track Card */}
+                  {postProd.fullVideoTrack && (() => {
+                    const fvt = postProd.fullVideoTrack
+                    const overallDue = computeOverallDueDate([fvt.fullVideoEditing.dueDate])
+                    const isOverdue = overallDue && nowTime > overallDue.getTime() && !isFullVideoTrackComplete(fvt)
+                    const isComplete = isFullVideoTrackComplete(fvt)
+                    const isReviewHistOpen = expandedReviewHistory['fullVideoTrack']
+
+                    return (
+                      <div style={{
+                        background: 'var(--color-surface-raised)',
+                        borderTop: '0.5px solid var(--color-border)',
+                        borderRight: '0.5px solid var(--color-border)',
+                        borderBottom: '0.5px solid var(--color-border)',
+                        borderLeft: `3px solid ${isComplete ? 'var(--color-success)' : 'var(--color-purple)'}`,
+                        borderRadius: '8px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ti ti-movie" style={{ fontSize: '16px', color: 'var(--color-purple)' }} />
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                              Full Video Track
+                            </span>
+                          </div>
+                          <Badge
+                            variant={isComplete ? 'done' : fvt.status === 'inProgress' ? 'inProgress' : 'todo'}
+                            label={isComplete ? 'Completed' : fvt.status === 'inProgress' ? 'In Progress' : 'Not Started'}
+                          />
+                        </div>
+
+                        {/* Overall Due Date & Assignee */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-foreground-muted)' }}>
+                            <i className="ti ti-user" style={{ fontSize: '13px' }} />
+                            <span>{fvt.assignment.staffName}</span>
+                            {fvt.assignment.freelancerName && (
+                              <span style={{ color: 'var(--color-secondary)' }}>+ {fvt.assignment.freelancerName}</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="ti ti-calendar" style={{ fontSize: '13px', color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground-subtle)' }} />
+                            <span style={{ fontWeight: 600, color: isOverdue ? 'var(--color-danger)' : 'var(--color-foreground)' }}>
+                              Due {formatDisplayDate(overallDue)}
+                            </span>
+                            {isOverdue && (
+                              <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: 'var(--color-danger-muted)', color: 'var(--color-danger)', fontWeight: 700 }}>
+                                OVERDUE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stage: Full Video Editing */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Full Video Editing
+                            </span>
+                            <select
+                              value={fvt.fullVideoEditing.status}
+                              onChange={(e) => handleTrackStageStatusChange('fullVideoTrack', 'fullVideoEditing', e.target.value as PostProdStageStatus, fvt.fullVideoEditing.startDate)}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: fvt.fullVideoEditing.status === 'completed' ? 'var(--color-success-muted)' : fvt.fullVideoEditing.status === 'inProgress' ? 'var(--color-purple-muted)' : 'var(--color-surface-raised)',
+                                color: fvt.fullVideoEditing.status === 'completed' ? 'var(--color-success)' : fvt.fullVideoEditing.status === 'inProgress' ? 'var(--color-purple)' : 'var(--color-foreground-muted)',
+                                border: '0.5px solid var(--color-border)',
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="inProgress">In Progress</option>
+                              <option value="waitingClient">Waiting for Client</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                            <span>Start: {formatDisplayDate(fvt.fullVideoEditing.startDate)}</span>
+                            <span>Due: {formatDisplayDate(fvt.fullVideoEditing.dueDate)}</span>
+                          </div>
+                        </div>
+
+                        {/* Client Review */}
+                        <div style={{
+                          padding: '8px 10px',
+                          background: 'var(--color-surface)',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                              Full Video Client Review
+                            </span>
+                            {!fvt.clientReview.required ? (
+                              <span style={{ fontSize: '10px', color: 'var(--color-success)', fontWeight: 600 }}>
+                                <i className="ti ti-check" /> Not Required
+                              </span>
+                            ) : (
+                              <Badge
+                                variant={fvt.clientReview.status === 'approved' ? 'done' : fvt.clientReview.status === 'notApproved' ? 'overdue' : fvt.clientReview.status === 'waitingClient' ? 'review' : 'todo'}
+                                label={fvt.clientReview.status === 'approved' ? 'Approved' : fvt.clientReview.status === 'notApproved' ? 'Revision Needed' : fvt.clientReview.status === 'waitingClient' ? 'Waiting Client' : 'Pending'}
+                              />
+                            )}
+                          </div>
+
+                          {fvt.clientReview.required && fvt.clientReview.status !== 'approved' && (
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                              <button
+                                onClick={() => handleClientReviewAction('fullVideoTrack', 'approved')}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-success)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-check" /> Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectModalTrack('fullVideoTrack')
+                                  setRejectNotes('')
+                                }}
+                                style={{
+                                  flex: 1,
+                                  padding: '5px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--color-danger)',
+                                  color: '#ffffff',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className="ti ti-x" /> Not Approved
+                              </button>
+                            </div>
+                          )}
+
+                          {fvt.clientReview.required && fvt.clientReview.history && fvt.clientReview.history.length > 0 && (
+                            <div>
+                              <button
+                                onClick={() => setExpandedReviewHistory(prev => ({ ...prev, fullVideoTrack: !prev.fullVideoTrack }))}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '0',
+                                  fontSize: '10px',
+                                  color: 'var(--color-accent)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <i className={isReviewHistOpen ? 'ti ti-chevron-down' : 'ti ti-chevron-right'} />
+                                <span>Review History ({fvt.clientReview.history.length})</span>
+                              </button>
+
+                              {isReviewHistOpen && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                                  {fvt.clientReview.history.map((h, i) => (
+                                    <div key={i} style={{ padding: '4px 6px', background: 'var(--color-surface-raised)', borderRadius: '4px', fontSize: '10px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: h.decision === 'approved' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                        <span>{h.decision === 'approved' ? '✓ Approved' : '✗ Revision Requested'}</span>
+                                        <span style={{ color: 'var(--color-foreground-subtle)' }}>{formatDisplayDate(h.reviewedAt)}</span>
+                                      </div>
+                                      {h.notes && <div style={{ color: 'var(--color-foreground-muted)', marginTop: '2px' }}>{h.notes}</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Delivered Checkbox */}
+                        <div
+                          onClick={() => handleTrackCheckboxToggle('fullVideoTrack', 'delivered', fvt.delivered)}
+                          style={{
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            background: fvt.delivered ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                            border: `0.5px solid ${fvt.delivered ? 'var(--color-success)' : 'var(--color-border)'}`,
+                          }}
+                        >
+                          <i className={fvt.delivered ? 'ti ti-checkbox' : 'ti ti-square'} style={{ fontSize: '16px', color: fvt.delivered ? 'var(--color-success)' : 'var(--color-foreground-subtle)' }} />
+                          <span style={{ flex: 1, fontSize: 'var(--text-xs)', color: fvt.delivered ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                            Full Video Delivered
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )
+            })()}
+
+            {/* Assigned Staff & Freelancer Crew Section (Hidden on Booked stage) */}
+            {panelStageKey !== 'booked' && (
+              <>
+                {/* Assigned Staff Section */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
+                        Assigned team
+                  </span>
+                  {isTeamAssignmentMandatory && (
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      background: hasAssignedTeamMembers
+                        ? 'var(--color-success-muted)'
+                        : panelStageStatus === 'active'
+                        ? 'var(--color-danger-muted)'
+                        : 'var(--color-surface-raised)',
+                      color: hasAssignedTeamMembers
+                        ? 'var(--color-success)'
+                        : panelStageStatus === 'active'
+                        ? 'var(--color-danger)'
+                        : 'var(--color-foreground-subtle)',
+                      border: `0.5px solid ${
+                        hasAssignedTeamMembers
+                          ? 'var(--color-success)'
+                          : panelStageStatus === 'active'
+                          ? 'var(--color-danger)'
+                          : 'var(--color-border)'
+                      }`,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}>
+                      Mandatory
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                  {assignedTeamMembers.length} assigned
+                </span>
+              </div>
+
+              {panelStageStatus === 'active' && isTeamAssignmentMandatory && !hasAssignedTeamMembers && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'var(--color-danger-muted)',
+                  border: '0.5px solid var(--color-danger)',
+                  color: 'var(--color-danger)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 500,
+                }}>
+                  <i className="ti ti-alert-circle" style={{ fontSize: '14px', flexShrink: 0 }} />
+                  <span>Mandatory: Assign at least one team member to advance this stage.</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {assignedTeamMembers.map(tm => {
+                  const init = tm.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                  return (
+                    <div
+                      key={tm.uid}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        borderRadius: '16px',
+                        padding: '3px 10px 3px 4px',
+                      }}
+                    >
+                      <div style={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '50%',
+                        background: 'var(--color-primary-muted)',
+                        color: 'var(--color-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                      }}>
+                        {init}
+                      </div>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                        {tm.name}
+                      </span>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveStaff(tm.uid)
+                        }}
+                        style={{ cursor: 'pointer', color: 'var(--color-foreground-subtle)', marginLeft: '2px' }}
+                      >
+                        <i className="ti ti-x" style={{ fontSize: '11px' }} />
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Quick Assign Staff Dropdown */}
+              {unassignedStaff.length > 0 && (
+                <div style={{ marginTop: '4px' }}>
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) handleAssignStaff(e.target.value)
+                    }}
+                    style={{
+                      fontFamily: 'var(--font-inter)',
+                      width: '100%',
+                      height: '30px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '6px',
+                      padding: '0 8px',
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-foreground-muted)',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">＋ Assign staff member…</option>
+                    {unassignedStaff.map(s => (
+                      <option key={s.uid} value={s.uid}>
+                        {s.name} ({s.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Freelancer Crew Section (Highlight for Pre-Prod) */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              padding: panelStageKey === 'preProduction' ? '12px' : '0',
+              borderRadius: panelStageKey === 'preProduction' ? '8px' : '0',
+              background: panelStageKey === 'preProduction' ? 'var(--color-surface-raised)' : 'transparent',
+              border: panelStageKey === 'preProduction' ? '0.5px solid var(--color-border)' : 'none',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: panelStageKey === 'preProduction' ? 'var(--color-primary)' : 'var(--color-foreground-subtle)',
+                }}>
+                  Freelancer crew {panelStageKey === 'preProduction' && '· Pre-Prod Gate'}
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+                  {assignedFreelancers.length} assigned
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {assignedFreelancers.length === 0 ? (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontStyle: 'italic' }}>
+                    No freelancers assigned yet.
+                  </span>
+                ) : (
+                  assignedFreelancers.map(fl => {
+                    const specificAssignment = selectedProject?.freelancerAssignments?.[fl.freelancerId]
+                    const roleLabel = specificAssignment?.role || fl.skill
+                    return (
+                      <div
+                        key={fl.freelancerId}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'var(--color-surface)',
+                          border: '0.5px solid var(--color-border)',
+                          borderRadius: '16px',
+                          padding: '3px 10px 3px 6px',
+                        }}
+                      >
+                        <span style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          padding: '2px 5px',
+                          borderRadius: '4px',
+                          background: 'var(--color-secondary-muted)',
+                          color: 'var(--color-secondary)',
+                          textTransform: 'uppercase',
+                        }}>
+                          FL
+                        </span>
+                        <span
+                          onClick={() => router.push(`/hrms/freelancers/${fl.freelancerId}`)}
+                          title="Click to view freelancer profile"
+                          style={{
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 600,
+                            color: 'var(--color-foreground)',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            textDecorationColor: 'var(--color-border)',
+                          }}
+                        >
+                          {fl.name}
+                        </span>
+                        <span style={{ fontSize: '10px', color: 'var(--color-foreground-muted)' }}>
+                          ({roleLabel})
+                        </span>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveFreelancer(fl.freelancerId)
+                          }}
+                          title="Remove freelancer"
+                          style={{ cursor: 'pointer', color: 'var(--color-foreground-subtle)', marginLeft: '2px' }}
+                        >
+                          <i className="ti ti-x" style={{ fontSize: '11px' }} />
+                        </span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Quick Assign Freelancer Dropdown */}
+              {unassignedFreelancers.length > 0 && (
+                <div style={{ marginTop: '4px' }}>
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) handleAssignFreelancer(e.target.value)
+                    }}
+                    style={{
+                      fontFamily: 'var(--font-inter)',
+                      width: '100%',
+                      height: '30px',
+                      background: 'var(--color-surface)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '6px',
+                      padding: '0 8px',
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--color-foreground-muted)',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">＋ Assign freelancer to project…</option>
+                    {unassignedFreelancers.map(fl => (
+                      <option key={fl.freelancerId} value={fl.freelancerId}>
+                        {fl.name} ({fl.skill} · ₹{fl.dayRate}/day)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+
+                  {/* ─── ADVANCE / STATUS SECTION ─── */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+
+                    {/* CASE 1: Completed */}
+                    {panelStageStatus === 'completed' && (() => {
+                      const compDate = getStageCompletedDate(selectedProject, panelStageKey)
+                      const isCurrentActiveStage = selectedProject.stage === panelStageKey
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '8px', background: 'var(--color-success-muted)', border: '0.5px solid var(--color-success)' }}>
+                            <i className="ti ti-circle-check" style={{ fontSize: '20px', color: 'var(--color-success)', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-success)' }}>
+                                {isCurrentActiveStage ? 'Ready to Advance' : 'Stage Completed'}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                                {compDate
+                                  ? `Completed ${formatDateTime(compDate)} · Current: ${STAGE_CONFIGS[currentStageIndex]?.name}.`
+                                  : isCurrentActiveStage
+                                  ? `All gates satisfied · Advance to ${nextStageKey ? STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name : 'next stage'}.`
+                                  : `All gates satisfied · Current: ${STAGE_CONFIGS[currentStageIndex]?.name}.`}
+                              </div>
+                            </div>
+                          </div>
+                          {isCurrentActiveStage && nextStageKey ? (
+                            <button
+                              onClick={handleAdvanceStage}
+                              disabled={isAdvancing}
+                              style={{ fontFamily: 'var(--font-inter)', height: '42px', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: '#ffffff', fontSize: 'var(--text-sm)', fontWeight: 600, cursor: isAdvancing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%' }}
+                            >
+                              {isAdvancing ? 'Advancing…' : `Advance to ${STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}`}
+                              <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
+                            </button>
+                          ) : nextStageKey ? (
+                            <button
+                              onClick={() => setPanelStageKey(nextStageKey)}
+                              style={{ fontFamily: 'var(--font-inter)', height: '38px', borderRadius: '8px', border: '0.5px solid var(--color-border)', background: 'var(--color-surface-raised)', color: 'var(--color-foreground)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}
+                            >
+                              View {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}
+                              <i className="ti ti-arrow-right" style={{ fontSize: '14px' }} />
+                            </button>
+                          ) : null}
+                        </div>
+                      )
+                    })()}
+
+                    {/* CASE 2: Pending */}
+                    {panelStageStatus === 'pending' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '8px', background: 'var(--color-surface-raised)', border: '0.5px solid var(--color-border)' }}>
+                          <i className={panelStageKey === 'eventDay' ? 'ti ti-calendar-time' : 'ti ti-lock'} style={{ fontSize: '20px', color: 'var(--color-foreground-subtle)', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>Upcoming Stage</div>
+                            <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
+                              {panelStageKey === 'eventDay' && multiEventDays[selectedDayTab]
+                                ? `Scheduled for ${formatShortDate(multiEventDays[selectedDayTab].date)}.`
+                                : `Unlocks after ${STAGE_CONFIGS[currentStageIndex]?.name} is completed.`}
+                            </div>
+                          </div>
+                        </div>
+                        {selectedProject.stage === 'eventDay' && panelStageKey === 'postProduction' && (
+                          allEventDaysChecked ? (
+                            <button
+                              onClick={async () => {
+                                if (!selectedProject) return
+                                setIsAdvancing(true)
+                                try {
+                                  const nowComp = new Date()
+                                  const currKey = selectedProject.stage
+                                  if (!selectedProject.projectId.startsWith('demo-')) {
+                                    await updateProjectStage(selectedProject.projectId, panelStageKey, selectedProject.clientId, undefined, currKey)
+                                  }
+                                  setProjects(prev => prev.map(p => p.projectId === selectedProject.projectId ? { ...p, stage: panelStageKey, stageCompletedAt: { ...(p.stageCompletedAt || {}), [currKey]: nowComp }, updatedAt: nowComp } : p))
+                                } catch (e) { console.error(e) } finally { setIsAdvancing(false) }
+                              }}
+                              disabled={isAdvancing}
+                              style={{ fontFamily: 'var(--font-inter)', height: '42px', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: '#ffffff', fontSize: 'var(--text-sm)', fontWeight: 600, cursor: isAdvancing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%' }}
+                            >
+                              {isAdvancing ? 'Advancing…' : `Advance to ${STAGE_CONFIGS.find(s => s.stageKey === panelStageKey)?.name}`}
+                              <i className="ti ti-arrow-right" style={{ fontSize: '15px' }} />
+                            </button>
+                          ) : (
+                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-secondary)', background: 'var(--color-secondary-muted)', padding: '10px 12px', borderRadius: '8px', border: '0.5px solid var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <i className="ti ti-alert-circle" style={{ fontSize: '16px', flexShrink: 0 }} />
+                              All event days must have raw footage backed up before advancing to Post-Production.
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+
+                    {/* CASE 3: Active */}
+                    {panelStageStatus === 'active' && (() => {
+                      const advanceBlockReason = (() => {
+                        if (isTeamAssignmentMandatory && !hasAssignedTeamMembers) return 'Assign team member first'
+                        if (panelStageKey === 'eventDay' && !shootTimingInfo.isCompleted) return `Shoot ends ${shootTimingInfo.formattedTime || 'later'}`
+                        if (panelStageKey === 'eventDay' && !allEventDaysChecked) return multiEventDays.length > 1 ? `Pending backup: ${pendingEventDayLabels.join(', ')}` : 'Raw footage backup pending'
+                        return 'Gates pending'
+                      })()
+
+                      if (panelStageKey === 'delivered') {
+                        return isRecurring ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {getSessionDeliveryStatus(selectedDayTab) === 'completed' ? (
+                              <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--color-success-muted)', border: '0.5px solid var(--color-success)', color: 'var(--color-success)', fontSize: 'var(--text-sm)', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                <i className="ti ti-circle-check" style={{ fontSize: '16px' }} />Session {selectedDayTab + 1} Handover Complete
+                              </div>
+                            ) : (
+                              <Button onClick={() => handleDeliverSession(selectedDayTab)} disabled={isAdvancing} className="w-full h-10 text-xs font-semibold" style={{ background: 'var(--color-success)', color: '#ffffff' }}>
+                                <i className="ti ti-package" style={{ marginRight: '6px' }} />Deliver Session {selectedDayTab + 1}
+                              </Button>
+                            )}
+                          </div>
+                        ) : selectedProject.status === 'completed' ? (
+                          <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--color-success-muted)', border: '0.5px solid var(--color-success)', color: 'var(--color-success)', fontSize: 'var(--text-sm)', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            <i className="ti ti-circle-check" style={{ fontSize: '16px' }} />Event Done &amp; Handover Complete
+                          </div>
+                        ) : isPaymentPending ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--color-secondary-muted)', border: '0.5px solid var(--color-secondary)', borderRadius: '8px', padding: '12px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-secondary)', fontWeight: 600, fontSize: 'var(--text-xs)' }}>
+                              <i className="ti ti-alert-circle" style={{ fontSize: '16px' }} />Remaining Payment Pending
+                            </div>
+                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground)' }}>
+                              ₹{effectiveBalanceDue.toLocaleString('en-IN')} remaining of ₹{effectiveTotalAmount.toLocaleString('en-IN')}. Record final payment to complete.
+                            </div>
+                            <Button className="w-full h-9 text-xs font-medium" onClick={() => setRecordPaymentModalOpen(true)}>
+                              <i className="ti ti-cash" style={{ marginRight: '6px' }} />Record Remaining Payment
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-success)', fontSize: 'var(--text-xs)', fontWeight: 600, background: 'var(--color-success-muted)', border: '0.5px solid var(--color-success)', borderRadius: '8px', padding: '8px 12px' }}>
+                              <i className="ti ti-circle-check" style={{ fontSize: '15px' }} />
+                              {effectiveTotalAmount > 0 ? `All payments cleared (₹${effectiveTotalAmount.toLocaleString('en-IN')})` : 'Payments cleared'}
+                            </div>
+                            <button
+                              onClick={handleCompleteHandover}
+                              disabled={(!allPanelGatesDone && !overrideReason.trim()) || isAdvancing}
+                              style={{ fontFamily: 'var(--font-inter)', height: '42px', borderRadius: '8px', border: 'none', background: (allPanelGatesDone || overrideReason.trim()) ? 'var(--color-success)' : 'var(--color-surface-raised)', color: (allPanelGatesDone || overrideReason.trim()) ? '#ffffff' : 'var(--color-foreground-subtle)', fontSize: 'var(--text-sm)', fontWeight: 600, cursor: (allPanelGatesDone || overrideReason.trim()) && !isAdvancing ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', transition: 'all 0.15s ease' }}
+                            >
+                              {isAdvancing ? 'Completing…' : allPanelGatesDone ? <><span>Complete Event Handover</span><i className="ti ti-check" /></> : overrideReason.trim() ? <><span>Override &amp; Complete</span><i className="ti ti-check" /></> : <span>Complete Handover · {advanceBlockReason}</span>}
+                            </button>
+                            {!allPanelGatesDone && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Admin override (reason required)</span>
+                                <input value={overrideReason} onChange={e => setOverrideReason(e.target.value)} placeholder="Reason for override…" style={{ fontFamily: 'var(--font-inter)', boxSizing: 'border-box', width: '100%', height: '36px', background: 'var(--color-surface-raised)', border: '0.5px solid var(--color-border)', borderRadius: '8px', padding: '0 10px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground)', outline: 'none' }} />
+                              </div>
+                            )}
+                          </>
+                        )
+                      }
+
+                      return (
+                        <>
+                          <button
+                            onClick={handleAdvanceStage}
+                            disabled={(!allPanelGatesDone && !overrideReason.trim()) || isAdvancing}
+                            style={{ fontFamily: 'var(--font-inter)', height: '42px', borderRadius: '8px', border: 'none', background: (allPanelGatesDone || overrideReason.trim()) ? 'var(--color-primary)' : 'var(--color-surface-raised)', color: (allPanelGatesDone || overrideReason.trim()) ? '#ffffff' : 'var(--color-foreground-subtle)', fontSize: 'var(--text-sm)', fontWeight: 600, cursor: (allPanelGatesDone || overrideReason.trim()) && !isAdvancing ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', transition: 'all 0.15s ease' }}
+                          >
+                            {isAdvancing ? 'Advancing…' : allPanelGatesDone
+                              ? <><span>Advance to {STAGE_CONFIGS.find(s => s.stageKey === nextStageKey)?.name}</span><i className="ti ti-arrow-right" /></>
+                              : overrideReason.trim()
+                              ? <><span>Override &amp; Advance</span><i className="ti ti-arrow-right" /></>
+                              : <span>Advance · {advanceBlockReason}</span>}
+                          </button>
+                          {!allPanelGatesDone && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>Admin override (reason required)</span>
+                              <input value={overrideReason} onChange={e => setOverrideReason(e.target.value)} placeholder="Reason for override…" style={{ fontFamily: 'var(--font-inter)', boxSizing: 'border-box', width: '100%', height: '36px', background: 'var(--color-surface-raised)', border: '0.5px solid var(--color-border)', borderRadius: '8px', padding: '0 10px', fontSize: 'var(--text-xs)', color: 'var(--color-foreground)', outline: 'none' }} />
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+
+                    {/* Record Payment shortcut */}
+                    {effectiveBalanceDue > 0 && panelStageKey !== 'delivered' && (
+                      <button
+                        type="button"
+                        onClick={() => setRecordPaymentModalOpen(true)}
+                        style={{ fontFamily: 'var(--font-inter)', height: '36px', borderRadius: '8px', border: '0.5px solid var(--color-secondary)', background: 'var(--color-secondary-muted)', color: 'var(--color-secondary)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}
+                      >
+                        <i className="ti ti-cash" style={{ fontSize: '14px' }} />
+                        Record Payment · ₹{effectiveBalanceDue.toLocaleString('en-IN')} Due
+                      </button>
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
+
+    {/* ═══════════════════════════════════════════════════════════════════════
+        END MOBILE VIEW
+       ═══════════════════════════════════════════════════════════════════════ */}
+
+    {/* ═══════════════════════════════════════════════════════════════════════
+        SHARED MODALS (both desktop and mobile)
+       ═══════════════════════════════════════════════════════════════════════ */}
+    {selectedProject && (
+      <RecordPaymentModal
+        isOpen={recordPaymentModalOpen}
+        onClose={() => setRecordPaymentModalOpen(false)}
+        clientId={selectedProject.clientId}
+        clientName={
+          isDiscreteSession
+            ? `${selectedProject.clientName || selectedProject.eventName} (Session ${selectedProject.sessionIndex || 1} of ${selectedProject.totalSessions || 1})`
+            : (selectedProject.clientName || selectedProject.eventName)
+        }
+        totalAmount={effectiveTotalAmount}
+        balanceDue={effectiveBalanceDue}
+        maxBalanceDue={clientBalanceDue}
+      />
+    )}
+
+    {/* Client Review Rejection / Revision Modal */}
+    {rejectModalTrack && (
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.7)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '480px',
+          background: 'var(--color-surface-overlay)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          padding: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: '18px', color: 'var(--color-danger)' }} />
+              <span style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                Client Revision / Rejection
+              </span>
+            </div>
+            <button
+              onClick={() => setRejectModalTrack(null)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--color-foreground-muted)', cursor: 'pointer', fontSize: '18px' }}
+            >
+              <i className="ti ti-x" />
+            </button>
+          </div>
+
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', lineHeight: '1.5' }}>
+            Please enter client feedback or required revisions. The work stage for this track will reset to pending so edits can be performed.
+          </span>
+
+          <textarea
+            value={rejectNotes}
+            onChange={(e) => setRejectNotes(e.target.value)}
+            placeholder="e.g. Client requested color grade adjustments and skin retouching on portraits..."
+            rows={4}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              background: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '8px',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-sm)',
+              resize: 'vertical',
+              outline: 'none',
+              fontFamily: 'var(--font-inter)',
+            }}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button
+              onClick={() => setRejectModalTrack(null)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '6px',
+                border: '0.5px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-foreground)',
+                fontSize: 'var(--text-sm)',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleClientReviewAction(rejectModalTrack, 'notApproved', rejectNotes)}
+              disabled={isSubmittingReview}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                border: 'none',
+                background: 'var(--color-danger)',
+                color: '#ffffff',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 600,
+                cursor: isSubmittingReview ? 'not-allowed' : 'pointer',
+                opacity: isSubmittingReview ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {isSubmittingReview ? <i className="ti ti-loader rotate" /> : <i className="ti ti-check" />}
+              Confirm Rejection
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    </>
   )
 }
 
@@ -7915,6 +11513,7 @@ interface StageNodeCardProps {
   style?:         React.CSSProperties
   inPortId?:      string
   outPortId?:     string
+  portOrientation?: 'horizontal' | 'vertical'
   gates:          string[]
   gateDetails?:   StageNodeGateDetail[]
   assignedNames:  string[]
@@ -7932,6 +11531,7 @@ function StageNodeCard({
   style,
   inPortId,
   outPortId,
+  portOrientation = 'horizontal',
   gates,
   gateDetails,
   assignedNames,
@@ -7981,37 +11581,67 @@ function StageNodeCard({
         ...style,
       }}
     >
-      {/* Connector Ports on Left and Right (Measured dynamically by data-port-id) */}
+      {/* Connector Ports (Measured dynamically by data-port-id) */}
       {inPortId && (
         <span
           data-port-id={inPortId}
-          style={{
-            position: 'absolute',
-            left: '-6px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: '12px',
-            height: '12px',
-            borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '2px solid var(--color-accent)',
-          }}
+          style={
+            portOrientation === 'vertical'
+              ? {
+                  position: 'absolute',
+                  top: '-6px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '50%',
+                  background: 'var(--color-surface)',
+                  border: '2px solid var(--color-accent)',
+                  zIndex: 3,
+                }
+              : {
+                  position: 'absolute',
+                  left: '-6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '50%',
+                  background: 'var(--color-surface)',
+                  border: '2px solid var(--color-accent)',
+                }
+          }
         />
       )}
       {outPortId && (
         <span
           data-port-id={outPortId}
-          style={{
-            position: 'absolute',
-            right: '-6px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: '12px',
-            height: '12px',
-            borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '2px solid var(--color-accent)',
-          }}
+          style={
+            portOrientation === 'vertical'
+              ? {
+                  position: 'absolute',
+                  bottom: '-6px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '50%',
+                  background: 'var(--color-surface)',
+                  border: '2px solid var(--color-accent)',
+                  zIndex: 3,
+                }
+              : {
+                  position: 'absolute',
+                  right: '-6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '50%',
+                  background: 'var(--color-surface)',
+                  border: '2px solid var(--color-accent)',
+                }
+          }
         />
       )}
 

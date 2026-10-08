@@ -11,22 +11,26 @@ service cloud.firestore {
     function isAdminOrManager() { return isAdmin() || isManager(); }
 
     match /users/{uid} {
-      // Any signed-in user can read their own doc (avoids recursive getRole() deadlock)
-      // Admins/managers can read all user docs
-      allow read:   if isSignedIn() && (
-                      request.auth.uid == uid ||
-                      isAdminOrManager()
-                    );
+      // Any signed-in user can read user profiles (for team assignments, author info & pickers)
+      allow read:   if isSignedIn();
       allow write:  if isAdmin();
       allow delete: if false;
     }
 
     match /clients/{clientId} {
-      allow read, write: if isAdminOrManager();
+      allow read:        if isSignedIn();
+      allow write:       if isAdminOrManager();
       allow delete:      if isAdmin();
       match /payments/{paymentId} {
-        allow read, write: if isAdminOrManager();
+        allow read:        if isSignedIn();
+        allow write:       if isAdminOrManager();
       }
+    }
+
+    // Collection group rule for cross-client payments query
+    match /{path=**}/payments/{paymentId} {
+      allow read:        if isSignedIn();
+      allow write:       if isAdminOrManager();
     }
 
     match /bookingDrafts/{draftId} {
@@ -64,12 +68,30 @@ service cloud.firestore {
 
     match /equipment/{itemId} {
       allow read:  if isSignedIn();
+      // Admins/managers have full write permissions
+      // Signed-in staff can update custody and status fields during checkout / check-in
+      allow write: if isAdminOrManager() || (
+        isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'assignedToUid', 'assignedToName', 'currentCheckoutId',
+          'dueBackDate', 'lastUsedDate', 'updatedAt', 'condition'
+        ])
+      );
+
+      match /statusLogs/{logId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /equipmentKits/{kitId} {
+      allow read:  if isSignedIn();
       allow write: if isAdminOrManager();
     }
 
     match /checkouts/{checkoutId} {
       allow read:  if isSignedIn();
-      allow write: if isAdminOrManager();
+      // Allow signed-in staff, managers, and admins to record checkouts and returns
+      allow write: if isSignedIn();
     }
 
     match /attendance/{attendanceId} {
@@ -81,29 +103,37 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.staffUid || isAdminOrManager()
       );
-      // Staff can create their own check-in record
-      allow create: if isSignedIn() &&
-        request.resource.data.staffUid == request.auth.uid;
+      // Staff can create their own check-in record, or Admins/Managers can create
+      allow create: if isAdminOrManager() || (
+        isSignedIn() && request.resource.data.staffUid == request.auth.uid
+      );
       // Staff can update only their own open sessions (check-out)
       allow update: if isAdminOrManager() || (
         isSignedIn() &&
         resource.data.staffUid == request.auth.uid &&
         resource.data.status == 'open'
       );
+      allow delete: if isAdminOrManager();
     }
 
-    match /leaveRequests/{requestId} {
+    match /timeLogCorrections/{correctionId} {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.staffUid || isAdminOrManager()
       );
-      // Staff can submit their own leave/permission requests
-      allow create: if isSignedIn() &&
-        request.resource.data.staffUid == request.auth.uid;
+      allow write: if isAdminOrManager();
+    }
+
+    match /leaveRequests/{requestId} {
+      allow read: if isSignedIn();
+      // Staff can submit their own leave/permission requests, or Admins/Managers can create
+      allow create: if isAdminOrManager() || (
+        isSignedIn() && request.resource.data.staffUid == request.auth.uid
+      );
       // Admins/managers can review/approve/reject requests
       allow update, delete: if isAdminOrManager();
     }
 
-    match /salaries/{salaryId}    { allow read, write: if isAdmin(); }
+    match /salaries/{salaryId}    { allow read, write: if isAdminOrManager(); }
     match /payslips/{payslipId} {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.staffUid == request.auth.uid);
@@ -113,7 +143,12 @@ service cloud.firestore {
     match /freelancers/{freelancerId}   { allow read, write: if isAdminOrManager(); }
     match /freelancerPayouts/{payoutId} { allow read, write: if isAdmin(); }
     match /expenses/{expenseId}         { allow read, write: if isAdmin(); }
+    match /expenseCategories/{categoryId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
     match /budgets/{budgetId}           { allow read, write: if isAdmin(); }
+    match /payables/{payableId}         { allow read, write: if isAdmin(); }
     match /quotations/{quotationId}     { allow read, write: if isAdminOrManager(); }
     match /invoices/{invoiceId}         { allow read, write: if isAdminOrManager(); }
 
@@ -122,5 +157,19 @@ service cloud.firestore {
       // Allow managers and admins to update numbering counters and runtime config
       allow write: if isAdminOrManager();
     }
+
+    match /saved_addresses/{addressId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdminOrManager();
+    }
+
+    match /bankAccounts/{bankAccountId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /notifications/{notificationId} {
+      allow read, write: if isSignedIn();
+    }
   }
 }
+

@@ -11,8 +11,9 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { BookingDraft, EventType } from '@/types'
 import { DraftsModal } from '@/components/shared/DraftsModal'
+import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { bookingReducer, createInitialState, BookingWizardState } from './bookingReducer'
-import StepIndicator from './StepIndicator'
+import StepIndicator, { STEPS } from './StepIndicator'
 import StepBookingType from './steps/StepBookingType'
 import StepClient from './steps/StepClient'
 import StepEventDetails from './steps/StepEventDetails'
@@ -91,6 +92,8 @@ function NewBookingPageContent(): React.JSX.Element {
     }
     setBackConfirmOpen(true)
   }, [isFormDirty, router])
+
+  const { backSwipeHandlers } = useBackSwipe(handleHeaderBack)
 
   const handleDropBooking = useCallback(() => {
     setBackConfirmOpen(false)
@@ -308,7 +311,9 @@ function NewBookingPageContent(): React.JSX.Element {
       const bookingPayload = {
         eventName:       state.eventName.trim() || state.clientName.trim(),
         eventType:       state.eventType,
-        customEventType: state.eventType === 'other' ? state.customEventType.trim() : undefined,
+        customEventType: (state.eventType === 'other' || String(state.eventType).startsWith('custom_'))
+          ? (state.customEventType?.trim() || undefined)
+          : undefined,
         eventDate,
         startTime:       state.startTime,
         endTime:         state.endTime,
@@ -405,14 +410,18 @@ function NewBookingPageContent(): React.JSX.Element {
   // ─── Layout ──────────────────────────────────────────────────────
 
   return (
-    <div style={{
-      fontFamily: 'var(--font-inter)',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '0',
-      height: '100%',
-      minHeight: 'calc(100vh - 56px)',
-    }}>
+    <div
+      {...backSwipeHandlers}
+      style={{
+        fontFamily: 'var(--font-inter)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0',
+        height: '100%',
+        minHeight: 'calc(100vh - 56px)',
+        paddingBottom: '90px',
+      }}
+    >
       {/* Header */}
       <div style={{
         display: 'flex',
@@ -424,12 +433,7 @@ function NewBookingPageContent(): React.JSX.Element {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span
             onClick={handleHeaderBack}
-            style={{
-              cursor: 'pointer',
-              color: 'var(--color-foreground-muted)',
-              display: 'flex',
-              alignItems: 'center',
-            }}
+            className="hidden md:flex items-center cursor-pointer text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] transition-colors"
           >
             <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
           </span>
@@ -506,6 +510,65 @@ function NewBookingPageContent(): React.JSX.Element {
         </motion.div>
       )}
 
+      {/* Mobile Stepper Bar (< 768px) */}
+      <div className="block md:hidden py-3 px-1 border-b border-[var(--color-border)]">
+        {/* 6-segment progress bar */}
+        <div className="grid grid-cols-6 gap-1.5 mb-2.5">
+          {STEPS.map((s, idx) => {
+            const isCurrent = idx === currentStep
+            const isDone = completedSteps.has(idx)
+            const isClickable = isDone || idx <= currentStep
+            return (
+              <button
+                key={s.label}
+                type="button"
+                disabled={!isClickable}
+                onClick={() => isClickable && goToStep(idx)}
+                className="h-1.5 rounded-full transition-all duration-200"
+                style={{
+                  background: isCurrent
+                    ? 'var(--color-primary)'
+                    : isDone
+                      ? 'var(--color-success)'
+                      : 'var(--color-surface-raised)',
+                  border: isCurrent ? 'none' : '0.5px solid var(--color-border)',
+                  opacity: isClickable ? 1 : 0.4,
+                  cursor: isClickable ? 'pointer' : 'default',
+                }}
+                title={s.label}
+              />
+            )
+          })}
+        </div>
+        {/* Current Step Label & Quick Badge */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className="flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold"
+              style={{
+                background: 'var(--color-primary-muted)',
+                color: 'var(--color-primary)',
+                border: '0.5px solid var(--color-primary)',
+              }}
+            >
+              {currentStep + 1}
+            </span>
+            <span
+              className="text-xs font-semibold"
+              style={{ color: 'var(--color-foreground)', fontFamily: 'var(--font-inter)' }}
+            >
+              {STEPS[currentStep]?.label}
+            </span>
+          </div>
+          <span
+            className="text-[11px]"
+            style={{ color: 'var(--color-foreground-muted)', fontFamily: 'var(--font-inter)' }}
+          >
+            {completedSteps.size} of 6 completed
+          </span>
+        </div>
+      </div>
+
       {/* Body: Sidebar + Content */}
       <div style={{
         display: 'flex',
@@ -513,10 +576,13 @@ function NewBookingPageContent(): React.JSX.Element {
         gap: '0',
         paddingTop: '0',
       }}>
-        {/* Step Indicator */}
-        <div style={{
-          borderRight: '0.5px solid var(--color-border)',
-        }}>
+        {/* Step Indicator (desktop only) */}
+        <div
+          className="hidden md:block"
+          style={{
+            borderRight: '0.5px solid var(--color-border)',
+          }}
+        >
           <StepIndicator
             currentStep={currentStep}
             onStepClick={goToStep}
@@ -525,13 +591,9 @@ function NewBookingPageContent(): React.JSX.Element {
         </div>
 
         {/* Content area */}
-        <div style={{
-          flex: 1,
-          padding: '24px 32px',
-          maxWidth: '860px',
-          overflow: 'visible',
-          position: 'relative',
-        }}>
+        <div
+          className="flex-1 w-full max-w-[860px] p-4 sm:p-6 md:px-8 md:py-6 overflow-visible relative"
+        >
           {/* Error banner */}
           {error && (
             <motion.div
@@ -575,28 +637,21 @@ function NewBookingPageContent(): React.JSX.Element {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              paddingTop: '24px',
+              paddingTop: '20px',
               marginTop: '24px',
               borderTop: '0.5px solid var(--color-border)',
+              gap: '12px',
             }}>
               <div>
                 {currentStep > 0 && (
                   <motion.button
                     onClick={handleBack}
+                    className="h-10 sm:h-9 px-4 rounded-lg font-medium text-sm flex items-center gap-1.5 cursor-pointer"
                     style={{
                       fontFamily: 'var(--font-inter)',
-                      height: '38px',
-                      padding: '0 16px',
-                      borderRadius: '8px',
                       border: '0.5px solid var(--color-border)',
                       background: 'transparent',
-                      fontSize: 'var(--text-sm)',
-                      fontWeight: 500,
                       color: 'var(--color-foreground)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
                     }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -609,20 +664,12 @@ function NewBookingPageContent(): React.JSX.Element {
 
               <motion.button
                 onClick={handleNext}
+                className="h-10 sm:h-9 px-5 rounded-lg font-semibold text-sm flex items-center justify-center gap-1.5 cursor-pointer ml-auto"
                 style={{
                   fontFamily: 'var(--font-inter)',
-                  height: '38px',
-                  padding: '0 20px',
-                  borderRadius: '8px',
                   border: 'none',
                   background: 'var(--color-primary)',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 600,
                   color: '#ffffff',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
                 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -703,10 +750,10 @@ function NewBookingPageContent(): React.JSX.Element {
               gap: '8px',
               marginTop: '8px',
             }}>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div className="flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 sm:justify-end">
                 <Button
                   variant="outline"
-                  className="h-9"
+                  className="h-10 sm:h-9 w-full sm:w-auto"
                   disabled={savingDraftAndExiting}
                   onClick={() => setBackConfirmOpen(false)}
                 >
@@ -714,7 +761,7 @@ function NewBookingPageContent(): React.JSX.Element {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9"
+                  className="h-10 sm:h-9 w-full sm:w-auto"
                   style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
                   disabled={savingDraftAndExiting}
                   onClick={handleDropBooking}
@@ -722,7 +769,7 @@ function NewBookingPageContent(): React.JSX.Element {
                   Drop Booking
                 </Button>
                 <Button
-                  className="h-9 font-medium"
+                  className="h-10 sm:h-9 w-full sm:w-auto font-medium"
                   disabled={savingDraftAndExiting}
                   onClick={handleSaveDraftAndExit}
                 >

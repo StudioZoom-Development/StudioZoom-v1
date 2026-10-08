@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, addMonths } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateField } from '@/components/shared/DateField'
 import { TimeField } from '@/components/shared/TimeField'
-import { Client, EventType, BookingType } from '@/types'
+import { Client, EventType, BookingType, EventTypeOption } from '@/types'
 import { updateClient } from '@/lib/firebase/queries/clients'
 import { computeRecurringSessionDates } from '@/lib/utils/dates'
 import { useAuthStore } from '@/store/authStore'
+import { subscribeToEventTypes, DEFAULT_EVENT_TYPES } from '@/lib/firebase/queries/eventTypes'
 
 interface EditClientModalProps {
   open: boolean
@@ -17,21 +18,6 @@ interface EditClientModalProps {
   onClose: () => void
   onSuccess?: () => void
 }
-
-const EVENT_TYPES: Array<{ value: EventType; label: string }> = [
-  { value: 'wedding', label: 'Wedding' },
-  { value: 'reception', label: 'Reception' },
-  { value: 'preWedding', label: 'Pre-Wedding' },
-  { value: 'engagement', label: 'Engagement' },
-  { value: 'birthday', label: 'Birthday' },
-  { value: 'babyShower', label: 'Baby Shower' },
-  { value: 'puberty', label: 'Puberty' },
-  { value: 'corporate', label: 'Corporate' },
-  { value: 'schoolEvent', label: 'School Event' },
-  { value: 'portrait', label: 'Portrait' },
-  { value: 'studio', label: 'Studio' },
-  { value: 'other', label: 'Other' },
-]
 
 export function EditClientModal({ open, client, onClose, onSuccess }: EditClientModalProps) {
   if (!open || !client) return null
@@ -63,6 +49,30 @@ function EditClientModalInner({
   const [eventName, setEventName] = useState(client.eventName || '')
   const [eventType, setEventType] = useState<EventType>(client.eventType || 'wedding')
   const [customEventType, setCustomEventType] = useState(client.customEventType || '')
+
+  const [eventTypesList, setEventTypesList] = useState<EventTypeOption[]>(DEFAULT_EVENT_TYPES)
+
+  useEffect(() => {
+    return subscribeToEventTypes(setEventTypesList)
+  }, [])
+
+  const activeEventTypes = useMemo(() => {
+    const list = eventTypesList.filter(t => t.isActive)
+    if (eventType && !list.some(t => t.id === eventType)) {
+      const existing = eventTypesList.find(t => t.id === eventType)
+      if (existing) {
+        list.push(existing)
+      } else {
+        list.push({
+          id: eventType,
+          label: customEventType || eventType,
+          isSystem: false,
+          isActive: true,
+        })
+      }
+    }
+    return list
+  }, [eventTypesList, eventType, customEventType])
   const [startTime, setStartTime] = useState(client.startTime || '09:00')
   const [endTime, setEndTime] = useState(client.endTime || '18:00')
   const [location, setLocation] = useState(client.location || '')
@@ -213,7 +223,7 @@ function EditClientModalInner({
           email,
           eventName,
           eventType,
-          customEventType: eventType === 'other' ? customEventType.trim() : '',
+          customEventType: (eventType === 'other' || String(eventType).startsWith('custom_')) ? customEventType.trim() : '',
           startTime: bookingType === 'recurring' ? sessionStartTime : startTime,
           endTime: bookingType === 'recurring' ? sessionEndTime : endTime,
           location,
@@ -266,17 +276,10 @@ function EditClientModalInner({
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="w-full max-w-[820px] max-h-[90vh] md:max-h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden"
         style={{
-          width: '100%',
-          maxWidth: '820px',
-          maxHeight: '90vh',
           background: 'var(--color-surface-overlay)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-          overflow: 'hidden',
         }}
       >
         {/* Header */}
@@ -284,7 +287,7 @@ function EditClientModalInner({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px 24px',
+          padding: '16px 20px',
           borderBottom: '0.5px solid var(--color-border)',
         }}>
           <div style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)' }}>
@@ -306,7 +309,7 @@ function EditClientModalInner({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSave} style={{ overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSave} className="overflow-y-auto p-4 md:p-6 flex flex-col gap-4">
           {error && (
             <div style={{
               fontSize: 'var(--text-xs)',
@@ -325,7 +328,7 @@ function EditClientModalInner({
               Client Information
             </span>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Name *</label>
                 <Input value={name} onChange={e => setName(e.target.value)} className="h-9 mt-1" placeholder="Client Name" />
@@ -334,7 +337,7 @@ function EditClientModalInner({
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Contact (+91) *</label>
                 <Input value={contact} onChange={e => setContact(e.target.value)} className="h-9 mt-1" placeholder="9840012345" />
               </div>
-              <div style={{ gridColumn: 'span 2' }}>
+              <div className="col-span-1 md:col-span-2">
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Email</label>
                 <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-9 mt-1" placeholder="client@example.com" />
               </div>
@@ -347,7 +350,7 @@ function EditClientModalInner({
               Event Details
             </span>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Event Name *</label>
                 <Input value={eventName} onChange={e => setEventName(e.target.value)} className="h-9 mt-1" placeholder="e.g. Wedding Reception" />
@@ -356,7 +359,18 @@ function EditClientModalInner({
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Event Type</label>
                 <select
                   value={eventType}
-                  onChange={e => setEventType(e.target.value as EventType)}
+                  onChange={e => {
+                    const val = e.target.value as EventType
+                    const match = activeEventTypes.find(t => t.id === val)
+                    setEventType(val)
+                    if (val === 'other') {
+                      // Keep customEventType or let user specify
+                    } else if (match && !match.isSystem) {
+                      setCustomEventType(match.label)
+                    } else {
+                      setCustomEventType('')
+                    }
+                  }}
                   style={{
                     fontFamily: 'var(--font-inter)',
                     height: '36px',
@@ -372,14 +386,14 @@ function EditClientModalInner({
                     cursor: 'pointer',
                   }}
                 >
-                  {EVENT_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                  {activeEventTypes.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
               </div>
 
               {eventType === 'other' && (
-                <div style={{ gridColumn: 'span 2' }}>
+                <div className="col-span-1 md:col-span-2">
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Specify Other Event Type *</label>
                   <Input value={customEventType} onChange={e => setCustomEventType(e.target.value)} className="h-9 mt-1" placeholder="e.g. Housewarming, Naming ceremony…" />
                 </div>
@@ -419,7 +433,7 @@ function EditClientModalInner({
 
             {/* Date & Timings Fields */}
             {bookingType === 'oneTime' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr] gap-3">
                 <div>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Event Date</label>
                   <DateField value={eventDate} onChange={val => setEventDate(val)} className="h-9 mt-1" />
@@ -459,15 +473,17 @@ function EditClientModalInner({
                 </div>
 
                 {eventDates.length > 0 && (
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1.1fr 140px 115px 115px 1fr 32px',
-                    gap: '8px',
-                    padding: '0 8px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--color-foreground-subtle)',
-                  }}>
+                  <div
+                    className="hidden md:grid"
+                    style={{
+                      gridTemplateColumns: '1.1fr 140px 115px 115px 1fr 32px',
+                      gap: '8px',
+                      padding: '0 8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: 'var(--color-foreground-subtle)',
+                    }}
+                  >
                     <span>LABEL</span>
                     <span>DATE</span>
                     <span>START</span>
@@ -478,62 +494,110 @@ function EditClientModalInner({
                 )}
 
                 {eventDates.map((ed, idx) => (
-                  <div
-                    key={ed.id}
-                    style={{
-                      position: 'relative',
-                      zIndex: eventDates.length - idx + 10,
-                      display: 'grid',
-                      gridTemplateColumns: '1.1fr 140px 115px 115px 1fr 32px',
-                      gap: '8px',
-                      alignItems: 'center',
-                      background: 'var(--color-surface-raised)',
-                      padding: '8px',
-                      borderRadius: '8px',
-                      border: '0.5px solid var(--color-border)',
-                    }}
-                  >
-                    <Input
-                      value={ed.label}
-                      onChange={e => handleUpdateDate(ed.id, 'label', e.target.value)}
-                      placeholder={`Event ${idx + 1}`}
-                      className="h-8 text-xs"
-                    />
-                    <DateField
-                      value={ed.date}
-                      onChange={val => handleUpdateDate(ed.id, 'date', val)}
-                      className="h-8 text-xs"
-                    />
-                    <TimeField
-                      value={ed.startTime || '09:00'}
-                      onChange={val => handleUpdateDate(ed.id, 'startTime', val)}
-                      className="h-8 text-xs"
-                    />
-                    <TimeField
-                      value={ed.endTime || '18:00'}
-                      onChange={val => handleUpdateDate(ed.id, 'endTime', val)}
-                      className="h-8 text-xs"
-                      align="right"
-                    />
-                    <Input
-                      value={ed.location}
-                      onChange={e => handleUpdateDate(ed.id, 'location', e.target.value)}
-                      placeholder="Venue"
-                      className="h-8 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDate(ed.id)}
+                  <div key={ed.id}>
+                    {/* Desktop row view (>= 768px) */}
+                    <div
+                      className="hidden md:grid"
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--color-danger)',
-                        cursor: 'pointer',
-                        padding: '4px',
+                        position: 'relative',
+                        zIndex: eventDates.length - idx + 10,
+                        gridTemplateColumns: '1.1fr 140px 115px 115px 1fr 32px',
+                        gap: '8px',
+                        alignItems: 'center',
+                        background: 'var(--color-surface-raised)',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: '0.5px solid var(--color-border)',
                       }}
                     >
-                      <i className="ti ti-trash" style={{ fontSize: '15px' }} />
-                    </button>
+                      <Input
+                        value={ed.label}
+                        onChange={e => handleUpdateDate(ed.id, 'label', e.target.value)}
+                        placeholder={`Event ${idx + 1}`}
+                        className="h-8 text-xs"
+                      />
+                      <DateField
+                        value={ed.date}
+                        onChange={val => handleUpdateDate(ed.id, 'date', val)}
+                        className="h-8 text-xs"
+                      />
+                      <TimeField
+                        value={ed.startTime || '09:00'}
+                        onChange={val => handleUpdateDate(ed.id, 'startTime', val)}
+                        className="h-8 text-xs"
+                      />
+                      <TimeField
+                        value={ed.endTime || '18:00'}
+                        onChange={val => handleUpdateDate(ed.id, 'endTime', val)}
+                        className="h-8 text-xs"
+                        align="right"
+                      />
+                      <Input
+                        value={ed.location}
+                        onChange={e => handleUpdateDate(ed.id, 'location', e.target.value)}
+                        placeholder="Venue"
+                        className="h-8 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDate(ed.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--color-danger)',
+                          cursor: 'pointer',
+                          padding: '4px',
+                        }}
+                      >
+                        <i className="ti ti-trash" style={{ fontSize: '15px' }} />
+                      </button>
+                    </div>
+
+                    {/* Mobile card view (< 768px) */}
+                    <div
+                      className="flex md:hidden flex-col gap-2.5 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-raised)]"
+                      style={{ position: 'relative', zIndex: eventDates.length - idx + 10 }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Input
+                          value={ed.label}
+                          onChange={e => handleUpdateDate(ed.id, 'label', e.target.value)}
+                          placeholder={`Event ${idx + 1} Label`}
+                          className="h-8 text-xs font-semibold flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDate(ed.id)}
+                          className="p-1 text-[var(--color-danger)] hover:bg-[var(--color-danger-muted)] rounded transition-colors"
+                        >
+                          <i className="ti ti-trash" style={{ fontSize: '16px' }} />
+                        </button>
+                      </div>
+                      <DateField
+                        value={ed.date}
+                        onChange={val => handleUpdateDate(ed.id, 'date', val)}
+                        className="h-8 text-xs w-full"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <TimeField
+                          value={ed.startTime || '09:00'}
+                          onChange={val => handleUpdateDate(ed.id, 'startTime', val)}
+                          className="h-8 text-xs w-full"
+                        />
+                        <TimeField
+                          value={ed.endTime || '18:00'}
+                          onChange={val => handleUpdateDate(ed.id, 'endTime', val)}
+                          className="h-8 text-xs w-full"
+                          align="right"
+                        />
+                      </div>
+                      <Input
+                        value={ed.location}
+                        onChange={e => handleUpdateDate(ed.id, 'location', e.target.value)}
+                        placeholder="Venue / Location"
+                        className="h-8 text-xs w-full"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -554,7 +618,7 @@ function EditClientModalInner({
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Frequency</label>
                     <select
@@ -591,7 +655,7 @@ function EditClientModalInner({
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Total Sessions</label>
                     <Input
@@ -616,7 +680,7 @@ function EditClientModalInner({
                 </div>
 
                 {/* Per Session Rate & Payment Type */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Per-Session Rate (₹)</label>
                     <Input
@@ -711,7 +775,7 @@ function EditClientModalInner({
               Package & Commercials
             </span>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', fontWeight: 500 }}>Package Name</label>
                 <Input value={packageType} onChange={e => setPackageType(e.target.value)} className="h-9 mt-1" placeholder="e.g. Platinum" />
@@ -772,18 +836,11 @@ function EditClientModalInner({
           </div>
 
           {/* Footer Buttons */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: '10px',
-            borderTop: '0.5px solid var(--color-border)',
-            paddingTop: '16px',
-            marginTop: '8px',
-          }}>
+          <div className="flex flex-col-reverse md:flex-row justify-end gap-2.5 pt-4 mt-2 border-t border-[var(--color-border)]">
             <Button
               type="button"
               variant="outline"
-              className="h-9"
+              className="w-full md:w-auto h-10 md:h-9"
               onClick={onClose}
               disabled={saving}
             >
@@ -791,7 +848,7 @@ function EditClientModalInner({
             </Button>
             <Button
               type="submit"
-              className="h-9 font-medium"
+              className="w-full md:w-auto h-10 md:h-9 font-medium"
               disabled={saving}
             >
               {saving ? 'Saving changes…' : 'Save changes'}
