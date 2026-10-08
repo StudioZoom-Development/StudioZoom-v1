@@ -5,6 +5,8 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { isAllowedByTestMode } from '@/lib/utils/testMode'
+import type { TimeLog } from '@/types'
+import { getMonthTimeLogs, computeDayStatus, dayTotalMinutes } from './timeLogs'
 
 export interface StaffMember {
   uid:         string
@@ -166,17 +168,136 @@ export async function addStaffMember(data: NewStaffInput): Promise<string> {
   return tempUid
 }
 
-/** Attendance summary for detail page — direct getDoc via ID pattern */
+export interface StaffAttendanceSummary {
+  present: number
+  late: number
+  absent: number
+  halfDay: number
+  leave: number
+  totalMinutes: number
+  hoursLabel: string
+}
+
+/** Attendance summary for detail page — computed dynamically matching Attendance grid */
 export async function getAttendanceSummary(
-  uid: string, year: number, month: number
-): Promise<{ present: number; late: number; absent: number; totalMinutes: number } | null> {
+  uid: string,
+  year: number,
+  month: number
+): Promise<StaffAttendanceSummary> {
   try {
+    const now = new Date()
+    const monthStr = String(month).padStart(2, '0')
+    const daysInMonth = new Date(year, month, 0).getDate()
+
+    // 1. Fetch attendance document if any
     const snap = await getDoc(doc(db, 'attendance', `${uid}_${year}_${month}`))
-    if (!snap.exists()) return null
-    return snap.data().summary as { present: number; late: number; absent: number; totalMinutes: number }
+    const attData = snap.exists() ? snap.data() : null
+
+    // 2. Fetch staff's time logs for the month
+    const logs = await getMonthTimeLogs(uid, year, month)
+    const logsByDate: Record<string, TimeLog[]> = {}
+    for (const log of logs) {
+      if (!logsByDate[log.date]) logsByDate[log.date] = []
+      logsByDate[log.date].push(log)
+    }
+
+    // 3. Fetch approved leave requests for the staff in this month
+    const prefix = `${year}-${monthStr}-`
+    const leaveQ = query(
+      collection(db, 'leaveRequests'),
+      where('staffUid', '==', uid)
+    )
+    const leaveSnap = await getDocs(leaveQ)
+    const approvedLeaveMap: Record<string, boolean> = {}
+    for (const d of leaveSnap.docs) {
+      const data = d.data()
+      if (data.status === 'approved' && typeof data.date === 'string' && data.date.startsWith(prefix)) {
+        approvedLeaveMap[data.date] = true
+      }
+    }
+
+    const dailyStatus = (attData?.dailyStatus as Record<string, unknown>) || {}
+    const dailyHours = (attData?.dailyHours as Record<string, number>) || {}
+
+    let P = 0,
+      L = 0,
+      H = 0,
+      LV = 0,
+      AB = 0,
+      totalMinutes = 0
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`
+
+      const rawDocStatus = dailyStatus[day] || dailyStatus[String(day)] || dailyStatus[dayStr]
+
+      let status: string | null = null
+      if (rawDocStatus) {
+        const norm = String(rawDocStatus).toUpperCase()
+        if (norm === 'P' || norm === 'PRESENT') status = 'P'
+        else if (norm === 'L' || norm === 'LATE') status = 'L'
+        else if (norm === 'H' || norm === 'HALFDAY') status = 'H'
+        else if (norm === 'LV' || norm === 'LEAVE') status = 'LV'
+        else if (norm === 'AB' || norm === 'ABSENT') status = 'AB'
+        else status = norm
+      } else {
+        const sessions = logsByDate[dayStr] ?? []
+        const approvedLeave = Boolean(approvedLeaveMap[dayStr])
+        status = computeDayStatus(sessions, dayStr, now, approvedLeave)
+      }
+
+      let minutes = 0
+      if (dailyHours[day] != null) {
+        minutes = dailyHours[day]
+      } else if (dailyHours[String(day)] != null) {
+        minutes = dailyHours[String(day)]
+      } else if (dailyHours[dayStr] != null) {
+        minutes = dailyHours[dayStr]
+      } else {
+        const sessions = logsByDate[dayStr] ?? []
+        minutes = dayTotalMinutes(sessions, now, dayStr)
+      }
+
+      if (status === 'P') P++
+      if (status === 'L') L++
+      if (status === 'H') H++
+      if (status === 'LV') LV++
+      if (status === 'AB') AB++
+      totalMinutes += minutes
+    }
+
+    // If no daily status or logs existed, check if attData has a pre-baked summary
+    if (P === 0 && L === 0 && H === 0 && LV === 0 && AB === 0 && totalMinutes === 0 && attData?.summary) {
+      const s = attData.summary as Record<string, number>
+      P = s.present || 0
+      L = s.late || 0
+      H = s.halfDay || 0
+      LV = s.leave || 0
+      AB = s.absent || 0
+      totalMinutes = s.totalMinutes || 0
+    }
+
+    const h = Math.floor(totalMinutes / 60)
+    return {
+      present: P,
+      late: L,
+      halfDay: H,
+      leave: LV,
+      absent: AB,
+      totalMinutes,
+      hoursLabel: `${h}h`
+    }
   } catch (err) {
     console.error('Failed to get attendance summary:', err)
-    return null
+    return {
+      present: 0,
+      late: 0,
+      halfDay: 0,
+      leave: 0,
+      absent: 0,
+      totalMinutes: 0,
+      hoursLabel: '0h'
+    }
   }
 }
 

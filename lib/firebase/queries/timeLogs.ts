@@ -328,6 +328,20 @@ export function computeDayStatus(
   return 'P'
 }
 
+/** Sum all closed + running minutes for a day's sessions */
+export function dayTotalMinutes(sessions: TimeLog[], now: Date, dateStr: string): number {
+  const todayStr = getTodayDateString()
+  const closed = sessions
+    .filter(s => s.status === 'closed' && s.workedMinutes != null)
+    .reduce((sum, s) => sum + (s.workedMinutes ?? 0), 0)
+  const openSession = sessions.find(s => s.status === 'open')
+  const running =
+    dateStr === todayStr && openSession
+      ? Math.max(0, Math.floor((now.getTime() - openSession.checkInAt.getTime()) / 60000))
+      : 0
+  return closed + running
+}
+
 /** Format minutes as "Xh Ym" — used in attendance hours column */
 export function formatWorkedMinutes(minutes: number): string {
   if (minutes <= 0) return '—'
