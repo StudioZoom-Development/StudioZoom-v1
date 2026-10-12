@@ -91,7 +91,7 @@ export function UpcomingShootsFeed({ events }: UpcomingShootsFeedProps) {
             paddingRight: '2px',
           }}
         >
-          {events.slice(0, 5).map((ev) => {
+          {events.map((ev) => {
             const dateObj = ev.eventDate
             const monthStr = dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase()
             const dayStr = dateObj.getDate().toString()

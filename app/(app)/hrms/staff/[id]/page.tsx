@@ -12,6 +12,7 @@ import { useBackSwipe } from '@/hooks/useMobileGestures'
 
 import {
   StaffMember,
+  StaffAttendanceSummary,
   getStaffMember,
   updateStaffProfile,
   getAttendanceSummary,
@@ -126,7 +127,9 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   const desktopTab = activeTab === 'profile' ? 'attendance' : activeTab
   
   // Tab Data States
-  const [attData, setAttData] = useState<{ present: number; late: number; absent: number; totalMinutes: number } | null>(null)
+  const [attDate, setAttDate] = useState<Date>(() => new Date())
+  const [attData, setAttData] = useState<StaffAttendanceSummary | null>(null)
+  const [loadingAtt, setLoadingAtt] = useState<boolean>(true)
   const [payData, setPayData] = useState<Array<{ payslipId: string; payslipNumber: string; month: number; year: number; netPay: number }>>([])
   const [workData, setWorkData] = useState<Array<{ projectId: string; eventName: string; eventDate: string; role: string; stage: string }>>([])
   
@@ -150,14 +153,24 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
     })
   }, [uid])
 
-  // Load attendance summary on mount
+  // Load attendance summary whenever uid or attDate changes
   useEffect(() => {
     if (!uid) return
-    const now = new Date()
-    getAttendanceSummary(uid, now.getFullYear(), now.getMonth() + 1).then(data => {
-      setAttData(data)
-    })
-  }, [uid])
+    let active = true
+    getAttendanceSummary(uid, attDate.getFullYear(), attDate.getMonth() + 1)
+      .then(data => {
+        if (!active) return
+        setAttData(data)
+        setLoadingAtt(false)
+      })
+      .catch(() => {
+        if (!active) return
+        setLoadingAtt(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [uid, attDate])
 
   // Handle Tab Switch
   const handleTabClick = (tab: TabType) => {
@@ -521,8 +534,68 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
             {/* Tab 1: Attendance */}
             {desktopTab === 'attendance' && (
               <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Month Navigator */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    padding: '2px 4px'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadingAtt(true)
+                        setAttDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        color: 'var(--color-foreground-muted)'
+                      }}
+                      title="Previous month"
+                    >
+                      <i className="ti ti-chevron-left" style={{ fontSize: '15px' }} />
+                    </button>
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, padding: '0 8px', color: 'var(--color-foreground)', minWidth: '95px', textAlign: 'center' }}>
+                      {format(attDate, 'MMMM yyyy')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadingAtt(true)
+                        setAttDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        color: 'var(--color-foreground-muted)'
+                      }}
+                      title="Next month"
+                    >
+                      <i className="ti ti-chevron-right" style={{ fontSize: '15px' }} />
+                    </button>
+                  </div>
+                </div>
+
                 <div className="att-summary-grid">
-                  
                   {/* Present */}
                   <div style={{
                     display: 'flex',
@@ -535,10 +608,10 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                     padding: '12px 6px'
                   }}>
                     <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-success)' }}>
-                      {attData?.present ?? 17}
+                      {loadingAtt ? '—' : (attData?.present ?? 0)}
                     </span>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                      Present · Jul
+                      Present · {format(attDate, 'MMM')}
                     </span>
                   </div>
 
@@ -554,7 +627,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                     padding: '12px 6px'
                   }}>
                     <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-secondary)' }}>
-                      {attData?.late ?? 1}
+                      {loadingAtt ? '—' : (attData?.late ?? 0)}
                     </span>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
                       Late
@@ -573,7 +646,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                     padding: '12px 6px'
                   }}>
                     <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-danger)' }}>
-                      {attData?.absent ?? 0}
+                      {loadingAtt ? '—' : (attData?.absent ?? 0)}
                     </span>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
                       Absent
@@ -593,7 +666,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                       padding: '12px 6px'
                     }}>
                       <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                        {Math.floor((attData?.totalMinutes ?? 9600) / 60)}h
+                        {loadingAtt ? '—' : (attData?.hoursLabel ?? `${Math.floor((attData?.totalMinutes ?? 0) / 60)}h`)}
                       </span>
                       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
                         Hours
@@ -605,7 +678,7 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
                 <div>
                   <button
                     type="button"
-                    onClick={() => router.push(`/hrms/attendance?staff=${uid}`)}
+                    onClick={() => router.push(`/hrms/attendance?staff=${uid}&month=${attDate.getMonth() + 1}&year=${attDate.getFullYear()}`)}
                     style={{
                       fontSize: 'var(--text-xs)',
                       color: 'var(--color-accent)',
