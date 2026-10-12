@@ -1,8 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import type { DashboardAggregates } from '@/lib/firebase/queries/dashboard'
+import type { DashboardAggregates, DashboardAttendanceItem } from '@/lib/firebase/queries/dashboard'
 
 interface AttendancePulseWidgetProps {
   attendance: DashboardAggregates['attendanceSummary']
@@ -15,8 +15,35 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+function formatSpentTime(st: DashboardAttendanceItem): string {
+  let minutes = st.totalMinutes ?? 0
+  if (st.status === 'present' && st.runningSince) {
+    const liveDiff = Math.floor((Date.now() - st.runningSince) / 60000)
+    if (liveDiff > 0 && liveDiff <= 1440) {
+      minutes += liveDiff
+    }
+  }
+
+  if (st.status !== 'present' && minutes === 0) {
+    return 'Not in yet'
+  }
+
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 export function AttendancePulseWidget({ attendance }: AttendancePulseWidgetProps) {
   const { totalStaff, clockedInCount, records } = attendance
+  const [, setTick] = useState(0)
+
+  // Re-render periodically to increment running minutes for active staff
+  useEffect(() => {
+    if (clockedInCount > 0) {
+      const interval = setInterval(() => setTick(t => t + 1), 30000)
+      return () => clearInterval(interval)
+    }
+  }, [clockedInCount])
 
   return (
     <div
@@ -156,16 +183,17 @@ export function AttendancePulseWidget({ attendance }: AttendancePulseWidgetProps
                   </span>
                 </div>
 
-                {/* Clock-in Time */}
+                {/* Hours Spent Today */}
                 <span
+                  title={st.checkInTime ? `First check-in: ${st.checkInTime}` : undefined}
                   style={{
                     fontSize: '11px',
                     color: isPresent ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
-                    fontWeight: isPresent ? 500 : 400,
+                    fontWeight: isPresent ? 600 : 400,
                     flexShrink: 0,
                   }}
                 >
-                  {st.time}
+                  {formatSpentTime(st)}
                 </span>
 
                 {/* Status Dot */}

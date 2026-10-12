@@ -9,6 +9,7 @@ export interface AppUser {
   isActive: boolean
   photoURL?: string
   createdAt: Date
+  isDeleted?: boolean
 }
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────

@@ -45,8 +45,12 @@ function getInitials(name: string): string {
 /** Compute total completed seconds from closed sessions */
 function completedSeconds(sessions: TimeLog[]): number {
   return sessions
-    .filter(s => s.status === 'closed' && s.workedMinutes != null)
-    .reduce((sum, s) => sum + (s.workedMinutes ?? 0) * 60, 0)
+    .filter(s => s.status === 'closed' && typeof s.workedMinutes === 'number' && s.workedMinutes > 0)
+    .reduce((sum, s) => {
+      // Guard against corrupted workedMinutes (> 24 hours = 1440 mins)
+      const mins = Math.min(s.workedMinutes ?? 0, 1440)
+      return sum + mins * 60
+    }, 0)
 }
 
 /** Format VS 9H with sign prefix */
@@ -63,13 +67,19 @@ function formatVs9h(totalSeconds: number): string {
 
 /** Duration between two Dates in human format */
 function sessionDuration(checkInAt: Date, checkOutAt: Date): string {
+  if (!checkInAt || isNaN(checkInAt.getTime()) || checkInAt.getFullYear() < 2000) return '0m'
+  if (!checkOutAt || isNaN(checkOutAt.getTime()) || checkOutAt.getFullYear() < 2000) return '0m'
   const secs = Math.max(0, Math.floor((checkOutAt.getTime() - checkInAt.getTime()) / 1000))
+  if (secs > 86400) return '24h'
   return formatDuration(secs)
 }
 
 /** Running seconds for an open session */
 function runningSessionSeconds(checkInAt: Date, now: Date): number {
-  return Math.max(0, Math.floor((now.getTime() - checkInAt.getTime()) / 1000))
+  if (!checkInAt || isNaN(checkInAt.getTime()) || checkInAt.getFullYear() < 2000) return 0
+  const diffSecs = Math.floor((now.getTime() - checkInAt.getTime()) / 1000)
+  if (diffSecs < 0 || diffSecs > 86400) return 0
+  return diffSecs
 }
 
 // ─── Team Time Clock View (Admin & Manager) ───────────────────────────────────
@@ -139,24 +149,29 @@ function TeamTimeClockView() {
           checkInDisplay = formatTime12h(firstLog.checkInAt)
         } else {
           // Automatic rule if no manual override
-          const checkInMins = firstLog.checkInAt.getHours() * 60 + firstLog.checkInAt.getMinutes()
-          status = checkInMins > 570 ? 'late' : 'in' // > 9:30 AM is Late
-          checkInDisplay = formatTime12h(firstLog.checkInAt)
+          if (firstLog.checkInAt && firstLog.checkInAt.getFullYear() >= 2000) {
+            const checkInMins = firstLog.checkInAt.getHours() * 60 + firstLog.checkInAt.getMinutes()
+            status = checkInMins > 570 ? 'late' : 'in' // > 9:30 AM is Late
+            checkInDisplay = formatTime12h(firstLog.checkInAt)
+          } else {
+            status = 'in'
+            checkInDisplay = '—'
+          }
         }
       }
 
-      if (lastSession && lastSession.checkOutAt) {
+      if (lastSession && lastSession.checkOutAt && lastSession.checkOutAt.getFullYear() >= 2000) {
         checkOutDisplay = formatTime12h(lastSession.checkOutAt)
       }
 
       // Calculate total worked minutes today
       const closedMinutes = logs
-        .filter(s => s.status === 'closed' && s.workedMinutes != null)
-        .reduce((sum, s) => sum + (s.workedMinutes ?? 0), 0)
+        .filter(s => s.status === 'closed' && typeof s.workedMinutes === 'number' && s.workedMinutes > 0)
+        .reduce((sum, s) => sum + Math.min(s.workedMinutes ?? 0, 1440), 0)
 
       const openSession = logs.find(s => s.status === 'open')
       const runningMinutes = openSession
-        ? Math.max(0, Math.floor((now.getTime() - openSession.checkInAt.getTime()) / 60000))
+        ? Math.floor(runningSessionSeconds(openSession.checkInAt, now) / 60)
         : 0
 
       const totalMinutes = closedMinutes + runningMinutes

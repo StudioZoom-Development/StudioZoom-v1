@@ -19,37 +19,82 @@ export const STANDARD_MINUTES = 540 // 9 hours
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Safely parse any timestamp representation (Firestore Timestamp, serialized object, Date, string, number)
+ * into a valid Date object. Guards against null, undefined, and Unix epoch (1970-01-01) corruption.
+ */
+function parseTimestampSafe(raw: unknown, fallback?: Date): Date {
+  const defaultFallback = fallback && !isNaN(fallback.getTime()) && fallback.getFullYear() >= 2000
+    ? fallback
+    : new Date()
+
+  if (!raw) return defaultFallback
+
+  if (raw instanceof Date) {
+    return isNaN(raw.getTime()) || raw.getFullYear() < 2000 ? defaultFallback : raw
+  }
+
+  if (raw instanceof Timestamp) {
+    try {
+      const d = raw.toDate()
+      return isNaN(d.getTime()) || d.getFullYear() < 2000 ? defaultFallback : d
+    } catch {
+      return defaultFallback
+    }
+  }
+
+  if (typeof (raw as { toDate?: () => Date })?.toDate === 'function') {
+    try {
+      const d = (raw as { toDate: () => Date }).toDate()
+      return isNaN(d.getTime()) || d.getFullYear() < 2000 ? defaultFallback : d
+    } catch {
+      return defaultFallback
+    }
+  }
+
+  if (typeof raw === 'object' && raw !== null && 'seconds' in raw && typeof (raw as { seconds: number }).seconds === 'number') {
+    const d = new Date((raw as { seconds: number }).seconds * 1000)
+    return isNaN(d.getTime()) || d.getFullYear() < 2000 ? defaultFallback : d
+  }
+
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const d = new Date(raw)
+    return isNaN(d.getTime()) || d.getFullYear() < 2000 ? defaultFallback : d
+  }
+
+  return defaultFallback
+}
+
+function parseOptionalTimestampSafe(raw: unknown): Date | undefined {
+  if (!raw) return undefined
+  const d = parseTimestampSafe(raw)
+  if (isNaN(d.getTime()) || d.getFullYear() < 2000) return undefined
+  return d
+}
+
 /** Convert a Firestore doc to a typed TimeLog */
 function docToTimeLog(id: string, data: Record<string, unknown>): TimeLog {
+  const createdAt = parseTimestampSafe(data.createdAt, new Date())
+  const checkInAt = parseTimestampSafe(data.checkInAt, createdAt)
+  const checkOutAt = parseOptionalTimestampSafe(data.checkOutAt)
+
   return {
     logId:              id,
     staffUid:           data.staffUid as string,
-    date:               data.date as string,
-    checkInAt:          data.checkInAt instanceof Timestamp
-                          ? data.checkInAt.toDate()
-                          : new Date(data.checkInAt as string),
-    checkOutAt:         data.checkOutAt instanceof Timestamp
-                          ? data.checkOutAt.toDate()
-                          : data.checkOutAt
-                            ? new Date(data.checkOutAt as string)
-                            : undefined,
-    workedMinutes:      data.workedMinutes as number | undefined,
+    date:               (data.date as string) || getTodayDateString(),
+    checkInAt,
+    checkOutAt,
+    workedMinutes:      typeof data.workedMinutes === 'number' ? data.workedMinutes : undefined,
     standardMinutes:    STANDARD_MINUTES as 540,
-    variance:           data.variance as number | undefined,
+    variance:           typeof data.variance === 'number' ? data.variance : undefined,
     status:             data.status as TimeLog['status'],
     overrideStatus:     data.overrideStatus as TimeLog['overrideStatus'],
     isCorrected:        data.isCorrected as boolean | undefined,
-    originalCheckInAt:  data.originalCheckInAt instanceof Timestamp
-                          ? data.originalCheckInAt.toDate()
-                          : data.originalCheckInAt ? new Date(data.originalCheckInAt as string) : undefined,
-    originalCheckOutAt: data.originalCheckOutAt instanceof Timestamp
-                          ? data.originalCheckOutAt.toDate()
-                          : data.originalCheckOutAt ? new Date(data.originalCheckOutAt as string) : undefined,
+    originalCheckInAt:  parseOptionalTimestampSafe(data.originalCheckInAt),
+    originalCheckOutAt: parseOptionalTimestampSafe(data.originalCheckOutAt),
     correctedBy:        data.correctedBy as string | undefined,
     correctionReason:   data.correctionReason as string | undefined,
-    correctedAt:        data.correctedAt instanceof Timestamp
-                          ? data.correctedAt.toDate()
-                          : data.correctedAt ? new Date(data.correctedAt as string) : undefined,
+    correctedAt:        parseOptionalTimestampSafe(data.correctedAt),
   }
 }
 
@@ -80,7 +125,7 @@ export function subscribeToTodayTimeLogs(
   )
 
   return onSnapshot(q, snap => {
-    const logs = snap.docs.map(d => docToTimeLog(d.id, d.data() as Record<string, unknown>))
+    const logs = snap.docs.map(d => docToTimeLog(d.id, d.data({ serverTimestamps: 'estimate' }) as Record<string, unknown>))
     logs.sort((a, b) => (a.checkInAt?.getTime() ?? 0) - (b.checkInAt?.getTime() ?? 0))
     callback(logs)
   }, err => {
@@ -100,7 +145,7 @@ export async function getTodayTimeLogs(staffUid: string, date: string): Promise<
     where('date', '==', date)
   )
   const snap = await getDocs(q)
-  const logs = snap.docs.map(d => docToTimeLog(d.id, d.data() as Record<string, unknown>))
+  const logs = snap.docs.map(d => docToTimeLog(d.id, d.data({ serverTimestamps: 'estimate' }) as Record<string, unknown>))
   logs.sort((a, b) => (a.checkInAt?.getTime() ?? 0) - (b.checkInAt?.getTime() ?? 0))
   return logs
 }
@@ -122,10 +167,11 @@ export async function checkIn(staffUid: string): Promise<string> {
     throw new Error('Already checked in. Please check out first.')
   }
 
+  const now = new Date()
   const ref = await addDoc(collection(db, 'timeLogs'), {
     staffUid,
     date,
-    checkInAt:       serverTimestamp(),
+    checkInAt:       Timestamp.fromDate(now),
     checkOutAt:      null,
     workedMinutes:   null,
     standardMinutes: STANDARD_MINUTES,
@@ -155,14 +201,18 @@ export async function checkOut(
   }
 
   const now = new Date()
-  const checkInTime = openSession.checkInAt
-  const sessionMs = now.getTime() - checkInTime.getTime()
-  const sessionMinutes = Math.max(0, Math.floor(sessionMs / 60000))
+  let checkInTime = openSession.checkInAt
+  if (!checkInTime || isNaN(checkInTime.getTime()) || checkInTime.getFullYear() < 2000) {
+    checkInTime = now
+  }
+  const sessionMs = Math.max(0, now.getTime() - checkInTime.getTime())
+  // Cap single session worked minutes at 1440 (24 hours) as an integrity safety guard
+  const sessionMinutes = Math.min(Math.max(0, Math.floor(sessionMs / 60000)), 1440)
 
   // Compute total worked minutes for the day (all closed + this session)
   const closedMinutes = sessions
-    .filter(l => l.status === 'closed' && l.workedMinutes != null)
-    .reduce((sum, l) => sum + (l.workedMinutes ?? 0), 0)
+    .filter(l => l.status === 'closed' && typeof l.workedMinutes === 'number' && l.workedMinutes > 0 && l.logId !== openSession.logId)
+    .reduce((sum, l) => sum + Math.min(l.workedMinutes ?? 0, 1440), 0)
 
   const totalDayMinutes = closedMinutes + sessionMinutes
   const variance = totalDayMinutes - STANDARD_MINUTES
@@ -197,7 +247,10 @@ export function formatMinutes(minutes: number): string {
 }
 
 /** Format a Date into "HH:MM AM/PM" */
-export function formatTime12h(date: Date): string {
+export function formatTime12h(date: Date | null | undefined): string {
+  if (!date || isNaN(date.getTime()) || date.getFullYear() < 2000) {
+    return '—'
+  }
   let hours = date.getHours()
   const minutes = String(date.getMinutes()).padStart(2, '0')
   const ampm = hours >= 12 ? 'PM' : 'AM'
@@ -294,13 +347,15 @@ export function computeDayStatus(
 
   // Calculate total worked minutes
   const closedMinutes = sessions
-    .filter(s => s.status === 'closed' && s.workedMinutes != null)
-    .reduce((sum, s) => sum + (s.workedMinutes ?? 0), 0)
+    .filter(s => s.status === 'closed' && typeof s.workedMinutes === 'number' && s.workedMinutes > 0)
+    .reduce((sum, s) => sum + Math.min(s.workedMinutes ?? 0, 1440), 0)
 
   const openSession = sessions.find(s => s.status === 'open')
-  const runningMinutes = (isToday && openSession)
-    ? Math.max(0, Math.floor((now.getTime() - openSession.checkInAt.getTime()) / 60000))
-    : 0
+  let runningMinutes = 0
+  if (isToday && openSession && openSession.checkInAt && openSession.checkInAt.getFullYear() >= 2000) {
+    const diff = Math.floor((now.getTime() - openSession.checkInAt.getTime()) / 60000)
+    if (diff > 0 && diff <= 1440) runningMinutes = diff
+  }
 
   const totalMinutes = closedMinutes + runningMinutes
 
@@ -308,11 +363,14 @@ export function computeDayStatus(
   const dayFullyEnded = isPast || (isToday && !openSession)
 
   // First check-in time
-  const firstSession = sessions.reduce((earliest, s) =>
-    s.checkInAt.getTime() < earliest.checkInAt.getTime() ? s : earliest
-  )
-  const firstCheckInMinutes =
-    firstSession.checkInAt.getHours() * 60 + firstSession.checkInAt.getMinutes()
+  const validSessions = sessions.filter(s => s.checkInAt && s.checkInAt.getFullYear() >= 2000)
+  const firstSession = validSessions.length > 0
+    ? validSessions.reduce((earliest, s) => s.checkInAt.getTime() < earliest.checkInAt.getTime() ? s : earliest)
+    : sessions[0]
+
+  const firstCheckInMinutes = firstSession && firstSession.checkInAt && firstSession.checkInAt.getFullYear() >= 2000
+    ? firstSession.checkInAt.getHours() * 60 + firstSession.checkInAt.getMinutes()
+    : 0
   const isLateArrival = firstCheckInMinutes > LATE_THRESHOLD_MINUTES
 
   // 9h+ worked → Present regardless of check-in time
@@ -326,6 +384,21 @@ export function computeDayStatus(
 
   // Otherwise: present (day still running, or checked in on time)
   return 'P'
+}
+
+/** Sum all closed + running minutes for a day's sessions */
+export function dayTotalMinutes(sessions: TimeLog[], now: Date, dateStr: string): number {
+  const todayStr = getTodayDateString()
+  const closed = sessions
+    .filter(s => s.status === 'closed' && typeof s.workedMinutes === 'number' && s.workedMinutes > 0)
+    .reduce((sum, s) => sum + Math.min(s.workedMinutes ?? 0, 1440), 0)
+  const openSession = sessions.find(s => s.status === 'open')
+  let running = 0
+  if (dateStr === todayStr && openSession && openSession.checkInAt && openSession.checkInAt.getFullYear() >= 2000) {
+    const diff = Math.floor((now.getTime() - openSession.checkInAt.getTime()) / 60000)
+    if (diff > 0 && diff <= 1440) running = diff
+  }
+  return closed + running
 }
 
 /** Format minutes as "Xh Ym" — used in attendance hours column */

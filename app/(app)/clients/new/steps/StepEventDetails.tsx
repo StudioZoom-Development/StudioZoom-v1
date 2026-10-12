@@ -318,13 +318,14 @@ export default function StepEventDetails({ state, dispatch }: StepEventDetailsPr
             {state.eventDates.map((ed, idx) => (
               <motion.div
                 key={ed.id}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
                   position: 'relative',
                   zIndex: state.eventDates.length - idx + 10,
+                  overflow: 'visible',
                 }}
               >
                 {/* Desktop 6-column grid view (>= 768px) */}

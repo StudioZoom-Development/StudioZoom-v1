@@ -18,73 +18,6 @@ interface StaffHeldGroup {
   hasOverdue: boolean
 }
 
-const INITIAL_FALLBACK_CHECKOUTS: Checkout[] = [
-  {
-    checkoutId: 'co_cam_01',
-    itemId: 'eq_cam_01',
-    itemCode: 'CAM-01',
-    itemName: 'Sony A7 IV',
-    staffName: 'Siva Prakash',
-    staffUid: 'uid_siva_prakash',
-    projectId: 'proj_divya_arjun',
-    eventName: 'Divya & Arjun — Engagement',
-    eventDate: new Date(Date.now() + 1 * 24 * 3600 * 1000),
-    checkedOutAt: new Date(Date.now() - 3 * 24 * 3600 * 1000),
-    dueBack: new Date(Date.now() + 3 * 24 * 3600 * 1000),
-    checkedOutBy: 'Studio Admin',
-    status: 'out',
-    notes: 'Outdoor daylight shoot at ECR resort',
-  },
-  {
-    checkoutId: 'co_len_04',
-    itemId: 'eq_len_04',
-    itemCode: 'LEN-04',
-    itemName: 'Sony FE 70-200mm f/2.8 GM OSS II',
-    staffName: 'Siva Prakash',
-    staffUid: 'uid_siva_prakash',
-    projectId: 'proj_divya_arjun',
-    eventName: 'Divya & Arjun — Engagement',
-    eventDate: new Date(Date.now() - 4 * 24 * 3600 * 1000),
-    checkedOutAt: new Date(Date.now() - 7 * 24 * 3600 * 1000),
-    dueBack: new Date(Date.now() - 3 * 24 * 3600 * 1000),
-    checkedOutBy: 'Studio Admin',
-    status: 'out',
-    notes: 'Overdue by 3 days. Return needed for upcoming weekend wedding.',
-  },
-  {
-    checkoutId: 'co_drn_01',
-    itemId: 'eq_drn_01',
-    itemCode: 'DRN-01',
-    itemName: 'DJI Mavic 3 Pro Cine Drone',
-    staffName: 'Deepak S',
-    staffUid: 'EmpaoYKGNpXHezIC4vDyLuMQs2o1',
-    projectId: 'proj_tvs_lucas',
-    eventName: 'TVS Lucas AV recce',
-    eventDate: new Date(Date.now() - 3 * 24 * 3600 * 1000),
-    checkedOutAt: new Date(Date.now() - 6 * 24 * 3600 * 1000),
-    dueBack: new Date(Date.now() - 2 * 24 * 3600 * 1000),
-    checkedOutBy: 'Studio Admin',
-    status: 'out',
-    notes: 'Industrial aerial photography survey.',
-  },
-  {
-    checkoutId: 'co_fls_03',
-    itemId: 'eq_fls_03',
-    itemCode: 'FLS-03',
-    itemName: 'Godox AD600Pro Witstro Outdoor Strobe',
-    staffName: 'Ramesh D',
-    staffUid: '1gJBWJl5iOfWHeZJnG7iaNACgrw1',
-    projectId: 'proj_studio_portraits',
-    eventName: 'Studio Sessions & Portrait Shoots',
-    eventDate: new Date(Date.now() + 2 * 24 * 3600 * 1000),
-    checkedOutAt: new Date(Date.now() - 1 * 24 * 3600 * 1000),
-    dueBack: new Date(Date.now() + 4 * 24 * 3600 * 1000),
-    checkedOutBy: 'Studio Admin',
-    status: 'out',
-    notes: 'Fashion portfolio shoot in Studio A.',
-  },
-]
-
 export default function StaffHeldEquipmentPage() {
   const appUser = useAuthStore((s) => s.appUser)
   const isStaff = appUser?.role === 'staff'
@@ -120,18 +53,14 @@ export default function StaffHeldEquipmentPage() {
     const unsubscribe = subscribeActiveCheckouts(
       (cos) => {
         if (mounted) {
-          if (cos.length > 0) {
-            setActiveCheckouts(cos)
-          } else {
-            setActiveCheckouts(INITIAL_FALLBACK_CHECKOUTS)
-          }
+          setActiveCheckouts(cos)
           setLoading(false)
         }
       },
       (err) => {
         console.error('[StaffHeldEquipmentPage] subscription error:', err)
         if (mounted) {
-          setActiveCheckouts(INITIAL_FALLBACK_CHECKOUTS)
+          setActiveCheckouts([])
           setLoading(false)
         }
       }
