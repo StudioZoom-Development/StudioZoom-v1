@@ -100,6 +100,10 @@ function parseDateSafe(val: unknown): Date | null {
     const d = new Date((val as { seconds: number }).seconds * 1000)
     return isNaN(d.getTime()) ? null : d
   }
+  if (typeof val === 'object' && val !== null && '_seconds' in val && typeof (val as { _seconds: number })._seconds === 'number') {
+    const d = new Date((val as { _seconds: number })._seconds * 1000)
+    return isNaN(d.getTime()) ? null : d
+  }
   if (typeof val === 'string' || typeof val === 'number') {
     const d = new Date(val)
     return isNaN(d.getTime()) ? null : d
@@ -323,7 +327,8 @@ export function subscribeToDashboardData(
 
     for (const item of workItems) {
       if (item.isDeleted) continue
-      const isPastDue = item.dueDate && new Date(item.dueDate).getTime() < now.getTime() && item.status !== 'done'
+      const dueDate = parseDateSafe(item.dueDate)
+      const isPastDue = !!(dueDate && dueDate.getTime() < now.getTime() && item.status !== 'done')
       if (isPastDue) overdueEditingTasksCount++
 
       if (item.status === 'review') awaitingClientReviewCount++
@@ -433,20 +438,7 @@ export function subscribeToDashboardData(
 
     for (const co of activeCheckouts) {
       gearOnFieldCount++
-      let dueBack = new Date()
-      const rawDue = (co as unknown as Record<string, unknown>).dueBack
-      if (rawDue) {
-        if (typeof (rawDue as { toDate?: () => Date }).toDate === 'function') {
-          dueBack = (rawDue as { toDate: () => Date }).toDate()
-        } else if (rawDue instanceof Date && !isNaN(rawDue.getTime())) {
-          dueBack = rawDue
-        } else if (typeof rawDue === 'object' && 'seconds' in rawDue && typeof (rawDue as { seconds: number }).seconds === 'number') {
-          dueBack = new Date((rawDue as { seconds: number }).seconds * 1000)
-        } else if (typeof rawDue === 'string' || typeof rawDue === 'number') {
-          const parsed = new Date(rawDue)
-          if (!isNaN(parsed.getTime())) dueBack = parsed
-        }
-      }
+      const dueBack = parseDateSafe((co as unknown as Record<string, unknown>).dueBack) || now
       const isOverdue = co.status === 'overdue' || (dueBack.getTime() < now.getTime() && co.status !== 'returned')
       if (isOverdue) gearOverdueCount++
 
