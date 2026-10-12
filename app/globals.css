@@ -32,6 +32,28 @@
   }
 }
 
+/* Responsive display overrides — guarantee desktop utility classes take precedence over external CSS bundles */
+@media (min-width: 768px) {
+  .md\:grid {
+    display: grid !important;
+  }
+  .md\:flex {
+    display: flex !important;
+  }
+  .md\:block {
+    display: block !important;
+  }
+  .md\:inline-flex {
+    display: inline-flex !important;
+  }
+  .md\:inline-block {
+    display: inline-block !important;
+  }
+  .md\:hidden {
+    display: none !important;
+  }
+}
+
 .dashboard-radars-grid-3 {
   display: grid;
   grid-template-columns: 1fr;

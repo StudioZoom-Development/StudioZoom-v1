@@ -314,12 +314,18 @@ function ApplyPopup({ open, onClose, onSubmit, submitting, submitError }: ApplyP
 // ─── Team Attendance View (Admin & Manager Role) ───────────────────────────────
 
 function TeamAttendanceView() {
-  const [viewDate, setViewDate] = useState<Date>(() => new Date())
+  const searchParams = useSearchParams()
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    const y = Number(searchParams.get('year'))
+    const m = Number(searchParams.get('month'))
+    if (y && m) return new Date(y, m - 1, 1)
+    return new Date()
+  })
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth() + 1
 
   // Filter state
-  const [selectedStaffUid, setSelectedStaffUid] = useState<string>('all')
+  const [selectedStaffUid, setSelectedStaffUid] = useState<string>(() => searchParams.get('staff') || 'all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'halfDay' | 'leave' | 'absent'>('all')
 
   // Data State
@@ -422,7 +428,7 @@ function TeamAttendanceView() {
       const days = dayNumbers.map(day => {
         const dayStr = `${year}-${monthStr}-${String(day).padStart(2, '0')}`
 
-        const rawDocStatus = attRecord?.dailyStatus?.[day] || attRecord?.dailyStatus?.[String(day)]
+        const rawDocStatus = attRecord?.dailyStatus?.[day] || attRecord?.dailyStatus?.[String(day)] || (attRecord?.dailyStatus as Record<string, string>)?.[dayStr]
 
         let status: string | null = null
         if (rawDocStatus) {
@@ -444,6 +450,8 @@ function TeamAttendanceView() {
           minutes = attRecord.dailyHours[day]
         } else if (attRecord?.dailyHours?.[String(day)] != null) {
           minutes = attRecord.dailyHours[String(day)]
+        } else if ((attRecord?.dailyHours as Record<string, number>)?.[dayStr] != null) {
+          minutes = (attRecord?.dailyHours as Record<string, number>)[dayStr]
         } else {
           const sessions = logsByDate[dayStr] ?? []
           minutes = dayTotalMinutes(sessions, now, dayStr)
