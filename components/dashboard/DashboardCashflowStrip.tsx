@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import type { DashboardAggregates } from '@/lib/firebase/queries/dashboard'
 
@@ -8,9 +8,33 @@ interface DashboardCashflowStripProps {
   months: DashboardAggregates['cashflowMonths']
 }
 
+function formatINR(val: number): string {
+  const abs = Math.abs(val)
+  const formatted = '₹' + abs.toLocaleString('en-IN')
+  return val < 0 ? `−${formatted}` : formatted
+}
+
+function formatCompactINR(val: number): string {
+  const abs = Math.abs(val)
+  let str = ''
+  if (abs >= 10000000) {
+    str = (abs / 10000000).toFixed(1) + 'Cr'
+  } else if (abs >= 100000) {
+    str = (abs / 100000).toFixed(1) + 'L'
+  } else if (abs >= 1000) {
+    str = (abs / 1000).toFixed(1) + 'k'
+  } else {
+    str = abs.toLocaleString('en-IN')
+  }
+  return (val < 0 ? '−₹' : '₹') + str
+}
+
 export function DashboardCashflowStrip({ months }: DashboardCashflowStripProps) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+
   const currentMonthData = months[months.length - 1] || { month: '', income: 0, outflow: 0, net: 0 }
-  const isNetPositive = currentMonthData.net >= 0
+  const activeData = (hoveredIdx !== null ? months[hoveredIdx] : null) || currentMonthData
+  const isActiveNetPositive = activeData.net >= 0
 
   // Calculate highest bar value for scaling
   const maxVal = Math.max(
@@ -69,17 +93,23 @@ export function DashboardCashflowStrip({ months }: DashboardCashflowStripProps) 
             </div>
           </div>
 
-          {/* Current Month Net Callout */}
+          {/* Current / Hovered Month Net Callout */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>Net:</span>
+            <span style={{ fontSize: '10px', color: 'var(--color-foreground-subtle)' }}>
+              {activeData.month} Net:
+            </span>
             <span
               style={{
                 fontSize: '11px',
                 fontWeight: 700,
-                color: isNetPositive ? 'var(--color-success)' : 'var(--color-danger)',
+                color: activeData.net === 0
+                  ? 'var(--color-foreground-muted)'
+                  : isActiveNetPositive
+                  ? 'var(--color-success)'
+                  : 'var(--color-danger)',
               }}
             >
-              {isNetPositive ? '+' : ''}₹{Math.abs(currentMonthData.net).toLocaleString('en-IN')}
+              {formatCompactINR(activeData.net)}
             </span>
           </div>
 
@@ -110,15 +140,19 @@ export function DashboardCashflowStrip({ months }: DashboardCashflowStripProps) 
             height: '135px',
             paddingBottom: '8px',
             borderBottom: '0.5px solid var(--color-border)',
+            position: 'relative',
           }}
         >
           {months.map((m, idx) => {
             const incomeHeight = Math.max(6, Math.round((m.income / maxVal) * 115))
             const outflowHeight = Math.max(6, Math.round((m.outflow / maxVal) * 115))
+            const isHovered = hoveredIdx === idx
 
             return (
               <div
                 key={idx}
+                onMouseEnter={() => setHoveredIdx(idx)}
+                onMouseLeave={() => setHoveredIdx(null)}
                 style={{
                   flex: 1,
                   display: 'flex',
@@ -126,30 +160,115 @@ export function DashboardCashflowStrip({ months }: DashboardCashflowStripProps) 
                   alignItems: 'center',
                   justifyContent: 'flex-end',
                   height: '100%',
+                  position: 'relative',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                  background: isHovered ? 'var(--color-surface-raised)' : 'transparent',
+                  transition: 'background 0.2s ease',
+                  padding: '0 2px',
                 }}
               >
+                {/* Floating Tooltip Card */}
+                {isHovered && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 6px)',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: 'var(--color-surface-overlay)',
+                      border: '0.5px solid var(--color-border-strong)',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                      zIndex: 50,
+                      pointerEvents: 'none',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      minWidth: '145px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: 'var(--color-foreground)',
+                        borderBottom: '0.5px solid var(--color-border)',
+                        paddingBottom: '3px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <span>{m.fullMonthLabel || m.month}</span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: m.net >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                        }}
+                      >
+                        {formatCompactINR(m.net)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', gap: '8px' }}>
+                      <span style={{ color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '2px', background: 'var(--color-primary)' }} />
+                        Inflow:
+                      </span>
+                      <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>₹{m.income.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', gap: '8px' }}>
+                      <span style={{ color: 'var(--color-foreground-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '2px', background: 'var(--color-secondary)' }} />
+                        Outflow:
+                      </span>
+                      <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>₹{m.outflow.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '10px',
+                        paddingTop: '3px',
+                        borderTop: '0.5px solid var(--color-border)',
+                        gap: '8px',
+                      }}
+                    >
+                      <span style={{ color: 'var(--color-foreground-subtle)' }}>Net:</span>
+                      <span style={{ fontWeight: 700, color: m.net >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                        {formatINR(m.net)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px' }}>
                   {/* Income Bar */}
                   <div
-                    title={`Income: ₹${m.income.toLocaleString('en-IN')}`}
                     style={{
                       width: 'clamp(12px, 2.6vw, 20px)',
                       height: `${incomeHeight}px`,
                       borderRadius: '3px 3px 0 0',
                       background: 'var(--color-primary)',
-                      transition: 'height 0.3s ease',
+                      filter: isHovered ? 'brightness(1.15)' : 'none',
+                      transition: 'height 0.3s ease, filter 0.2s ease',
                     }}
                   />
                   {/* Outflow Bar */}
                   <div
-                    title={`Outflow: ₹${m.outflow.toLocaleString('en-IN')}`}
                     style={{
                       width: 'clamp(12px, 2.6vw, 20px)',
                       height: `${outflowHeight}px`,
                       borderRadius: '3px 3px 0 0',
                       background: 'var(--color-secondary)',
-                      opacity: 0.9,
-                      transition: 'height 0.3s ease',
+                      opacity: isHovered ? 1 : 0.9,
+                      filter: isHovered ? 'brightness(1.15)' : 'none',
+                      transition: 'height 0.3s ease, opacity 0.2s ease, filter 0.2s ease',
                     }}
                   />
                 </div>
@@ -160,20 +279,27 @@ export function DashboardCashflowStrip({ months }: DashboardCashflowStripProps) 
 
         {/* X-Axis Month Labels */}
         <div style={{ display: 'flex' }}>
-          {months.map((m, idx) => (
-            <div
-              key={idx}
-              style={{
-                flex: 1,
-                textAlign: 'center',
-                fontSize: '11px',
-                fontWeight: 500,
-                color: 'var(--color-foreground-subtle)',
-              }}
-            >
-              {m.month}
-            </div>
-          ))}
+          {months.map((m, idx) => {
+            const isHovered = hoveredIdx === idx
+            return (
+              <div
+                key={idx}
+                onMouseEnter={() => setHoveredIdx(idx)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  fontSize: '11px',
+                  fontWeight: isHovered ? 700 : 500,
+                  color: isHovered ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
+                  cursor: 'pointer',
+                  transition: 'color 0.2s ease',
+                }}
+              >
+                {m.month}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

@@ -56,7 +56,14 @@ export interface DashboardAggregates {
   revenueGrowthPct: number
   pendingReceivables: number
   overdueClientsCount: number
-  cashflowMonths: { month: string; income: number; outflow: number; net: number }[]
+  cashflowMonths: {
+    month: string
+    year?: number
+    fullMonthLabel?: string
+    income: number
+    outflow: number
+    net: number
+  }[]
 
   // Operational (Admin & Manager)
   activeProjectsCount: number
@@ -473,8 +480,8 @@ export function subscribeToDashboardData(
 
     for (const e of expenses) {
       if (e.isDeleted) continue
-      const date = e.date instanceof Date ? e.date : new Date(e.date)
-      if (isNaN(date.getTime())) continue
+      const date = parseDateSafe(e.date)
+      if (!date) continue
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       if (monthlyMap.has(key)) {
         monthlyMap.get(key)!.outflow += Number(e.amount) || 0
@@ -485,8 +492,11 @@ export function subscribeToDashboardData(
       const [yr, mo] = key.split('-')
       const d = new Date(Number(yr), Number(mo) - 1, 1)
       const monthLabel = d.toLocaleString('en-US', { month: 'short' })
+      const fullMonthLabel = d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
       return {
         month: monthLabel,
+        year: Number(yr),
+        fullMonthLabel,
         income: data.income,
         outflow: data.outflow,
         net: data.income - data.outflow,
@@ -524,8 +534,7 @@ export function subscribeToDashboardData(
   const unsubPayments = onSnapshot(collectionGroup(db, 'payments'), (snap) => {
     clientPayments = snap.docs.map(d => {
       const data = d.data()
-      const rawDate = data.date
-      const date = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date()
+      const date = parseDateSafe(data.date) || new Date()
       return {
         amount: Number(data.amount) || 0,
         date,
@@ -567,7 +576,9 @@ export function subscribeToDashboardData(
   }, () => {})
 
   const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snap) => {
-    expenses = snap.docs.map(d => ({ expenseId: d.id, ...(d.data() as object) } as Expense))
+    expenses = snap.docs
+      .filter(d => !d.data().isDeleted)
+      .map(d => ({ expenseId: d.id, ...(d.data() as object) } as Expense))
     computeAndEmit()
   }, () => {})
 
