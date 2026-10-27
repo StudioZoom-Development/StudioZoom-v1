@@ -156,13 +156,22 @@ export function calculatePayslip(input: CalculatePayslipInput): PayslipRecord {
     halfDays = Number(attendanceRecord.summary.halfDay || 0)
     absentDays = Number(attendanceRecord.summary.absent || 0)
     weekOffs = Number(attendanceRecord.summary.weekOff || 0)
-  } else if (attendanceRecord?.dailyStatus) {
+  } else if (attendanceRecord?.dailyStatus && Object.keys(attendanceRecord.dailyStatus).length > 0) {
     for (const status of Object.values(attendanceRecord.dailyStatus)) {
       if (status === 'P' || status === 'Permission') presentDays++
       else if (status === 'HalfDay') halfDays++
       else if (status === 'AB') absentDays++
       else if (status === 'WO') weekOffs++
     }
+  } else {
+    // Standard full attendance: calculate Sundays as week-offs
+    for (let day = 1; day <= totalCalendarDays; day++) {
+      const dayOfWeek = new Date(year, month - 1, day).getDay()
+      if (dayOfWeek === 0) weekOffs++ // Sunday
+    }
+    presentDays = Math.max(0, totalCalendarDays - weekOffs)
+    halfDays = 0
+    absentDays = 0
   }
 
   const workingDays = Math.max(0, totalCalendarDays - weekOffs)

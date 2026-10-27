@@ -151,7 +151,6 @@ export default function PayslipsPage() {
 
       const baseSalary = Number(staff.baseSalary || 0)
       const hasBaseSalary = baseSalary > 0
-      const hasAttendance = Boolean(att && att.summary)
 
       const calculation = calculatePayslip({
         staffUid: staff.uid,
@@ -173,9 +172,6 @@ export default function PayslipsPage() {
       } else if (!hasBaseSalary) {
         status = 'missing'
         missingReason = 'Missing base salary'
-      } else if (!hasAttendance) {
-        status = 'missing'
-        missingReason = 'Missing attendance'
       }
 
       return {
@@ -952,7 +948,14 @@ export default function PayslipsPage() {
                             </div>
                           </div>
                         ) : (
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>—</span>
+                          <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div>
+                              <strong>{row.calculation.presentDays}</strong> Present · <strong>{row.calculation.weekOffs}</strong> WO
+                            </div>
+                            <div style={{ color: 'var(--color-foreground-muted)' }}>
+                              Standard (Full Attendance)
+                            </div>
+                          </div>
                         )}
                       </td>
 
