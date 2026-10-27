@@ -211,15 +211,52 @@ export async function POST(req: NextRequest): Promise<Response> {
       paymentDate: existingPayslipDoc.data()?.paymentDate,
     })
 
-    // 6. Save/Update Audit Snapshot to Cloud Firestore
-    await db.collection('payslips').doc(payslipDocId).set(
-      {
-        ...payslipSnapshot,
-        generatedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    )
+    // 6. Save/Update Audit Snapshot to Cloud Firestore (sanitizing undefined fields)
+    const firestoreData: Record<string, unknown> = {
+      payslipId:           payslipSnapshot.payslipId,
+      payslipNumber:       payslipSnapshot.payslipNumber,
+      staffUid:            payslipSnapshot.staffUid,
+      staffName:           payslipSnapshot.staffName,
+      jobTitle:            payslipSnapshot.jobTitle,
+      month:               payslipSnapshot.month,
+      year:                payslipSnapshot.year,
+      baseSalary:          payslipSnapshot.baseSalary,
+      allowances:          payslipSnapshot.allowances,
+      customBonus:         payslipSnapshot.customBonus,
+      grossEarnings:       payslipSnapshot.grossEarnings,
+      totalCalendarDays:   payslipSnapshot.totalCalendarDays,
+      workingDays:         payslipSnapshot.workingDays,
+      presentDays:         payslipSnapshot.presentDays,
+      halfDays:            payslipSnapshot.halfDays,
+      absentDays:          payslipSnapshot.absentDays,
+      weekOffs:            payslipSnapshot.weekOffs,
+      payableDays:         payslipSnapshot.payableDays,
+      dailyRate:           payslipSnapshot.dailyRate,
+      attendanceDeduction: payslipSnapshot.attendanceDeduction,
+      advances:            payslipSnapshot.advances,
+      totalAdvances:       payslipSnapshot.totalAdvances,
+      customDeduction:     payslipSnapshot.customDeduction,
+      totalDeductions:     payslipSnapshot.totalDeductions,
+      netPay:              payslipSnapshot.netPay,
+      paymentStatus:       payslipSnapshot.paymentStatus,
+      isAdjusted:          payslipSnapshot.isAdjusted,
+      generatedByUid:      payslipSnapshot.generatedByUid,
+      generatedByName:     payslipSnapshot.generatedByName,
+      generatedAt:         FieldValue.serverTimestamp(),
+      updatedAt:           FieldValue.serverTimestamp(),
+    }
+
+    if (payslipSnapshot.customBonusReason) {
+      firestoreData.customBonusReason = payslipSnapshot.customBonusReason
+    }
+    if (payslipSnapshot.customDeductionReason) {
+      firestoreData.customDeductionReason = payslipSnapshot.customDeductionReason
+    }
+    if (payslipSnapshot.paymentDate) {
+      firestoreData.paymentDate = payslipSnapshot.paymentDate
+    }
+
+    await db.collection('payslips').doc(payslipDocId).set(firestoreData, { merge: true })
 
     // 7. Generate in-memory PDF
     const pdfBytes = await generatePayslipPdf(payslipSnapshot)

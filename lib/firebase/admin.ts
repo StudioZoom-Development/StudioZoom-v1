@@ -95,6 +95,11 @@ export async function getAdminFirestore(): Promise<Firestore> {
     const app = await getAdminApp()
     const { getFirestore } = await import('firebase-admin/firestore')
     _firestore = getFirestore(app)
+    try {
+      _firestore.settings({ ignoreUndefinedProperties: true })
+    } catch {
+      // Ignore if settings already set
+    }
   }
   return _firestore
 }
