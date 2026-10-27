@@ -135,9 +135,9 @@ service cloud.firestore {
 
     match /salaries/{salaryId}    { allow read, write: if isAdminOrManager(); }
     match /payslips/{payslipId} {
-      allow read: if isAdmin() ||
+      allow read: if isAdminOrManager() ||
         (isSignedIn() && resource.data.staffUid == request.auth.uid);
-      allow write: if isAdmin();
+      allow write: if isAdminOrManager();
     }
 
     match /freelancers/{freelancerId}   { allow read, write: if isAdminOrManager(); }
