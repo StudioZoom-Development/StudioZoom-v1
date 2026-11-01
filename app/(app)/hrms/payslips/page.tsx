@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { format, addMonths, subMonths } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
 import { useBackSwipe } from '@/hooks/useMobileGestures'
@@ -50,10 +51,18 @@ const TD_STYLE: React.CSSProperties = {
 }
 
 export default function PayslipsPage() {
+  const router = useRouter()
   const { backSwipeHandlers } = useBackSwipe()
   const appUser = useAuthStore((s) => s.appUser)
   const role = appUser?.role ?? 'staff'
   const isAdminOrManager = role === 'admin' || role === 'manager'
+
+  // Redirect staff users away from payslips management page
+  useEffect(() => {
+    if (appUser && !isAdminOrManager) {
+      router.replace('/hrms/timeclock')
+    }
+  }, [appUser, isAdminOrManager, router])
 
   // Month navigation:
   // Strictly completed months only.
@@ -337,222 +346,23 @@ export default function PayslipsPage() {
   }
 
   // ─── STAFF VIEW (ROLE === 'STAFF') ──────────────────────────────────────────
+  // Per business rule, staff role does not have access to payslips page.
   if (!isAdminOrManager) {
-    const currentMonthPayslip = staffHistory.find(
-      (p) => p.year === selectedYear && p.month === selectedMonth
-    )
-
     return (
       <div
-        {...backSwipeHandlers}
         style={{
           maxWidth: '1280px',
           margin: '0 auto',
-          padding: '24px 16px',
+          padding: '60px 16px',
+          textAlign: 'center',
           fontFamily: 'var(--font-inter)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '24px',
         }}
       >
-        {/* TOAST FEEDBACK */}
-        {toastMessage && (
-          <div
-            style={{
-              position: 'fixed',
-              top: '20px',
-              right: '20px',
-              zIndex: 10000,
-              padding: '12px 18px',
-              borderRadius: '8px',
-              backgroundColor: toastMessage.type === 'error' ? 'var(--color-danger)' : 'var(--color-surface-raised)',
-              border: `0.5px solid ${toastMessage.type === 'error' ? 'var(--color-danger)' : 'var(--color-primary)'}`,
-              color: toastMessage.type === 'error' ? '#ffffff' : 'var(--color-foreground)',
-              fontSize: 'var(--text-sm)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-            }}
-          >
-            <i className={`ti ${toastMessage.type === 'error' ? 'ti-alert-circle' : 'ti-check'}`} />
-            <span>{toastMessage.text}</span>
-          </div>
-        )}
-
-        {/* STAFF HEADER */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-foreground)', margin: 0 }}>
-            My Payslips
-          </h1>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0 }}>
-            View and download your monthly salary statements in INR.
-          </p>
-        </div>
-
-        {/* CURRENT MONTH CALLOUT CARD */}
-        <div
-          style={{
-            padding: '24px',
-            borderRadius: '14px',
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-primary)', textTransform: 'uppercase' }}>
-                Current Statement
-              </div>
-              <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-foreground)', marginTop: '2px' }}>
-                {format(currentDate, 'MMMM yyyy')}
-              </div>
-            </div>
-
-            {currentMonthPayslip ? (
-              <Badge variant="paid" label="Ready for Download" />
-            ) : (
-              <Badge variant="inProgress" label="Processing by Accounts" />
-            )}
-          </div>
-
-          {currentMonthPayslip ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', paddingTop: '12px', borderTop: '0.5px solid var(--color-border)' }}>
-              <div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>Net Salary Payable</div>
-                <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  {formatIndianCurrency(currentMonthPayslip.netPay)}
-                </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', marginTop: '2px' }}>
-                  Ref: {currentMonthPayslip.payslipNumber}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <Button
-                  onClick={() =>
-                    appUser?.uid &&
-                    handleGeneratePayslip(
-                      { uid: appUser.uid, name: appUser.name || 'Staff', email: appUser.email || '', role: 'staff', isActive: true },
-                      {},
-                      'preview'
-                    )
-                  }
-                  style={{ backgroundColor: 'var(--color-surface-raised)', color: 'var(--color-foreground)', border: '0.5px solid var(--color-border)' }}
-                >
-                  <i className="ti ti-eye" style={{ marginRight: '6px' }} />
-                  Preview
-                </Button>
-                <Button
-                  onClick={() =>
-                    appUser?.uid &&
-                    handleGeneratePayslip(
-                      { uid: appUser.uid, name: appUser.name || 'Staff', email: appUser.email || '', role: 'staff', isActive: true },
-                      {},
-                      'download'
-                    )
-                  }
-                  style={{ backgroundColor: 'var(--color-primary)', color: '#ffffff' }}
-                >
-                  <i className="ti ti-download" style={{ marginRight: '6px' }} />
-                  Download PDF
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>
-              Your payslip for this month is being calculated by the studio manager. It will be available for download once processed.
-            </div>
-          )}
-        </div>
-
-        {/* HISTORICAL STATEMENTS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-foreground)', margin: 0 }}>
-            Past Payslips
-          </h2>
-
-          {loading ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-foreground-muted)' }}>
-              Loading past statements...
-            </div>
-          ) : staffHistory.length === 0 ? (
-            <EmptyState
-              icon="ti-file-invoice"
-              title="No past payslips yet"
-              description="Your generated payslips will appear here as they are processed."
-            />
-          ) : (
-            <div
-              style={{
-                borderRadius: '12px',
-                border: '0.5px solid var(--color-border)',
-                backgroundColor: 'var(--color-surface)',
-                overflow: 'hidden',
-              }}
-            >
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={TH_STYLE}>PERIOD</th>
-                    <th style={TH_STYLE}>REFERENCE</th>
-                    <th style={TH_STYLE}>NET PAY (INR)</th>
-                    <th style={TH_STYLE}>STATUS</th>
-                    <th style={{ ...TH_STYLE, textAlign: 'right' }}>ACTION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {staffHistory.map((ps) => {
-                    const pDate = new Date(ps.year, ps.month - 1, 1)
-                    return (
-                      <tr key={ps.payslipId}>
-                        <td style={TD_STYLE}>
-                          <div style={{ fontWeight: 600 }}>{format(pDate, 'MMMM yyyy')}</div>
-                        </td>
-                        <td style={TD_STYLE}>
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                            {ps.payslipNumber}
-                          </span>
-                        </td>
-                        <td style={TD_STYLE}>
-                          <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
-                            {formatIndianCurrency(ps.netPay)}
-                          </span>
-                        </td>
-                        <td style={TD_STYLE}>
-                          <Badge
-                            variant={ps.paymentStatus === 'paid' ? 'paid' : 'inProgress'}
-                            label={ps.paymentStatus === 'paid' ? 'Paid' : 'Processed'}
-                          />
-                        </td>
-                        <td style={{ ...TD_STYLE, textAlign: 'right' }}>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              appUser?.uid &&
-                              handleGeneratePayslip(
-                                { uid: appUser.uid, name: appUser.name || 'Staff', email: appUser.email || '', role: 'staff', isActive: true },
-                                {},
-                                'download'
-                              )
-                            }
-                            style={{ backgroundColor: 'var(--color-surface-raised)', color: 'var(--color-foreground)', border: '0.5px solid var(--color-border)' }}
-                          >
-                            <i className="ti ti-download" style={{ marginRight: '4px' }} />
-                            Download
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <EmptyState
+          icon="ti-lock"
+          title="Access Restricted"
+          description="Payslip management is only accessible to Studio Administrators and Managers."
+        />
       </div>
     )
   }
