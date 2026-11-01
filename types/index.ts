@@ -531,19 +531,62 @@ export interface Salary {
   updatedAt?:     Date
 }
 
-export interface Payslip {
-  payslipId:          string
-  staffUid:           string
-  staffName:          string
-  month:              number
-  year:               number
-  baseSalary:         number
-  totalAdvances:      number
-  netPay:             number
-  attendanceSummary:  AttendanceRecord['summary']
-  generatedAt:        Date
-  generatedBy:        string
+export interface PayslipAdvanceItem {
+  label:  string
+  amount: number
+  date?:  string
 }
+
+export interface PayslipRecord {
+  payslipId:           string           // "ps_uid123_2026_10"
+  payslipNumber:       string           // "ZS-PS-0145"
+  staffUid:            string
+  staffName:           string
+  jobTitle:            string
+  month:               number           // 1–12
+  year:                number           // e.g. 2026
+
+  // Earnings
+  baseSalary:          number
+  allowances:          number
+  customBonus:         number
+  customBonusReason?:  string
+  grossEarnings:       number
+
+  // Attendance metrics
+  totalCalendarDays:   number
+  workingDays:         number
+  presentDays:         number
+  halfDays:            number
+  absentDays:          number
+  weekOffs:            number
+  payableDays:         number
+  dailyRate:           number
+  attendanceDeduction: number
+
+  // Advance recovery
+  advances:            PayslipAdvanceItem[]
+  totalAdvances:       number
+
+  // Custom deductions
+  customDeduction:     number
+  customDeductionReason?: string
+
+  // Totals
+  totalDeductions:     number
+  netPay:              number
+
+  // Status & Audit
+  paymentStatus:       'unpaid' | 'paid'
+  paymentDate?:        string
+  generatedAt:         Date
+  generatedByUid:      string
+  generatedByName:     string
+  isAdjusted:          boolean
+}
+
+export type Payslip = PayslipRecord
+
 
 // ─── FREELANCER ───────────────────────────────────────────────────────────
 export interface Freelancer {

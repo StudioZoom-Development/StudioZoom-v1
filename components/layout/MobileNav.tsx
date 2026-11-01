@@ -30,7 +30,7 @@ const HRMS_SECTIONS: NavSectionOption[] = [
   { href: '/hrms/staff',       icon: 'ti-id-badge-2',   label: 'Staff Directory',   description: 'Full team profiles, documents & roles', roles: ['admin'] },
   { href: '/hrms/freelancers', icon: 'ti-user-star',    label: 'Freelancers',       description: 'Contractors, day rates & booking calendar', roles: ['admin', 'manager'] },
   { href: '/hrms/salary',      icon: 'ti-cash',         label: 'Salary & Advances', description: 'Payroll structure, advances & adjustments', roles: ['admin', 'manager'] },
-  { href: '/hrms/payslips',    icon: 'ti-file-invoice', label: 'Payslips',          description: 'Monthly salary slips & payout status', roles: ['admin', 'staff'] },
+  { href: '/hrms/payslips',    icon: 'ti-file-invoice', label: 'Payslips',          description: 'Monthly salary slips & payout status', roles: ['admin', 'manager'] },
 ]
 
 const ERP_SECTIONS: NavSectionOption[] = [
@@ -1149,7 +1149,6 @@ export function MobileNav() {
   const isAttendanceActive = pathname === '/hrms/attendance'
   const isWorkActive       = pathname === '/events/work-board'
   const isEquipmentActive  = pathname.startsWith('/erp/equipment')
-  const isPayslipsActive   = pathname === '/hrms/payslips'
 
   return (
     <>
@@ -1315,48 +1314,6 @@ export function MobileNav() {
                 Staff
               </span>
             </div>
-
-            {/* My Payslips link in drawer */}
-            <button
-              type="button"
-              onClick={() => navigateTo('/hrms/payslips')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '14px',
-                background: isPayslipsActive ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
-                border: `0.5px solid ${isPayslipsActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                color: isPayslipsActive ? 'var(--color-primary)' : 'var(--color-foreground)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: 'var(--color-surface)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  border: '0.5px solid var(--color-border)',
-                }}
-              >
-                <i className="ti ti-file-invoice" style={{ fontSize: '18px' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>My Payslips</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                  View salary slips & monthly payouts
-                </div>
-              </div>
-              <i className="ti ti-chevron-right" style={{ fontSize: '16px', color: 'var(--color-foreground-muted)' }} />
-            </button>
 
             {/* Equipment Inventory link in drawer */}
             <button
