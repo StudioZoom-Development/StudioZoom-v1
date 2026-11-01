@@ -47,6 +47,13 @@ export function PayslipDeductionsModal({
   const [isCustomAttendance, setIsCustomAttendance] = useState(false)
   const [customAttendanceAmount, setCustomAttendanceAmount] = useState<string>('')
 
+  // Editable attendance metrics
+  const [presentDaysInput, setPresentDaysInput] = useState<string>('')
+  const [halfDaysInput, setHalfDaysInput] = useState<string>('')
+  const [lateDaysInput, setLateDaysInput] = useState<string>('')
+  const [leaveDaysInput, setLeaveDaysInput] = useState<string>('')
+  const [absentDaysInput, setAbsentDaysInput] = useState<string>('')
+
   const [advanceAmount, setAdvanceAmount] = useState<string>('')
   const [customBonus, setCustomBonus] = useState<string>('')
   const [customBonusReason, setCustomBonusReason] = useState<string>('')
@@ -56,6 +63,44 @@ export function PayslipDeductionsModal({
 
   const baseSalary = Number(staffMember?.baseSalary || 0)
 
+  // Baseline actual counts from Firestore attendance summary or standard defaults
+  const actualAttendance = useMemo(() => {
+    let present = 0
+    let half = 0
+    let late = 0
+    let absent = 0
+    let weekOff = 0
+    let leave = 0
+
+    if (attendanceRecord?.summary) {
+      present = Number(attendanceRecord.summary.present || 0)
+      half = Number(attendanceRecord.summary.halfDay || 0)
+      late = Number(attendanceRecord.summary.late || 0)
+      absent = Number(attendanceRecord.summary.absent || 0)
+      weekOff = Number(attendanceRecord.summary.weekOff || 0)
+    } else if (attendanceRecord?.dailyStatus && Object.keys(attendanceRecord.dailyStatus).length > 0) {
+      for (const rawStatus of Object.values(attendanceRecord.dailyStatus)) {
+        const s = String(rawStatus)
+        if (s === 'P' || s === 'Permission') present++
+        else if (s === 'HalfDay' || s === 'H') half++
+        else if (s === 'Late' || s === 'L') late++
+        else if (s === 'Leave' || s === 'LV') leave++
+        else if (s === 'AB' || s === 'Absent') absent++
+        else if (s === 'WO') weekOff++
+      }
+    } else {
+      // Standard full month
+      const totalCal = new Date(year, month, 0).getDate()
+      for (let day = 1; day <= totalCal; day++) {
+        const d = new Date(year, month - 1, day).getDay()
+        if (d === 0) weekOff++
+      }
+      present = Math.max(0, totalCal - weekOff)
+    }
+
+    return { present, half, late, absent, weekOff, leave }
+  }, [attendanceRecord, year, month])
+
   // Initialize or reset state when modal opens
   useEffect(() => {
     if (!isOpen || !staffMember) return
@@ -63,13 +108,26 @@ export function PayslipDeductionsModal({
     if (existingPayslip) {
       setApplyAttendanceDeduction(existingPayslip.attendanceDeduction > 0 || !existingPayslip.isAdjusted)
       setIsCustomAttendance(existingPayslip.isAdjusted)
-      setCustomAttendanceAmount(String(existingPayslip.attendanceDeduction || ''))
-      setAdvanceAmount(String(existingPayslip.totalAdvances || ''))
+      setCustomAttendanceAmount(String(existingPayslip.attendanceDeduction ?? ''))
+      setPresentDaysInput(String(existingPayslip.presentDays ?? actualAttendance.present))
+      setHalfDaysInput(String(existingPayslip.halfDays ?? actualAttendance.half))
+      setLateDaysInput(String(actualAttendance.late))
+      setLeaveDaysInput(String(actualAttendance.leave))
+      setAbsentDaysInput(String(existingPayslip.absentDays ?? actualAttendance.absent))
+
+      setAdvanceAmount(String(existingPayslip.totalAdvances ?? ''))
       setCustomBonus(existingPayslip.customBonus > 0 ? String(existingPayslip.customBonus) : '')
       setCustomBonusReason(existingPayslip.customBonusReason || '')
       setCustomDeduction(existingPayslip.customDeduction > 0 ? String(existingPayslip.customDeduction) : '')
       setCustomDeductionReason(existingPayslip.customDeductionReason || '')
     } else {
+      // Defaults from attendance record
+      setPresentDaysInput(String(actualAttendance.present))
+      setHalfDaysInput(String(actualAttendance.half))
+      setLateDaysInput(String(actualAttendance.late))
+      setLeaveDaysInput(String(actualAttendance.leave))
+      setAbsentDaysInput(String(actualAttendance.absent))
+
       // Defaults from salary record
       const defaultAdvTotal =
         (Number(salaryRecord?.advance1?.amount) || 0) +
@@ -85,13 +143,29 @@ export function PayslipDeductionsModal({
       setCustomDeduction('')
       setCustomDeductionReason('')
     }
-  }, [isOpen, staffMember, salaryRecord, existingPayslip])
+  }, [isOpen, staffMember, salaryRecord, existingPayslip, actualAttendance])
 
   // Build adjustments object for calculation
   const currentAdjustments = useMemo<PayrollAdjustmentParams>(() => {
     const adj: PayrollAdjustmentParams = {
       applyAttendanceDeduction,
     }
+
+    // Pass custom attendance days if specified
+    const pDays = parseFloat(presentDaysInput)
+    if (!isNaN(pDays) && pDays >= 0) adj.customPresentDays = pDays
+
+    const hDays = parseFloat(halfDaysInput)
+    if (!isNaN(hDays) && hDays >= 0) adj.customHalfDays = hDays
+
+    const aDays = parseFloat(absentDaysInput)
+    if (!isNaN(aDays) && aDays >= 0) adj.customAbsentDays = aDays
+
+    const ltDays = parseFloat(lateDaysInput)
+    if (!isNaN(ltDays) && ltDays >= 0) adj.customLateDays = ltDays
+
+    const lvDays = parseFloat(leaveDaysInput)
+    if (!isNaN(lvDays) && lvDays >= 0) adj.customLeaveDays = lvDays
 
     if (applyAttendanceDeduction && isCustomAttendance) {
       const parsed = parseFloat(customAttendanceAmount)
@@ -120,6 +194,11 @@ export function PayslipDeductionsModal({
     applyAttendanceDeduction,
     isCustomAttendance,
     customAttendanceAmount,
+    presentDaysInput,
+    halfDaysInput,
+    absentDaysInput,
+    lateDaysInput,
+    leaveDaysInput,
     advanceAmount,
     customBonus,
     customBonusReason,
@@ -284,7 +363,7 @@ export function PayslipDeductionsModal({
             </div>
           </div>
 
-          {/* 1. ATTENDANCE DEDUCTION ADJUSTMENT */}
+          {/* 1. ACTUAL ATTENDANCE & EDITABLE ATTENDANCE DAYS */}
           <div
             style={{
               padding: '14px 16px',
@@ -296,65 +375,219 @@ export function PayslipDeductionsModal({
               gap: '12px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                  Attendance Deduction
-                </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                  Auto-calculated for {((livePreview?.absentDays || 0) + (livePreview?.halfDays || 0) * 0.5).toFixed(1)} days lost
-                </div>
+            {/* Actual attendance status banner */}
+            <div>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-muted)', textTransform: 'uppercase' }}>
+                Actual System Attendance Logged
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: 'var(--text-xs)', color: applyAttendanceDeduction ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
-                  {applyAttendanceDeduction ? 'Apply' : 'Waived'}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', fontSize: 'var(--text-xs)' }}>
+                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-success-muted)', color: 'var(--color-success)', fontWeight: 600 }}>
+                  Present: {actualAttendance.present}d
                 </span>
-                <Switch
-                  checked={applyAttendanceDeduction}
-                  onCheckedChange={setApplyAttendanceDeduction}
-                />
+                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-secondary-muted)', color: 'var(--color-secondary)', fontWeight: 600 }}>
+                  Late: {actualAttendance.late}d
+                </span>
+                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-accent-muted)', color: 'var(--color-accent)', fontWeight: 600 }}>
+                  Half-Day: {actualAttendance.half}d
+                </span>
+                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-purple-muted)', color: 'var(--color-purple)', fontWeight: 600 }}>
+                  Leave: {actualAttendance.leave}d
+                </span>
+                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-danger-muted)', color: 'var(--color-danger)', fontWeight: 600 }}>
+                  Absent: {actualAttendance.absent}d
+                </span>
+                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-surface)', color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
+                  Week-Off: {actualAttendance.weekOff}d
+                </span>
               </div>
             </div>
 
-            {applyAttendanceDeduction && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-xs)', cursor: 'pointer', color: 'var(--color-foreground)' }}>
-                  <input
-                    type="checkbox"
-                    checked={isCustomAttendance}
-                    onChange={(e) => {
-                      setIsCustomAttendance(e.target.checked)
-                      if (!e.target.checked) setCustomAttendanceAmount('')
-                    }}
-                    style={{ accentColor: 'var(--color-primary)' }}
-                  />
-                  <span>Override with custom attendance deduction amount</span>
-                </label>
-
-                {isCustomAttendance && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>₹</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={customAttendanceAmount}
-                      onChange={(e) => setCustomAttendanceAmount(e.target.value)}
-                      placeholder="e.g. 500"
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: '0.5px solid var(--color-border)',
-                        backgroundColor: 'var(--color-surface)',
-                        color: 'var(--color-foreground)',
-                        fontSize: 'var(--text-sm)',
-                        fontFamily: 'var(--font-inter)',
-                      }}
-                    />
-                  </div>
-                )}
+            {/* Editable Days Inputs */}
+            <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '10px' }}>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)', marginBottom: '8px' }}>
+                Edit Attendance Days for this Payroll
               </div>
-            )}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
+                  gap: '8px',
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '3px' }}>
+                    Present (d)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={presentDaysInput}
+                    onChange={(e) => setPresentDaysInput(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '0.5px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '3px' }}>
+                    Leave (d)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={leaveDaysInput}
+                    onChange={(e) => setLeaveDaysInput(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '0.5px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '3px' }}>
+                    Late (d)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={lateDaysInput}
+                    onChange={(e) => setLateDaysInput(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '0.5px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '3px' }}>
+                    Half-Day (d)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={halfDaysInput}
+                    onChange={(e) => setHalfDaysInput(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '0.5px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: 'var(--color-foreground-muted)', marginBottom: '3px' }}>
+                    Absent (d)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={absentDaysInput}
+                    onChange={(e) => setAbsentDaysInput(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '0.5px solid var(--color-border)',
+                      backgroundColor: 'var(--color-surface)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Deduction Toggle & Custom Amount Override */}
+            <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    Attendance Deduction
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                    Auto: {formatIndianCurrency(Math.round(((parseFloat(absentDaysInput) || 0) + (parseFloat(halfDaysInput) || 0) * 0.5) * (livePreview?.dailyRate || 0)))}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: applyAttendanceDeduction ? 'var(--color-foreground)' : 'var(--color-foreground-muted)' }}>
+                    {applyAttendanceDeduction ? 'Apply' : 'Waived'}
+                  </span>
+                  <Switch
+                    checked={applyAttendanceDeduction}
+                    onCheckedChange={setApplyAttendanceDeduction}
+                  />
+                </div>
+              </div>
+
+              {applyAttendanceDeduction && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-xs)', cursor: 'pointer', color: 'var(--color-foreground)' }}>
+                    <input
+                      type="checkbox"
+                      checked={isCustomAttendance}
+                      onChange={(e) => {
+                        setIsCustomAttendance(e.target.checked)
+                        if (!e.target.checked) setCustomAttendanceAmount('')
+                      }}
+                      style={{ accentColor: 'var(--color-primary)' }}
+                    />
+                    <span>Enter custom attendance deduction amount (override)</span>
+                  </label>
+
+                  {isCustomAttendance && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={customAttendanceAmount}
+                        onChange={(e) => setCustomAttendanceAmount(e.target.value)}
+                        placeholder="e.g. 500"
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: '0.5px solid var(--color-border)',
+                          backgroundColor: 'var(--color-surface)',
+                          color: 'var(--color-foreground)',
+                          fontSize: 'var(--text-sm)',
+                          fontFamily: 'var(--font-inter)',
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 2. ADVANCE DEDUCTION ADJUSTMENT */}
@@ -379,6 +612,31 @@ export function PayslipDeductionsModal({
                 </div>
               </div>
             </div>
+
+            {/* Advance Breakdown Pills if available */}
+            {salaryRecord && ((salaryRecord.advance1?.amount || 0) > 0 || (salaryRecord.advance2?.amount || 0) > 0 || (salaryRecord.advance3?.amount || 0) > 0) ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '11px' }}>
+                {(salaryRecord.advance1?.amount || 0) > 0 && (
+                  <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-surface)', border: '0.5px solid var(--color-border)', color: 'var(--color-foreground)' }}>
+                    Advance 1: <strong>{formatIndianCurrency(salaryRecord.advance1?.amount)}</strong> {salaryRecord.advance1?.date ? `(${salaryRecord.advance1.date})` : ''}
+                  </span>
+                )}
+                {(salaryRecord.advance2?.amount || 0) > 0 && (
+                  <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-surface)', border: '0.5px solid var(--color-border)', color: 'var(--color-foreground)' }}>
+                    Advance 2: <strong>{formatIndianCurrency(salaryRecord.advance2?.amount)}</strong> {salaryRecord.advance2?.date ? `(${salaryRecord.advance2.date})` : ''}
+                  </span>
+                )}
+                {(salaryRecord.advance3?.amount || 0) > 0 && (
+                  <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-surface)', border: '0.5px solid var(--color-border)', color: 'var(--color-foreground)' }}>
+                    Advance 3: <strong>{formatIndianCurrency(salaryRecord.advance3?.amount)}</strong> {salaryRecord.advance3?.date ? `(${salaryRecord.advance3.date})` : ''}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', color: 'var(--color-foreground-muted)', fontStyle: 'italic' }}>
+                No scheduled salary advances logged for this month.
+              </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)' }}>₹</span>

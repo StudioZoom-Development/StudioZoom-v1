@@ -87,6 +87,17 @@ export async function POST(req: NextRequest): Promise<Response> {
       )
     }
 
+    // Guard against generating payslips for upcoming/future months
+    const now = new Date()
+    const targetMonthStart = new Date(Number(year), Number(month) - 1, 1)
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    if (targetMonthStart > currentMonthStart) {
+      return NextResponse.json(
+        { error: 'Cannot generate payslips for upcoming future months' },
+        { status: 400 }
+      )
+    }
+
     // Role-based authorization gate
     if (caller.role === 'staff' && caller.uid !== staffUid) {
       return NextResponse.json(

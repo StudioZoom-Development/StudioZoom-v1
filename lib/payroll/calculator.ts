@@ -4,6 +4,13 @@ import type { AttendanceRecord, Salary, PayslipRecord, PayslipAdvanceItem } from
 export interface PayrollAdjustmentParams {
   applyAttendanceDeduction?: boolean
   customAttendanceDeduction?: number
+  // Editable attendance counts
+  customPresentDays?:        number
+  customLeaveDays?:          number
+  customHalfDays?:           number
+  customLateDays?:           number
+  customAbsentDays?:         number
+  // Advances & adjustments
   advanceDeduction?:         number
   customBonus?:              number
   customBonusReason?:        string
@@ -174,6 +181,22 @@ export function calculatePayslip(input: CalculatePayslipInput): PayslipRecord {
     absentDays = 0
   }
 
+  let isAdjusted = false
+
+  // Apply custom attendance overrides if provided
+  if (adjustments.customPresentDays !== undefined && adjustments.customPresentDays >= 0) {
+    if (adjustments.customPresentDays !== presentDays) isAdjusted = true
+    presentDays = adjustments.customPresentDays
+  }
+  if (adjustments.customHalfDays !== undefined && adjustments.customHalfDays >= 0) {
+    if (adjustments.customHalfDays !== halfDays) isAdjusted = true
+    halfDays = adjustments.customHalfDays
+  }
+  if (adjustments.customAbsentDays !== undefined && adjustments.customAbsentDays >= 0) {
+    if (adjustments.customAbsentDays !== absentDays) isAdjusted = true
+    absentDays = adjustments.customAbsentDays
+  }
+
   const workingDays = Math.max(0, totalCalendarDays - weekOffs)
   const payableDays = Math.max(0, totalCalendarDays - absentDays - halfDays * 0.5)
 
@@ -181,7 +204,6 @@ export function calculatePayslip(input: CalculatePayslipInput): PayslipRecord {
   const autoAttendanceDeduction = Math.round((absentDays + halfDays * 0.5) * dailyRate)
 
   let attendanceDeduction = autoAttendanceDeduction
-  let isAdjusted = false
 
   if (adjustments.applyAttendanceDeduction === false) {
     attendanceDeduction = 0

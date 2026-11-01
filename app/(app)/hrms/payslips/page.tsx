@@ -55,10 +55,28 @@ export default function PayslipsPage() {
   const role = appUser?.role ?? 'staff'
   const isAdminOrManager = role === 'admin' || role === 'manager'
 
-  // Month navigation (defaults to current month)
-  const [currentDate, setCurrentDate] = useState<Date>(() => new Date())
+  // Month navigation (defaults to previous month if current month is in progress, or current month)
+  // Per business rule: Upcoming months cannot be generated/downloaded.
+  const now = useMemo(() => new Date(), [])
+  const maxAllowedDate = useMemo(() => new Date(now.getFullYear(), now.getMonth(), 1), [now])
+
+  const [currentDate, setCurrentDate] = useState<Date>(() => {
+    // Defaults to the latest completed month (or current month)
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
   const selectedYear = currentDate.getFullYear()
   const selectedMonth = currentDate.getMonth() + 1 // 1-12
+
+  // Check if selected month is in the future
+  const isUpcomingMonth = useMemo(() => {
+    const selectedStart = new Date(selectedYear, selectedMonth - 1, 1)
+    return selectedStart > maxAllowedDate
+  }, [selectedYear, selectedMonth, maxAllowedDate])
+
+  const canGoNextMonth = useMemo(() => {
+    const nextMonth = addMonths(currentDate, 1)
+    return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1) <= maxAllowedDate
+  }, [currentDate, maxAllowedDate])
 
   // Data states
   const [staffList, setStaffList] = useState<StaffMember[]>([])
@@ -627,17 +645,24 @@ export default function PayslipsPage() {
           </span>
 
           <button
-            onClick={() => setCurrentDate((prev) => addMonths(prev, 1))}
+            onClick={() => {
+              if (canGoNextMonth) {
+                setCurrentDate((prev) => addMonths(prev, 1))
+              }
+            }}
+            disabled={!canGoNextMonth}
             style={{
               background: 'transparent',
               border: 'none',
-              cursor: 'pointer',
-              color: 'var(--color-foreground)',
+              cursor: canGoNextMonth ? 'pointer' : 'not-allowed',
+              color: canGoNextMonth ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
+              opacity: canGoNextMonth ? 1 : 0.4,
               fontSize: '18px',
               padding: '4px',
               display: 'flex',
               alignItems: 'center',
             }}
+            title={canGoNextMonth ? 'Next Month' : 'Upcoming months cannot be generated yet'}
           >
             <i className="ti ti-chevron-right" />
           </button>
@@ -798,16 +823,18 @@ export default function PayslipsPage() {
         {/* BULK ACTION BUTTON */}
         <Button
           onClick={handleGenerateAll}
-          disabled={Boolean(bulkProgress) || stats.readyCount + stats.generatedCount === 0}
+          disabled={Boolean(bulkProgress) || isUpcomingMonth || stats.readyCount + stats.generatedCount === 0}
           style={{
-            backgroundColor: 'var(--color-primary)',
-            color: '#ffffff',
+            backgroundColor: isUpcomingMonth ? 'var(--color-surface-raised)' : 'var(--color-primary)',
+            color: isUpcomingMonth ? 'var(--color-foreground-muted)' : '#ffffff',
             fontWeight: 600,
             fontSize: 'var(--text-sm)',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            cursor: isUpcomingMonth ? 'not-allowed' : 'pointer',
           }}
+          title={isUpcomingMonth ? 'Upcoming months cannot be generated yet' : undefined}
         >
           {bulkProgress ? (
             <>
@@ -992,7 +1019,11 @@ export default function PayslipsPage() {
                       {/* 7. Action Buttons */}
                       <td style={{ ...TD_STYLE, textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                          {row.status !== 'missing' ? (
+                          {isUpcomingMonth ? (
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                              Upcoming month
+                            </span>
+                          ) : row.status !== 'missing' ? (
                             <>
                               <Button
                                 size="sm"
@@ -1121,7 +1152,11 @@ export default function PayslipsPage() {
                 </div>
 
                 {/* Action Buttons */}
-                {row.status !== 'missing' && (
+                {isUpcomingMonth ? (
+                  <div style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)', padding: '6px 0' }}>
+                    Upcoming month cannot be generated yet
+                  </div>
+                ) : row.status !== 'missing' ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <Button
                       size="sm"
@@ -1146,7 +1181,7 @@ export default function PayslipsPage() {
                       Download
                     </Button>
                   </div>
-                )}
+                ) : null}
               </div>
             ))}
           </div>
