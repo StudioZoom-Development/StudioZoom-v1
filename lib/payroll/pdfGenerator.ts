@@ -1,7 +1,9 @@
-import { PDFDocument, StandardFonts, rgb, grayscale } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, grayscale, type PDFImage } from 'pdf-lib'
 import type { PayslipRecord } from '@/types'
 import { formatPdfCurrency, numberToWordsINR } from './calculator'
 import { format } from 'date-fns'
+import fs from 'fs'
+import path from 'path'
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -44,22 +46,69 @@ export async function generatePayslipPdf(record: PayslipRecord): Promise<Uint8Ar
   y -= 20
 
   // ─── 2. HEADER BLOCK ────────────────────────────────────────────────────────
-  // Left: Company Name & Subline
-  page.drawText('STUDIO ZOOM', {
-    x: margin,
-    y: y,
-    size: 20,
-    font: fontBold,
-    color: COLOR_PRIMARY,
-  })
+  // Try loading Studio Zoom logo
+  let logoImage: PDFImage | null = null
+  try {
+    const possiblePaths = [
+      path.join(process.cwd(), 'public', 'logo.png'),
+      path.join(process.cwd(), 'public', 'icon.png'),
+    ]
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        const bytes = fs.readFileSync(p)
+        logoImage = await doc.embedPng(bytes)
+        break
+      }
+    }
+  } catch {
+    // If embedding image fails, fallback gracefully to typography header
+  }
 
-  page.drawText('Creative Photography & Film Studio', {
-    x: margin,
-    y: y - 14,
-    size: 9,
-    font: fontRegular,
-    color: COLOR_TEXT_MUTED,
-  })
+  const logoH = 36
+  const logoW = logoImage ? (logoImage.width / logoImage.height) * logoH : 0
+
+  if (logoImage && logoW > 0) {
+    page.drawImage(logoImage, {
+      x: margin,
+      y: y - logoH + 4,
+      width: logoW,
+      height: logoH,
+    })
+
+    // Subtitle alongside logo
+    page.drawText('STUDIO ZOOM', {
+      x: margin + logoW + 10,
+      y: y - 10,
+      size: 15,
+      font: fontBold,
+      color: COLOR_PRIMARY,
+    })
+
+    page.drawText('Creative Photography & Film Studio', {
+      x: margin + logoW + 10,
+      y: y - 22,
+      size: 8,
+      font: fontRegular,
+      color: COLOR_TEXT_MUTED,
+    })
+  } else {
+    // Fallback: Typography Company Name & Subline
+    page.drawText('STUDIO ZOOM', {
+      x: margin,
+      y: y,
+      size: 20,
+      font: fontBold,
+      color: COLOR_PRIMARY,
+    })
+
+    page.drawText('Creative Photography & Film Studio', {
+      x: margin,
+      y: y - 14,
+      size: 9,
+      font: fontRegular,
+      color: COLOR_TEXT_MUTED,
+    })
+  }
 
   // Right: Document Title & Reference
   const monthName = MONTH_NAMES[record.month - 1] || 'Month'
