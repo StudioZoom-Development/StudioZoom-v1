@@ -18,7 +18,6 @@ import {
 import { subscribeMonthlySalaries } from '@/lib/firebase/queries/salary'
 import {
   subscribeMonthlyPayslips,
-  subscribeStaffPayslipHistory,
   requestGeneratePayslip,
 } from '@/lib/firebase/queries/payslips'
 import {
@@ -95,7 +94,6 @@ export default function PayslipsPage() {
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceRecord>>({})
   const [salariesMap, setSalariesMap] = useState<Record<string, Salary>>({})
   const [monthlyPayslipsMap, setMonthlyPayslipsMap] = useState<Record<string, PayslipRecord>>({})
-  const [staffHistory, setStaffHistory] = useState<PayslipRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   // Filters & Search
@@ -122,7 +120,6 @@ export default function PayslipsPage() {
   // ─── 1. Subscriptions for Admin/Manager ──────────────────────────────────────
   useEffect(() => {
     if (!isAdminOrManager) return
-    setLoading(true)
 
     // Staff list
     const unsubStaff = subscribeToStaffOnly((staff) => {
@@ -156,21 +153,6 @@ export default function PayslipsPage() {
       unsubPayslips()
     }
   }, [isAdminOrManager, selectedYear, selectedMonth])
-
-  // ─── 2. Subscription for Staff Role ──────────────────────────────────────────
-  useEffect(() => {
-    if (isAdminOrManager || !appUser?.uid) return
-    setLoading(true)
-
-    const unsubHistory = subscribeStaffPayslipHistory(appUser.uid, (records) => {
-      setStaffHistory(records)
-      setLoading(false)
-    })
-
-    return () => {
-      unsubHistory()
-    }
-  }, [isAdminOrManager, appUser?.uid])
 
   // ─── 3. Computed Staff Rows ──────────────────────────────────────────────────
   const processedRows = useMemo(() => {
@@ -1002,8 +984,9 @@ export default function PayslipsPage() {
       )}
 
       {/* DEDUCTIONS ADJUSTMENT MODAL */}
-      {selectedStaffForModal && (
+      {selectedStaffForModal && isModalOpen && (
         <PayslipDeductionsModal
+          key={`${selectedStaffForModal.uid}-${selectedYear}-${selectedMonth}`}
           isOpen={isModalOpen}
           onClose={() => {
             setIsModalOpen(false)

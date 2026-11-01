@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import type { StaffMember } from '@/lib/firebase/queries/staff'
 import type { AttendanceRecord, Salary, PayslipRecord } from '@/types'
 import {
@@ -42,23 +42,6 @@ export function PayslipDeductionsModal({
   onConfirmGenerate,
   isGenerating = false,
 }: PayslipDeductionsModalProps) {
-  // State for overrides
-  const [applyAttendanceDeduction, setApplyAttendanceDeduction] = useState(true)
-  const [isCustomAttendance, setIsCustomAttendance] = useState(false)
-  const [customAttendanceAmount, setCustomAttendanceAmount] = useState<string>('')
-
-  // Editable attendance metrics (Present, Half-Days, Absences)
-  const [presentDaysInput, setPresentDaysInput] = useState<string>('')
-  const [halfDaysInput, setHalfDaysInput] = useState<string>('')
-  const [absentDaysInput, setAbsentDaysInput] = useState<string>('')
-
-  const [advanceAmount, setAdvanceAmount] = useState<string>('')
-  const [customBonus, setCustomBonus] = useState<string>('')
-  const [customBonusReason, setCustomBonusReason] = useState<string>('')
-
-  const [customDeduction, setCustomDeduction] = useState<string>('')
-  const [customDeductionReason, setCustomDeductionReason] = useState<string>('')
-
   const baseSalary = Number(staffMember?.baseSalary || 0)
 
   // Baseline actual counts from Firestore attendance summary or standard defaults
@@ -91,45 +74,60 @@ export function PayslipDeductionsModal({
     return { present, half, absent, weekOff }
   }, [attendanceRecord, year, month])
 
-  // Initialize or reset state when modal opens
-  useEffect(() => {
-    if (!isOpen || !staffMember) return
-
+  // Initial state derived from props
+  const initialValues = useMemo(() => {
     if (existingPayslip) {
-      setApplyAttendanceDeduction(existingPayslip.attendanceDeduction > 0 || !existingPayslip.isAdjusted)
-      setIsCustomAttendance(existingPayslip.isAdjusted)
-      setCustomAttendanceAmount(String(existingPayslip.attendanceDeduction ?? ''))
-      setPresentDaysInput(String(existingPayslip.presentDays ?? actualAttendance.present))
-      setHalfDaysInput(String(existingPayslip.halfDays ?? actualAttendance.half))
-      setAbsentDaysInput(String(existingPayslip.absentDays ?? actualAttendance.absent))
-
-      setAdvanceAmount(String(existingPayslip.totalAdvances ?? ''))
-      setCustomBonus(existingPayslip.customBonus > 0 ? String(existingPayslip.customBonus) : '')
-      setCustomBonusReason(existingPayslip.customBonusReason || '')
-      setCustomDeduction(existingPayslip.customDeduction > 0 ? String(existingPayslip.customDeduction) : '')
-      setCustomDeductionReason(existingPayslip.customDeductionReason || '')
-    } else {
-      // Defaults from attendance record
-      setPresentDaysInput(String(actualAttendance.present))
-      setHalfDaysInput(String(actualAttendance.half))
-      setAbsentDaysInput(String(actualAttendance.absent))
-
-      // Defaults from salary record
-      const defaultAdvTotal =
-        (Number(salaryRecord?.advance1?.amount) || 0) +
-        (Number(salaryRecord?.advance2?.amount) || 0) +
-        (Number(salaryRecord?.advance3?.amount) || 0)
-
-      setApplyAttendanceDeduction(true)
-      setIsCustomAttendance(false)
-      setCustomAttendanceAmount('')
-      setAdvanceAmount(defaultAdvTotal > 0 ? String(defaultAdvTotal) : '')
-      setCustomBonus('')
-      setCustomBonusReason('')
-      setCustomDeduction('')
-      setCustomDeductionReason('')
+      return {
+        applyAttendanceDeduction: existingPayslip.attendanceDeduction > 0 || !existingPayslip.isAdjusted,
+        isCustomAttendance: Boolean(existingPayslip.isAdjusted),
+        customAttendanceAmount: String(existingPayslip.attendanceDeduction ?? ''),
+        presentDaysInput: String(existingPayslip.presentDays ?? actualAttendance.present),
+        halfDaysInput: String(existingPayslip.halfDays ?? actualAttendance.half),
+        absentDaysInput: String(existingPayslip.absentDays ?? actualAttendance.absent),
+        advanceAmount: String(existingPayslip.totalAdvances ?? ''),
+        customBonus: existingPayslip.customBonus > 0 ? String(existingPayslip.customBonus) : '',
+        customBonusReason: existingPayslip.customBonusReason || '',
+        customDeduction: existingPayslip.customDeduction > 0 ? String(existingPayslip.customDeduction) : '',
+        customDeductionReason: existingPayslip.customDeductionReason || '',
+      }
     }
-  }, [isOpen, staffMember, salaryRecord, existingPayslip, actualAttendance])
+
+    const defaultAdvTotal =
+      (Number(salaryRecord?.advance1?.amount) || 0) +
+      (Number(salaryRecord?.advance2?.amount) || 0) +
+      (Number(salaryRecord?.advance3?.amount) || 0)
+
+    return {
+      applyAttendanceDeduction: true,
+      isCustomAttendance: false,
+      customAttendanceAmount: '',
+      presentDaysInput: String(actualAttendance.present),
+      halfDaysInput: String(actualAttendance.half),
+      absentDaysInput: String(actualAttendance.absent),
+      advanceAmount: defaultAdvTotal > 0 ? String(defaultAdvTotal) : '',
+      customBonus: '',
+      customBonusReason: '',
+      customDeduction: '',
+      customDeductionReason: '',
+    }
+  }, [existingPayslip, actualAttendance, salaryRecord])
+
+  // State for overrides initialized from initialValues
+  const [applyAttendanceDeduction, setApplyAttendanceDeduction] = useState(initialValues.applyAttendanceDeduction)
+  const [isCustomAttendance, setIsCustomAttendance] = useState(initialValues.isCustomAttendance)
+  const [customAttendanceAmount, setCustomAttendanceAmount] = useState<string>(initialValues.customAttendanceAmount)
+
+  // Editable attendance metrics (Present, Half-Days, Absences)
+  const [presentDaysInput, setPresentDaysInput] = useState<string>(initialValues.presentDaysInput)
+  const [halfDaysInput, setHalfDaysInput] = useState<string>(initialValues.halfDaysInput)
+  const [absentDaysInput, setAbsentDaysInput] = useState<string>(initialValues.absentDaysInput)
+
+  const [advanceAmount, setAdvanceAmount] = useState<string>(initialValues.advanceAmount)
+  const [customBonus, setCustomBonus] = useState<string>(initialValues.customBonus)
+  const [customBonusReason, setCustomBonusReason] = useState<string>(initialValues.customBonusReason)
+
+  const [customDeduction, setCustomDeduction] = useState<string>(initialValues.customDeduction)
+  const [customDeductionReason, setCustomDeductionReason] = useState<string>(initialValues.customDeductionReason)
 
   // Build adjustments object for calculation
   const currentAdjustments = useMemo<PayrollAdjustmentParams>(() => {
