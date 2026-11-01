@@ -55,19 +55,22 @@ export default function PayslipsPage() {
   const role = appUser?.role ?? 'staff'
   const isAdminOrManager = role === 'admin' || role === 'manager'
 
-  // Month navigation (defaults to previous month if current month is in progress, or current month)
-  // Per business rule: Upcoming months cannot be generated/downloaded.
+  // Month navigation:
+  // Strictly completed months only.
+  // Example: If today is in November, only months up to October can be generated/downloaded.
+  // When December arrives, November payslips become available to generate/download.
   const now = useMemo(() => new Date(), [])
-  const maxAllowedDate = useMemo(() => new Date(now.getFullYear(), now.getMonth(), 1), [now])
+  // Latest completed month = 1st day of the previous calendar month
+  const maxAllowedDate = useMemo(() => new Date(now.getFullYear(), now.getMonth() - 1, 1), [now])
 
   const [currentDate, setCurrentDate] = useState<Date>(() => {
-    // Defaults to the latest completed month (or current month)
-    return new Date(now.getFullYear(), now.getMonth(), 1)
+    // Defaults directly to the latest completed month (e.g. October when current month is November)
+    return new Date(now.getFullYear(), now.getMonth() - 1, 1)
   })
   const selectedYear = currentDate.getFullYear()
   const selectedMonth = currentDate.getMonth() + 1 // 1-12
 
-  // Check if selected month is in the future
+  // Check if selected month is ongoing (current month) or in the future
   const isUpcomingMonth = useMemo(() => {
     const selectedStart = new Date(selectedYear, selectedMonth - 1, 1)
     return selectedStart > maxAllowedDate
@@ -670,10 +673,10 @@ export default function PayslipsPage() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setCurrentDate(new Date())}
+            onClick={() => setCurrentDate(new Date(now.getFullYear(), now.getMonth() - 1, 1))}
             style={{ fontSize: 'var(--text-xs)', padding: '4px 8px', height: 'auto', marginLeft: '4px' }}
           >
-            This Month
+            Latest Closed Month
           </Button>
         </div>
       </div>

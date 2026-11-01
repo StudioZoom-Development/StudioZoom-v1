@@ -87,13 +87,14 @@ export async function POST(req: NextRequest): Promise<Response> {
       )
     }
 
-    // Guard against generating payslips for upcoming/future months
+    // Guard against generating payslips for ongoing or upcoming/future months.
+    // Payroll can only be closed and generated for completed calendar months (e.g. In Nov, only up to Oct).
     const now = new Date()
     const targetMonthStart = new Date(Number(year), Number(month) - 1, 1)
-    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    if (targetMonthStart > currentMonthStart) {
+    const latestClosedMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    if (targetMonthStart > latestClosedMonthStart) {
       return NextResponse.json(
-        { error: 'Cannot generate payslips for upcoming future months' },
+        { error: 'Cannot generate payslips for ongoing or upcoming months. Payslips are only available after the calendar month has ended.' },
         { status: 400 }
       )
     }
