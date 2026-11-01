@@ -83,7 +83,7 @@ export default function LoginPage() {
     const creds = {
       admin:   { email: 'admin@studiozoom.in',   password: 'StudioZoom@2026' },
       manager: { email: 'manager@studiozoom.in', password: 'StudioZoom@2026' },
-      staff:   { email: 'staff@studiozoom.in',   password: 'StudioZoom@2026' },
+      staff:   { email: 'staffsiva@gmail.com',   password: 'Welcome@123' },
     }[role]
     setValue('email', creds.email, { shouldValidate: true, shouldDirty: true, shouldTouch: true })
     setValue('password', creds.password, { shouldValidate: true, shouldDirty: true, shouldTouch: true })
