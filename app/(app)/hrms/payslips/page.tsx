@@ -968,7 +968,7 @@ export default function PayslipsPage() {
                         {row.att?.summary ? (
                           <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <div>
-                              <strong>{row.att.summary.present}</strong> Present · <strong>{row.att.summary.weekOff}</strong> WO
+                              <strong>{row.att.summary.present}</strong> Present{row.att.summary.weekOff > 0 ? ` · ${row.att.summary.weekOff} WO` : ''}
                             </div>
                             <div style={{ color: 'var(--color-foreground-muted)' }}>
                               {row.att.summary.absent} Absent · {row.att.summary.halfDay} Half
@@ -977,10 +977,10 @@ export default function PayslipsPage() {
                         ) : (
                           <div style={{ fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <div>
-                              <strong>{row.calculation.presentDays}</strong> Present · <strong>{row.calculation.weekOffs}</strong> WO
+                              <strong>{row.calculation.presentDays}</strong> Present / {row.calculation.totalCalendarDays} Days
                             </div>
                             <div style={{ color: 'var(--color-foreground-muted)' }}>
-                              Standard (Full Attendance)
+                              Full Calendar Working Days
                             </div>
                           </div>
                         )}

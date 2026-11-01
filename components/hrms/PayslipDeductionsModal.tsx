@@ -77,7 +77,7 @@ export function PayslipDeductionsModal({
       half = Number(attendanceRecord.summary.halfDay || 0)
       late = Number(attendanceRecord.summary.late || 0)
       absent = Number(attendanceRecord.summary.absent || 0)
-      weekOff = Number(attendanceRecord.summary.weekOff || 0)
+      weekOff = 0
     } else if (attendanceRecord?.dailyStatus && Object.keys(attendanceRecord.dailyStatus).length > 0) {
       for (const rawStatus of Object.values(attendanceRecord.dailyStatus)) {
         const s = String(rawStatus)
@@ -86,16 +86,13 @@ export function PayslipDeductionsModal({
         else if (s === 'Late' || s === 'L') late++
         else if (s === 'Leave' || s === 'LV') leave++
         else if (s === 'AB' || s === 'Absent') absent++
-        else if (s === 'WO') weekOff++
       }
+      weekOff = 0
     } else {
-      // Standard full month
+      // Standard full month: full calendar days as working days (0 week-offs)
       const totalCal = new Date(year, month, 0).getDate()
-      for (let day = 1; day <= totalCal; day++) {
-        const d = new Date(year, month - 1, day).getDay()
-        if (d === 0) weekOff++
-      }
-      present = Math.max(0, totalCal - weekOff)
+      present = totalCal
+      weekOff = 0
     }
 
     return { present, half, late, absent, weekOff, leave }
@@ -396,9 +393,11 @@ export function PayslipDeductionsModal({
                 <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-danger-muted)', color: 'var(--color-danger)', fontWeight: 600 }}>
                   Absent: {actualAttendance.absent}d
                 </span>
-                <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-surface)', color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
-                  Week-Off: {actualAttendance.weekOff}d
-                </span>
+                {actualAttendance.weekOff > 0 && (
+                  <span style={{ padding: '3px 8px', borderRadius: '4px', backgroundColor: 'var(--color-surface)', color: 'var(--color-foreground-muted)', fontWeight: 500 }}>
+                    Week-Off: {actualAttendance.weekOff}d
+                  </span>
+                )}
               </div>
             </div>
 

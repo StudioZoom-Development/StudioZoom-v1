@@ -166,7 +166,7 @@ export async function generatePayslipPdf(record: PayslipRecord): Promise<Uint8Ar
     { label: 'CALENDAR DAYS', val: String(record.totalCalendarDays) },
     { label: 'WORKING DAYS',  val: String(record.workingDays) },
     { label: 'PRESENT DAYS',  val: String(record.presentDays) },
-    { label: 'WEEK OFFS',     val: String(record.weekOffs) },
+    ...(record.weekOffs > 0 ? [{ label: 'WEEK OFFS', val: String(record.weekOffs) }] : []),
     { label: 'HALF DAYS',     val: String(record.halfDays) },
     { label: 'ABSENCES',      val: String(record.absentDays) },
     { label: 'PAYABLE DAYS',  val: String(record.payableDays) },
