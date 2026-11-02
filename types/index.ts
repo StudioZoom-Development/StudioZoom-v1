@@ -707,7 +707,10 @@ export interface CashOpeningBalances {
 }
 
 // ─── QUOTATION & INVOICE ──────────────────────────────────────────────────
+export type QuotationTemplateId = 'production' | 'modern' | 'floral'
+
 export interface LineItem {
+  id?:         string
   description: string
   qty:         number
   rate:        number
@@ -720,22 +723,29 @@ export type QuotationStatus =
 export interface Quotation {
   quotationId:        string
   quotationNumber:    string          // ZS-Q-2026-001
+  templateId?:        QuotationTemplateId // 'production' | 'modern' | 'floral'
   clientId?:          string
   clientName:         string
   contact:            string
+  email?:             string
+  place?:             string          // e.g. Chennai, Mahabalipuram
   eventType:          string
   eventDate?:         Date
   validityDate:       Date
   lineItems:          LineItem[]
   subtotal:           number
   gstEnabled:         boolean
+  gstRate?:           number          // default 18 (9% CGST + 9% SGST)
   cgst?:              number
   sgst?:              number
   grandTotal:         number
   status:             QuotationStatus
-  termsAndConditions: string
+  termsAndConditions?: string
+  notes?:             string
+  isDeleted?:         boolean
   createdBy:          string
   createdAt:          Date
+  updatedAt?:         Date
 }
 
 export type InvoiceStatus =
