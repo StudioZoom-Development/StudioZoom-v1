@@ -308,8 +308,19 @@ export default function QuotationsPage() {
 
       {/* DATA TABLE (DESKTOP) & COMPACT CARDS (MOBILE) */}
       {loading ? (
-        <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: '12px', padding: '16px' }}>
-          <TableRowSkeleton rows={5} />
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}
+        >
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              <TableRowSkeleton rows={5} cols={8} />
+            </tbody>
+          </table>
         </div>
       ) : quotations.length === 0 ? (
         <EmptyState

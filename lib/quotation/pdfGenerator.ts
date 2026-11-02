@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFImage } from 'pdf-lib'
 import type { Quotation } from '@/types'
-import { formatIndianCurrency, numberToWordsINR } from '@/lib/payroll/calculator'
+import { formatPdfCurrency, numberToWordsINR } from '@/lib/payroll/calculator'
 import { format } from 'date-fns'
 
 const COLOR_TEXT = rgb(0.12, 0.12, 0.12)
@@ -285,7 +285,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       color: COLOR_TEXT,
     })
 
-    page.drawText(formatIndianCurrency(item.rate), {
+    page.drawText(formatPdfCurrency(item.rate), {
       x: marginX + 340,
       y: curY,
       size: 8.5,
@@ -293,7 +293,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       color: COLOR_TEXT,
     })
 
-    const amtStr = formatIndianCurrency(item.amount)
+    const amtStr = formatPdfCurrency(item.amount)
     const amtWidth = fontBold.widthOfTextAtSize(amtStr, 8.5)
     page.drawText(amtStr, {
       x: marginX + 490 - amtWidth,
@@ -330,7 +330,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     font: fontRegular,
     color: COLOR_TEXT_MUTED,
   })
-  const subtotalStr = formatIndianCurrency(quotation.subtotal)
+  const subtotalStr = formatPdfCurrency(quotation.subtotal)
   page.drawText(subtotalStr, {
     x: marginX + contentWidth - fontBold.widthOfTextAtSize(subtotalStr, 9),
     y: curY,
@@ -350,7 +350,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
     })
-    const cgstStr = formatIndianCurrency(quotation.cgst || 0)
+    const cgstStr = formatPdfCurrency(quotation.cgst || 0)
     page.drawText(cgstStr, {
       x: marginX + contentWidth - fontRegular.widthOfTextAtSize(cgstStr, 8.5),
       y: curY,
@@ -368,7 +368,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
     })
-    const sgstStr = formatIndianCurrency(quotation.sgst || 0)
+    const sgstStr = formatPdfCurrency(quotation.sgst || 0)
     page.drawText(sgstStr, {
       x: marginX + contentWidth - fontRegular.widthOfTextAtSize(sgstStr, 8.5),
       y: curY,
@@ -397,7 +397,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     color: rgb(1, 1, 1),
   })
 
-  const grandStr = `Rs. ${formatIndianCurrency(quotation.grandTotal)}`
+  const grandStr = formatPdfCurrency(quotation.grandTotal)
   page.drawText(grandStr, {
     x: marginX + contentWidth - fontBold.widthOfTextAtSize(grandStr, 9.5),
     y: curY,
