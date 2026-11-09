@@ -123,17 +123,17 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
   // ─────────────────────────────────────────────────────────────────────────────
   if (templateKey === 'package1') {
     // ── PACKAGE 1: Wedding Editorial ──────────────────────────────────────────
-    // Background photo collage ends at y ≈ 492 pt.
-    // {Header}: Logo, then client info, then deliverables
+    // Background photo collage ends at y ≈ 425 pt (~49.5% from top).
+    // {Header}: Logo, then client info, then deliverables in white space below photos
     const logoBytes = await loadLogoAsset()
     if (logoBytes) {
       try {
         const logoImg = await doc.embedPng(logoBytes)
         page.drawImage(logoImg, {
-          x: (width - 55) / 2,
-          y: 435,
-          width: 55,
-          height: 42,
+          x: (width - 50) / 2,
+          y: 390,
+          width: 50,
+          height: 36,
         })
       } catch {
         // Fallback text if image embedding fails
@@ -141,7 +141,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
         const tw = fontBold.widthOfTextAtSize(logoText, 14)
         page.drawText(logoText, {
           x: (width - tw) / 2,
-          y: 445,
+          y: 400,
           size: 14,
           font: fontBold,
           color: COLOR_PRIMARY,
@@ -151,7 +151,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`QUOTATION : ${quotation.quotationNumber}`, {
       x: marginX,
-      y: 412,
+      y: 360,
       size: 9.5,
       font: fontBold,
       color: COLOR_PRIMARY,
@@ -159,7 +159,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Date: ${qDate}  •  Valid Until: ${validDateStr}`, {
       x: width - marginX - 210,
-      y: 412,
+      y: 360,
       size: 8.5,
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
@@ -167,8 +167,8 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`${quotation.clientName}  —  ${quotation.eventType}`, {
       x: marginX,
-      y: 394,
-      size: 12,
+      y: 342,
+      size: 11,
       font: fontBold,
       color: COLOR_TEXT,
     })
@@ -176,21 +176,21 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     if (quotation.place) {
       page.drawText(quotation.place, {
         x: marginX,
-        y: 380,
-        size: 8.5,
+        y: 330,
+        size: 8,
         font: fontRegular,
         color: COLOR_TEXT_MUTED,
       })
     }
 
-    tableStartY = 365
+    tableStartY = 315
   } else if (templateKey === 'package2') {
     // ── PACKAGE 2: Media Production Estimation ────────────────────────────────
-    // Background pink banner ends at y ≈ 697 pt.
-    // {Header}: Place, Date, Quotation No
+    // Background pink banner and black logo swirl end at y ≈ 665 pt (~20.5% from top).
+    // {Header}: Place, Date, Quotation No placed comfortably below the logo swirl
     page.drawText(`Place :  ${quotation.place || 'Chennai'}`, {
       x: 46,
-      y: 672,
+      y: 640,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
@@ -198,7 +198,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Date :  ${qDate}`, {
       x: 46,
-      y: 654,
+      y: 622,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
@@ -206,7 +206,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Quotation No: ${quotation.quotationNumber}`, {
       x: 390,
-      y: 654,
+      y: 622,
       size: 9.5,
       font: fontBold,
       color: COLOR_PRIMARY,
@@ -215,7 +215,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     // {Body}: Respected Sir / Mam, greeting
     page.drawText('Respected Sir / Mam,', {
       x: 46,
-      y: 620,
+      y: 590,
       size: 10.5,
       font: fontBold,
       color: COLOR_TEXT,
@@ -223,7 +223,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText('Thank You for Giving us this Great Oppurtunity.', {
       x: 46,
-      y: 602,
+      y: 574,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
@@ -231,7 +231,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText("We're delighted to Work with you.", {
       x: 46,
-      y: 586,
+      y: 560,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
@@ -239,30 +239,30 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Prepared For:  ${quotation.clientName}  (${quotation.eventType})`, {
       x: 46,
-      y: 558,
+      y: 534,
       size: 10.5,
       font: fontBold,
       color: COLOR_TEXT,
     })
 
-    tableStartY = 530
+    tableStartY = 506
   } else if (templateKey === 'package3') {
     // ── PACKAGE 3: Royal Wedding with Add-ons ─────────────────────────────────
-    // Background blossom & purple badge ends at y ≈ 532 pt.
-    // {Header}: Greeting & Event Name
+    // Background purple scalloped badge ends at y ≈ 515 pt (~38.5% from top).
+    // {Header}: Greeting & Event Name placed below the scalloped badge
     const gText = "Thank you for giving us this great oppurtunity. We're delighted to work for you"
     page.drawText(gText, {
       x: (width - fontRegular.widthOfTextAtSize(gText, 9)) / 2,
-      y: 514,
+      y: 485,
       size: 9,
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
     })
 
-    const evHeader = `${evDateStr} - ${quotation.eventType.toUpperCase()}`
+    const evHeader = `[${evDateStr.toUpperCase()} - ${quotation.eventType.toUpperCase()}]`
     page.drawText(evHeader, {
       x: (width - fontBold.widthOfTextAtSize(evHeader, 10.5)) / 2,
-      y: 494,
+      y: 465,
       size: 10.5,
       font: fontBold,
       color: COLOR_TEXT,
@@ -270,7 +270,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Client: ${quotation.clientName}`, {
       x: marginX,
-      y: 470,
+      y: 440,
       size: 10.5,
       font: fontBold,
       color: COLOR_TEXT,
@@ -278,13 +278,13 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Quote: ${quotation.quotationNumber}  •  Valid: ${validDateStr}`, {
       x: width - marginX - 210,
-      y: 470,
+      y: 440,
       size: 8.5,
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
     })
 
-    tableStartY = 446
+    tableStartY = 415
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

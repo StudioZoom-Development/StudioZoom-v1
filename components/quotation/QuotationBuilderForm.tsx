@@ -1354,13 +1354,13 @@ export function QuotationBuilderForm({
               {/* ── PACKAGE 1: Wedding Editorial ─────────────────────────────────── */}
               {normalizeTemplateKey(templateId) === 'package1' && (
                 <>
-                  {/* {Header}: Logo & Metadata in white space below photo collage */}
-                  <div style={{ marginTop: '42.5%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {/* {Header}: Logo & Metadata in white space below photo collage (which ends at ~49.5%) */}
+                  <div style={{ marginTop: '51%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src="/logo.png"
                       alt="Studio Zoom Logo"
-                      style={{ height: '30px', width: 'auto', objectFit: 'contain', marginBottom: '8px' }}
+                      style={{ height: '28px', width: 'auto', objectFit: 'contain', marginBottom: '6px' }}
                     />
                   </div>
 
@@ -1412,7 +1412,7 @@ export function QuotationBuilderForm({
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
 
-                    {lineItems.slice(0, 5).map((item, i) => (
+                    {lineItems.slice(0, 4).map((item, i) => (
                       <div
                         key={i}
                         style={{
@@ -1461,7 +1461,7 @@ export function QuotationBuilderForm({
                   </div>
 
                   {/* Subtotal & Grand Total */}
-                  <div style={{ alignSelf: 'flex-end', width: '50%', marginBottom: '13%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <div style={{ alignSelf: 'flex-end', width: '50%', marginBottom: '11%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
                       <span>Subtotal</span>
                       <span>₹{subtotal.toLocaleString('en-IN')}</span>
@@ -1518,8 +1518,8 @@ export function QuotationBuilderForm({
               {/* ── PACKAGE 2: Media Production Estimation ──────────────────────── */}
               {normalizeTemplateKey(templateId) === 'package2' && (
                 <>
-                  {/* {Header}: Place & Date, Quotation No */}
-                  <div style={{ marginTop: '19%', display: 'flex', justifyContent: 'space-between', fontSize: '9px', marginBottom: '8px' }}>
+                  {/* {Header}: Place & Date, Quotation No comfortably below logo swirl (which ends at ~20%) */}
+                  <div style={{ marginTop: '23%', display: 'flex', justifyContent: 'space-between', fontSize: '9px', marginBottom: '8px' }}>
                     <div>
                       <div><span style={{ fontWeight: 600, color: '#333' }}>Place :</span> <span style={{ fontWeight: 500 }}>{place || 'Chennai'}</span></div>
                       <div style={{ marginTop: '2px' }}><span style={{ fontWeight: 600, color: '#333' }}>Date :</span> <span style={{ fontWeight: 500 }}>{format(new Date(), 'dd MMM yyyy')}</span></div>
@@ -1560,7 +1560,7 @@ export function QuotationBuilderForm({
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
 
-                    {lineItems.slice(0, 6).map((item, i) => (
+                    {lineItems.slice(0, 5).map((item, i) => (
                       <div
                         key={i}
                         style={{
@@ -1609,7 +1609,7 @@ export function QuotationBuilderForm({
                   </div>
 
                   {/* TOTALS */}
-                  <div style={{ alignSelf: 'flex-end', width: '48%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '8px' }}>
+                  <div style={{ alignSelf: 'flex-end', width: '48%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
                       <span>Subtotal</span>
                       <span>₹{subtotal.toLocaleString('en-IN')}</span>
@@ -1673,11 +1673,121 @@ export function QuotationBuilderForm({
               {/* ── PACKAGE 3: Royal Wedding with Add-ons ────────────────────────── */}
               {normalizeTemplateKey(templateId) === 'package3' && (
                 <>
-                  {/* {Header}: Great Opportunity Greeting & Event Header */}
-                  <div style={{ marginTop: '38.5%', textAlign: 'center', marginBottom: '6px' }}>
+                  {/* {Header}: Great Opportunity Greeting & Event Header below purple badge (which ends at ~38%) */}
+                  <div style={{ marginTop: '41.5%', textAlign: 'center', marginBottom: '6px' }}>
                     <div style={{ fontSize: '8.5px', color: '#555', fontStyle: 'italic', letterSpacing: '0.01em' }}>
                       Thank you for giving us this great oppurtunity. We&apos;re delighted to work for you
                     </div>
+                    <div style={{ marginTop: '3px', fontSize: '10px', fontWeight: 700, color: '#222', letterSpacing: '0.04em' }}>
+                      [{format(eventDate || new Date(), 'dd MMM yyyy').toUpperCase()} - {eventType.toUpperCase()}]
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.08)', paddingBottom: '3px' }}>
+                    <span style={{ fontWeight: 700, color: '#222' }}>Client: {clientName || 'Client Name'}</span>
+                    <span style={{ color: '#8b2e67', fontWeight: 700 }}>Quote: {quotationNumber}</span>
+                  </div>
+
+                  {/* {Body}: ITEM TABLE */}
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 30px 60px 65px',
+                        padding: '3px 6px',
+                        backgroundColor: 'rgba(0,0,0,0.04)',
+                        fontWeight: 700,
+                        fontSize: '8px',
+                        color: '#555',
+                      }}
+                    >
+                      <span>DESCRIPTION</span>
+                      <span style={{ textAlign: 'center' }}>QTY</span>
+                      <span style={{ textAlign: 'right' }}>RATE</span>
+                      <span style={{ textAlign: 'right' }}>AMOUNT</span>
+                    </div>
+
+                    {lineItems.slice(0, 4).map((item, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 30px 60px 65px',
+                          padding: '2px 6px',
+                          borderBottom: '0.5px solid rgba(0,0,0,0.06)',
+                          fontSize: '8px',
+                        }}
+                      >
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.description || 'Deliverable Item'}
+                        </span>
+                        <span style={{ textAlign: 'center', color: '#666' }}>{item.qty}</span>
+                        <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
+                        <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+
+                    {/* PACKAGE DELIVERABLES PRICE */}
+                    <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', fontWeight: 700, color: '#8b2e67' }}>
+                      <span>Package Deliverables:</span>
+                      <span>Rs. {lineItemsSubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+
+                    {/* ADDONS Section */}
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ fontSize: '8.5px', fontWeight: 700, color: '#8b2e67', letterSpacing: '0.05em', borderBottom: '0.5px solid rgba(139,46,103,0.2)', paddingBottom: '2px', marginBottom: '3px' }}>
+                        ADDONS
+                      </div>
+                      {addons.length === 0 ? (
+                        <div style={{ fontSize: '7.5px', color: '#888', fontStyle: 'italic' }}>
+                          - None (No optional add-ons selected)
+                        </div>
+                      ) : (
+                        addons.slice(0, 3).map((item, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              fontSize: '8px',
+                              padding: '1px 0',
+                              color: '#333',
+                            }}
+                          >
+                            <span>• {item.description || 'Add-on deliverable'}</span>
+                            <span style={{ fontWeight: 600 }}>Rs. {item.amount.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* TOTALS: Pinned above the pre-printed bottom footer */}
+                  <div style={{ position: 'absolute', bottom: '13.5%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {gstEnabled && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '7.5px' }}>
+                        <span>Incl. 18% GST</span>
+                        <span>Rs. {(cgst + sgst).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        backgroundColor: '#8b2e67',
+                        padding: '3px 6px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                      }}
+                    >
+                      <span>GRAND TOTAL</span>
+                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </>
+              )}
                     <div style={{ marginTop: '2px', fontSize: '10px', fontWeight: 700, color: '#222', letterSpacing: '0.04em' }}>
                       [{format(eventDate || new Date(), 'dd MMM yyyy').toUpperCase()} - {eventType.toUpperCase()}]
                     </div>
