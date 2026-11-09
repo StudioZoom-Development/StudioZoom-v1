@@ -1321,7 +1321,7 @@ export function QuotationBuilderForm({
             {/* BACKGROUND TEMPLATE IMAGE */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`/templates/quotations/${normalizeTemplateKey(templateId)}.png`}
+              src={`/templates/quotations/${normalizeTemplateKey(templateId) === 'package1' ? 'package-1' : normalizeTemplateKey(templateId) === 'package2' ? 'package-2' : 'package-3'}.png`}
               alt="Template Background"
               style={{
                 position: 'absolute',
