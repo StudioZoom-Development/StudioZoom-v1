@@ -707,7 +707,7 @@ export interface CashOpeningBalances {
 }
 
 // ─── QUOTATION & INVOICE ──────────────────────────────────────────────────
-export type QuotationTemplateId = 'production' | 'modern' | 'floral'
+export type QuotationTemplateId = 'package1' | 'package2' | 'package3' | 'production' | 'modern' | 'floral'
 
 export interface LineItem {
   id?:         string
