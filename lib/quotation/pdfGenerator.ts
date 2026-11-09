@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFImage } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFPage } from 'pdf-lib'
 import type { Quotation } from '@/types'
 import { formatPdfCurrency, numberToWordsINR } from '@/lib/payroll/calculator'
 import { format } from 'date-fns'
@@ -10,27 +10,31 @@ const COLOR_BORDER = rgb(0.85, 0.85, 0.85)
 const COLOR_SURFACE_LIGHT = rgb(0.97, 0.97, 0.97)
 
 /**
- * Fetch background template image bytes dynamically.
+ * Fetch background template PDF or PNG bytes dynamically.
  * In Next.js client/SSR, static assets in /public are served via URL paths.
  */
-async function loadTemplateImageBytes(templateId: Quotation['templateId']): Promise<Uint8Array | null> {
+async function loadTemplateAsset(
+  templateId: Quotation['templateId'],
+  type: 'pdf' | 'png'
+): Promise<Uint8Array | null> {
   const fileNameMap: Record<string, string> = {
-    production: 'template-production.png',
-    modern: 'template-modern.png',
-    floral: 'template-floral.png',
+    production: type === 'pdf' ? 'template-production.pdf' : 'template-production.png',
+    modern: type === 'pdf' ? 'template-modern.pdf' : 'template-modern.png',
+    floral: type === 'pdf' ? 'template-floral.pdf' : 'template-floral.png',
   }
-  const fileName = fileNameMap[templateId || 'production'] || 'template-production.png'
+  const fileName = fileNameMap[templateId || 'production'] || (type === 'pdf' ? 'template-production.pdf' : 'template-production.png')
+  const relativePath = type === 'pdf' ? `/templates/quotations/pdf/${fileName}` : `/templates/quotations/${fileName}`
 
-  // Browser & Client fetch
+  // Browser fetch
   if (typeof window !== 'undefined') {
     try {
-      const res = await fetch(`/templates/quotations/${fileName}`)
+      const res = await fetch(relativePath)
       if (res.ok) {
         const buf = await res.arrayBuffer()
         return new Uint8Array(buf)
       }
     } catch (e) {
-      console.warn('Could not fetch template image via browser fetch:', e)
+      console.warn(`Could not fetch template ${type} via browser:`, e)
     }
   }
 
@@ -38,48 +42,61 @@ async function loadTemplateImageBytes(templateId: Quotation['templateId']): Prom
 }
 
 /**
- * Generates an in-memory vector PDF document with the selected template stationery.
+ * Generates an in-memory vector PDF document with the selected Package 1, 2, or 3 template.
  */
 export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
-  const page = doc.addPage([595.28, 841.89]) // A4 Portrait
-  const { width, height } = page.getSize()
+  const template = quotation.templateId || 'production'
 
-  const fontRegular = await doc.embedFont(StandardFonts.Helvetica)
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold)
+  let page: PDFPage
 
-  // ─── 1. DRAW BACKGROUND TEMPLATE STATIONERY ──────────────────────────────────
-  const templateBytes = await loadTemplateImageBytes(quotation.templateId)
-  if (templateBytes) {
+  // Attempt vector PDF template copy first for 100% vector sharpness
+  const pdfBytes = await loadTemplateAsset(template, 'pdf')
+  if (pdfBytes) {
     try {
-      const bgImage: PDFImage = await doc.embedPng(templateBytes)
-      page.drawImage(bgImage, {
-        x: 0,
-        y: 0,
-        width,
-        height,
-      })
-    } catch (err) {
-      console.error('Failed to embed template background:', err)
+      const templateDoc = await PDFDocument.load(pdfBytes)
+      const [copiedPage] = await doc.copyPages(templateDoc, [0])
+      page = doc.addPage(copiedPage)
+    } catch {
+      page = doc.addPage([595.28, 841.89])
+    }
+  } else {
+    page = doc.addPage([595.28, 841.89])
+    // Fallback to high-res raster PNG background
+    const pngBytes = await loadTemplateAsset(template, 'png')
+    if (pngBytes) {
+      try {
+        const bgImage: PDFImage = await doc.embedPng(pngBytes)
+        page.drawImage(bgImage, {
+          x: 0,
+          y: 0,
+          width: page.getWidth(),
+          height: page.getHeight(),
+        })
+      } catch (err) {
+        console.error('Failed to embed PNG template background:', err)
+      }
     }
   }
+
+  const { width } = page.getSize()
+  const fontRegular = await doc.embedFont(StandardFonts.Helvetica)
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold)
 
   const marginX = 42
   const contentWidth = width - marginX * 2
 
-  // ─── 2. TEMPLATE-SPECIFIC OVERLAYS ───────────────────────────────────────────
-  // Coordinates tuned for the 3 distinct stationery designs:
-  const template = quotation.templateId || 'production'
-
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TEMPLATE-SPECIFIC OVERLAYS
+  // ─────────────────────────────────────────────────────────────────────────────
   let tableStartY = 540
 
   if (template === 'production') {
-    // Media production template:
-    // Has "Place :", "Date :", "Respected Sir / Mam," at top.
-    // Office address at bottom.
-    // Place & Date
+    // ── PACKAGE 1: Media Production Estimation ──────────────────────────────────
+    // Top has: Place :, Date :, Respected Sir / Mam, Thank You for Giving us...
+    // Footer has: Thank You, OFFICE: No.3 Kasturi Bai Nagar..., Email, Contact
     page.drawText(quotation.place || 'Chennai', {
-      x: 90,
+      x: 92,
       y: 728,
       size: 10,
       font: fontRegular,
@@ -88,23 +105,22 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     const qDate = quotation.createdAt ? format(quotation.createdAt, 'dd MMM yyyy') : format(new Date(), 'dd MMM yyyy')
     page.drawText(qDate, {
-      x: 90,
+      x: 92,
       y: 708,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
     })
 
-    // Quotation number on the right
     page.drawText(`Quotation No: ${quotation.quotationNumber}`, {
-      x: width - marginX - 160,
+      x: width - marginX - 165,
       y: 708,
       size: 9.5,
       font: fontBold,
       color: COLOR_PRIMARY,
     })
 
-    // Prepared For / Event banner
+    // Prepared For
     page.drawText(`Prepared For:  ${quotation.clientName}  (${quotation.eventType})`, {
       x: marginX,
       y: 648,
@@ -125,10 +141,10 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     tableStartY = 610
   } else if (template === 'modern') {
-    // Minimal Wedding Editorial:
-    // Top photo collage occupies up to y ≈ 520.
-    // Middle section (y: 510 to 180) is clear white for line items.
-    // Bottom contains "PRICE - Rs." and contact info.
+    // ── PACKAGE 2: Wedding Editorial Photo-Strip ────────────────────────────────
+    // Top has: Wedding photo strip collage (rings, couple, shoes).
+    // Center: Logo.
+    // Bottom: PRICE - Rs. [value], Phone numbers, Instagram @studio_zoom_chennai
     page.drawText(`QUOTATION : ${quotation.quotationNumber}`, {
       x: marginX,
       y: 508,
@@ -167,13 +183,17 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     tableStartY = 455
   } else if (template === 'floral') {
-    // Royal Floral Wedding:
-    // Top header + ornamental badge down to y ≈ 580.
-    // Has "DATE - EVENT NAME" placeholder around y: 500.
-    // Add-ons around y: 220.
+    // ── PACKAGE 3: Royal Floral Wedding with Dedicated Add-ons Section ──────────
+    // Top: Blossom & Ring, Purple Badge "Wedding Quotation"
+    // "Thank you for giving us this great oppurtunity. We're delighted to work for you"
+    // Center Placeholder: [DATE - EVENT NAME]
+    // Middle-Lower Section: ADD ONS
+    // Footer: Contact numbers, studiozoomindia@gmail.com, studiozoom.in, floral corners
     const evDateStr = quotation.eventDate ? format(quotation.eventDate, 'dd MMM yyyy') : format(new Date(), 'dd MMM yyyy')
     const eventHeader = `${evDateStr} - ${quotation.eventType.toUpperCase()}`
     const evTextWidth = fontBold.widthOfTextAtSize(eventHeader, 10.5)
+
+    // Center header exactly aligned with the template's "[DATE - EVENT NAME]" placeholder
     page.drawText(eventHeader, {
       x: (width - evTextWidth) / 2,
       y: 506,
@@ -190,7 +210,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       color: COLOR_TEXT,
     })
 
-    page.drawText(`Quote: ${quotation.quotationNumber}  •  Valid Until: ${format(quotation.validityDate, 'dd MMM yyyy')}`, {
+    page.drawText(`Quote: ${quotation.quotationNumber}  •  Valid: ${format(quotation.validityDate, 'dd MMM yyyy')}`, {
       x: width - marginX - 220,
       y: 486,
       size: 9,
@@ -201,7 +221,9 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     tableStartY = 465
   }
 
-  // ─── 3. ITEM TABLE ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 3. MAIN DELIVERABLES TABLE
+  // ─────────────────────────────────────────────────────────────────────────────
   let curY = tableStartY
 
   // Table header background bar
@@ -249,12 +271,13 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
   curY -= 20
 
-  // Draw Line Items
+  // Draw Primary Line Items
   const items = quotation.lineItems || []
-  for (let i = 0; i < items.length; i++) {
+  const maxPrimaryItems = template === 'floral' ? 4 : 7
+
+  for (let i = 0; i < items.length && i < maxPrimaryItems; i++) {
     const item = items[i]
 
-    // Alternate soft zebra
     if (i % 2 === 1) {
       page.drawRectangle({
         x: marginX,
@@ -265,7 +288,6 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       })
     }
 
-    // Truncate description if long
     let desc = item.description
     if (desc.length > 44) desc = desc.slice(0, 42) + '...'
 
@@ -304,121 +326,273 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     })
 
     curY -= 17
-    // Avoid running into footer
-    if (curY < 170) break
   }
 
-  // Divider under table
-  page.drawLine({
-    start: { x: marginX, y: curY + 6 },
-    end: { x: marginX + contentWidth, y: curY + 6 },
-    thickness: 0.5,
-    color: COLOR_BORDER,
-  })
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 4. ADD-ONS & TOTALS BREAKDOWN (TEMPLATE-AWARE LAYOUT)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const totalsBoxX = marginX + 260
+  const totalsBoxW = contentWidth - 260
+  const addons = quotation.addons || []
 
-  curY -= 10
+  if (template === 'floral') {
+    // ── PACKAGE 3 (FLORAL) SPECIALIZED SECTIONS ──────────────────────────────
+    // 1. Deliverables subtotal right below line items (above pre-printed ADD ONS)
+    page.drawLine({
+      start: { x: marginX, y: curY + 4 },
+      end: { x: marginX + contentWidth, y: curY + 4 },
+      thickness: 0.5,
+      color: COLOR_BORDER,
+    })
+    curY -= 12
 
-  // ─── 4. TOTALS & GST BREAKDOWN ───────────────────────────────────────────────
-  const totalsBoxX = marginX + 270
-  const totalsBoxW = contentWidth - 270
-
-  // Subtotal
-  page.drawText('Subtotal:', {
-    x: totalsBoxX,
-    y: curY,
-    size: 9,
-    font: fontRegular,
-    color: COLOR_TEXT_MUTED,
-  })
-  const subtotalStr = formatPdfCurrency(quotation.subtotal)
-  page.drawText(subtotalStr, {
-    x: marginX + contentWidth - fontBold.widthOfTextAtSize(subtotalStr, 9),
-    y: curY,
-    size: 9,
-    font: fontBold,
-    color: COLOR_TEXT,
-  })
-
-  curY -= 15
-
-  // GST Breakdown (if enabled)
-  if (quotation.gstEnabled) {
-    page.drawText('CGST (9%):', {
+    const lineSubtotalStr = formatPdfCurrency(quotation.lineItems?.reduce((a, b) => a + (b.amount || 0), 0) || quotation.subtotal)
+    page.drawText('Package Deliverables:', {
       x: totalsBoxX,
       y: curY,
       size: 8.5,
-      font: fontRegular,
-      color: COLOR_TEXT_MUTED,
-    })
-    const cgstStr = formatPdfCurrency(quotation.cgst || 0)
-    page.drawText(cgstStr, {
-      x: marginX + contentWidth - fontRegular.widthOfTextAtSize(cgstStr, 8.5),
-      y: curY,
-      size: 8.5,
-      font: fontRegular,
+      font: fontBold,
       color: COLOR_TEXT,
     })
+    page.drawText(lineSubtotalStr, {
+      x: marginX + contentWidth - fontBold.widthOfTextAtSize(lineSubtotalStr, 8.5),
+      y: curY,
+      size: 8.5,
+      font: fontBold,
+      color: COLOR_PRIMARY,
+    })
 
-    curY -= 13
-
-    page.drawText('SGST (9%):', {
+    curY -= 11
+    const lineWords = numberToWordsINR(quotation.lineItems?.reduce((a, b) => a + (b.amount || 0), 0) || quotation.subtotal)
+    page.drawText(`(${lineWords})`, {
       x: totalsBoxX,
       y: curY,
-      size: 8.5,
+      size: 7,
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
     })
-    const sgstStr = formatPdfCurrency(quotation.sgst || 0)
-    page.drawText(sgstStr, {
-      x: marginX + contentWidth - fontRegular.widthOfTextAtSize(sgstStr, 8.5),
+
+    // 2. Add-ons rendered beneath the pre-printed "ADD ONS" template heading (y ≈ 208)
+    curY = 208
+    if (addons.length > 0) {
+      for (let i = 0; i < addons.length && i < 3; i++) {
+        const addon = addons[i]
+        page.drawText(`-  ${addon.description}`, {
+          x: marginX + 16,
+          y: curY,
+          size: 8.5,
+          font: fontRegular,
+          color: COLOR_TEXT,
+        })
+        const addonAmtStr = formatPdfCurrency(addon.amount)
+        const amtWidth = fontBold.widthOfTextAtSize(addonAmtStr, 8.5)
+        page.drawText(addonAmtStr, {
+          x: marginX + contentWidth - amtWidth,
+          y: curY,
+          size: 8.5,
+          font: fontBold,
+          color: COLOR_TEXT,
+        })
+        curY -= 14
+      }
+    } else {
+      page.drawText('-  None (No optional add-ons selected)', {
+        x: marginX + 16,
+        y: curY,
+        size: 8,
+        font: fontRegular,
+        color: COLOR_TEXT_MUTED,
+      })
+      curY -= 14
+    }
+
+    // 3. Grand Total and GST bar above the footer (y ≈ 142)
+    curY = Math.min(curY - 4, 142)
+    if (quotation.gstEnabled) {
+      const gstTotal = (quotation.cgst || 0) + (quotation.sgst || 0)
+      const gstSummary = `Incl. 18% GST: ${formatPdfCurrency(gstTotal)}`
+      page.drawText(gstSummary, {
+        x: totalsBoxX,
+        y: curY,
+        size: 8,
+        font: fontRegular,
+        color: COLOR_TEXT_MUTED,
+      })
+      curY -= 13
+    }
+
+    page.drawRectangle({
+      x: totalsBoxX - 6,
+      y: curY - 4,
+      width: totalsBoxW + 6,
+      height: 18,
+      color: COLOR_PRIMARY,
+    })
+    page.drawText('GRAND TOTAL:', {
+      x: totalsBoxX,
+      y: curY + 1,
+      size: 9,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    })
+    const grandStr = formatPdfCurrency(quotation.grandTotal)
+    page.drawText(grandStr, {
+      x: marginX + contentWidth - fontBold.widthOfTextAtSize(grandStr, 9),
+      y: curY + 1,
+      size: 9,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    })
+  } else {
+    // ── PACKAGE 1 & 2 STANDARD TOTALS & ADDONS ────────────────────────────────
+    if (addons.length > 0) {
+      curY -= 8
+      page.drawText('ADD-ONS / OPTIONAL SERVICES', {
+        x: marginX + 8,
+        y: curY,
+        size: 8.5,
+        font: fontBold,
+        color: COLOR_PRIMARY,
+      })
+      curY -= 14
+
+      for (let i = 0; i < addons.length && i < 3; i++) {
+        const addon = addons[i]
+        page.drawText(`• ${addon.description}`, {
+          x: marginX + 16,
+          y: curY,
+          size: 8,
+          font: fontRegular,
+          color: COLOR_TEXT,
+        })
+        const addonAmtStr = formatPdfCurrency(addon.amount)
+        const amtWidth = fontBold.widthOfTextAtSize(addonAmtStr, 8)
+        page.drawText(addonAmtStr, {
+          x: marginX + contentWidth - amtWidth,
+          y: curY,
+          size: 8,
+          font: fontBold,
+          color: COLOR_TEXT,
+        })
+        curY -= 13
+      }
+    }
+
+    // Divider under table
+    page.drawLine({
+      start: { x: marginX, y: curY + 4 },
+      end: { x: marginX + contentWidth, y: curY + 4 },
+      thickness: 0.5,
+      color: COLOR_BORDER,
+    })
+    curY -= 12
+
+    // Subtotal
+    page.drawText('Subtotal:', {
+      x: totalsBoxX,
       y: curY,
-      size: 8.5,
+      size: 9,
       font: fontRegular,
+      color: COLOR_TEXT_MUTED,
+    })
+    const subtotalStr = formatPdfCurrency(quotation.subtotal)
+    page.drawText(subtotalStr, {
+      x: marginX + contentWidth - fontBold.widthOfTextAtSize(subtotalStr, 9),
+      y: curY,
+      size: 9,
+      font: fontBold,
       color: COLOR_TEXT,
     })
+    curY -= 14
 
-    curY -= 15
+    // GST Breakdown (if enabled)
+    if (quotation.gstEnabled) {
+      page.drawText('CGST (9%):', {
+        x: totalsBoxX,
+        y: curY,
+        size: 8.5,
+        font: fontRegular,
+        color: COLOR_TEXT_MUTED,
+      })
+      const cgstStr = formatPdfCurrency(quotation.cgst || 0)
+      page.drawText(cgstStr, {
+        x: marginX + contentWidth - fontRegular.widthOfTextAtSize(cgstStr, 8.5),
+        y: curY,
+        size: 8.5,
+        font: fontRegular,
+        color: COLOR_TEXT,
+      })
+      curY -= 12
+
+      page.drawText('SGST (9%):', {
+        x: totalsBoxX,
+        y: curY,
+        size: 8.5,
+        font: fontRegular,
+        color: COLOR_TEXT_MUTED,
+      })
+      const sgstStr = formatPdfCurrency(quotation.sgst || 0)
+      page.drawText(sgstStr, {
+        x: marginX + contentWidth - fontRegular.widthOfTextAtSize(sgstStr, 8.5),
+        y: curY,
+        size: 8.5,
+        font: fontRegular,
+        color: COLOR_TEXT,
+      })
+      curY -= 14
+    }
+
+    // Grand Total Highlight
+    page.drawRectangle({
+      x: totalsBoxX - 8,
+      y: curY - 5,
+      width: totalsBoxW + 8,
+      height: 20,
+      color: COLOR_PRIMARY,
+    })
+    page.drawText('GRAND TOTAL:', {
+      x: totalsBoxX,
+      y: curY,
+      size: 9.5,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    })
+    const grandStr = formatPdfCurrency(quotation.grandTotal)
+    page.drawText(grandStr, {
+      x: marginX + contentWidth - fontBold.widthOfTextAtSize(grandStr, 9.5),
+      y: curY,
+      size: 9.5,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    })
+    curY -= 16
+
+    // Amount in words
+    const words = numberToWordsINR(quotation.grandTotal)
+    page.drawText(`(${words})`, {
+      x: totalsBoxX,
+      y: curY,
+      size: 7.5,
+      font: fontRegular,
+      color: COLOR_TEXT_MUTED,
+    })
+
+    // In Package 2: Stamp grand total right beside pre-printed "PRICE - Rs." at bottom (y ≈ 74)
+    if (template === 'modern') {
+      const priceNumberStr = `${quotation.grandTotal.toLocaleString('en-IN')}/-`
+      page.drawText(priceNumberStr, {
+        x: 335,
+        y: 74,
+        size: 13,
+        font: fontBold,
+        color: COLOR_TEXT,
+      })
+    }
   }
 
-  // Grand Total Highlight
-  page.drawRectangle({
-    x: totalsBoxX - 8,
-    y: curY - 5,
-    width: totalsBoxW + 8,
-    height: 20,
-    color: COLOR_PRIMARY,
-  })
-
-  page.drawText('GRAND TOTAL:', {
-    x: totalsBoxX,
-    y: curY,
-    size: 9.5,
-    font: fontBold,
-    color: rgb(1, 1, 1),
-  })
-
-  const grandStr = formatPdfCurrency(quotation.grandTotal)
-  page.drawText(grandStr, {
-    x: marginX + contentWidth - fontBold.widthOfTextAtSize(grandStr, 9.5),
-    y: curY,
-    size: 9.5,
-    font: fontBold,
-    color: rgb(1, 1, 1),
-  })
-
-  curY -= 18
-
-  // Amount in words
-  const words = numberToWordsINR(quotation.grandTotal)
-  page.drawText(`(${words})`, {
-    x: totalsBoxX,
-    y: curY,
-    size: 7.5,
-    font: fontRegular,
-    color: COLOR_TEXT_MUTED,
-  })
-
-  // ─── 5. NOTES OR TERMS (if any) ──────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 6. TERMS & CONDITIONS
+  // ─────────────────────────────────────────────────────────────────────────────
   if (quotation.termsAndConditions) {
     page.drawText('Terms & Conditions:', {
       x: marginX,

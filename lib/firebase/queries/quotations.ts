@@ -34,6 +34,7 @@ function parseQuotationDoc(id: string, data: Record<string, unknown>): Quotation
     eventDate: data.eventDate instanceof Timestamp ? data.eventDate.toDate() : (data.eventDate ? new Date(String(data.eventDate)) : undefined),
     validityDate: data.validityDate instanceof Timestamp ? data.validityDate.toDate() : (data.validityDate ? new Date(String(data.validityDate)) : new Date(Date.now() + 15 * 86400000)),
     lineItems: Array.isArray(data.lineItems) ? data.lineItems : [],
+    addons: Array.isArray(data.addons) ? data.addons : [],
     subtotal: Number(data.subtotal || 0),
     gstEnabled: Boolean(data.gstEnabled),
     gstRate: Number(data.gstRate || 18),

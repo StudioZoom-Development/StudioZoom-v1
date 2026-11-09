@@ -26,24 +26,24 @@ interface TemplateOption {
 const TEMPLATE_OPTIONS: TemplateOption[] = [
   {
     id: 'production',
-    name: 'Media Production Estimation',
-    subtitle: 'Magenta logo, corporate salutation, Avadi office footer',
+    name: 'Package 1 : Estimation',
+    subtitle: 'Place & Date, Respected Sir/Mam greeting, Office address footer',
     thumbnailUrl: '/templates/quotations/template-production.png',
-    tag: 'Corporate & Media',
+    tag: 'Production & Commercial',
   },
   {
     id: 'modern',
-    name: 'Minimal Wedding Editorial',
-    subtitle: 'Collage photo strip, rings & shoes, phone & Instagram',
+    name: 'Package 2 : Wedding Editorial',
+    subtitle: 'Logo header, clean line items, contact & Instagram footer',
     thumbnailUrl: '/templates/quotations/template-modern.png',
-    tag: 'Modern Wedding',
+    tag: 'Editorial Wedding',
   },
   {
     id: 'floral',
-    name: 'Royal Floral Wedding',
-    subtitle: 'Cherry blossoms, ornamental quotation badge, botanical motifs',
+    name: 'Package 3 : Royal Wedding with Add-ons',
+    subtitle: 'Wedding Quotation badge, Event Header, dedicated Add-ons section',
     thumbnailUrl: '/templates/quotations/template-floral.png',
-    tag: 'Royal Wedding',
+    tag: 'Royal Wedding & Add-ons',
   },
 ]
 
@@ -98,7 +98,7 @@ export function QuotationBuilderForm({
     return d
   })
 
-  // Line items state
+  // Line items state (Primary services)
   const [lineItems, setLineItems] = useState<LineItem[]>(() => {
     if (initialQuotation?.lineItems && initialQuotation.lineItems.length > 0) {
       return initialQuotation.lineItems
@@ -108,6 +108,14 @@ export function QuotationBuilderForm({
       { id: '2', description: 'Traditional HD Videography (Full Day)', qty: 1, rate: 35000, amount: 35000 },
       { id: '3', description: 'Cinematic Teaser & Highlight Reel', qty: 1, rate: 25000, amount: 25000 },
     ]
+  })
+
+  // Separate Add-ons state (Specially for Package 3 or custom add-on deliverables)
+  const [addons, setAddons] = useState<LineItem[]>(() => {
+    if (initialQuotation?.addons && initialQuotation.addons.length > 0) {
+      return initialQuotation.addons
+    }
+    return []
   })
 
   // GST Switch State
@@ -163,9 +171,17 @@ export function QuotationBuilderForm({
   }, [])
 
   // ─── FINANCIAL CALCULATIONS ────────────────────────────────────────────────
-  const subtotal = useMemo(() => {
+  const lineItemsSubtotal = useMemo(() => {
     return lineItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0)
   }, [lineItems])
+
+  const addonsSubtotal = useMemo(() => {
+    return addons.reduce((acc, item) => acc + (Number(item.amount) || 0), 0)
+  }, [addons])
+
+  const subtotal = useMemo(() => {
+    return lineItemsSubtotal + addonsSubtotal
+  }, [lineItemsSubtotal, addonsSubtotal])
 
   const cgst = useMemo(() => {
     if (!gstEnabled) return 0
@@ -197,6 +213,7 @@ export function QuotationBuilderForm({
       eventDate,
       validityDate,
       lineItems,
+      addons,
       subtotal,
       gstEnabled,
       gstRate: 18,
@@ -221,6 +238,7 @@ export function QuotationBuilderForm({
     eventDate,
     validityDate,
     lineItems,
+    addons,
     subtotal,
     gstEnabled,
     cgst,
@@ -232,8 +250,14 @@ export function QuotationBuilderForm({
   ])
 
   // ─── LINE ITEM HANDLERS ────────────────────────────────────────────────────
-  const handleItemChange = (index: number, field: keyof LineItem, val: string | number) => {
-    setLineItems((prev) => {
+  const handleItemChange = (
+    index: number,
+    field: keyof LineItem,
+    val: string | number,
+    isAddon: boolean = false
+  ) => {
+    const setter = isAddon ? setAddons : setLineItems
+    setter((prev) => {
       const copy = [...prev]
       const current = { ...copy[index] }
 
@@ -273,6 +297,23 @@ export function QuotationBuilderForm({
     setLineItems((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const handleAddAddon = () => {
+    setAddons((prev) => [
+      ...prev,
+      {
+        id: `addon-${prev.length + 1}-${Math.random().toString(36).slice(2, 7)}`,
+        description: '',
+        qty: 1,
+        rate: 0,
+        amount: 0,
+      },
+    ])
+  }
+
+  const handleRemoveAddon = (index: number) => {
+    setAddons((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleApplyPackage = (pkg: PackageTemplate) => {
     if (pkg.lineItems && pkg.lineItems.length > 0) {
       setLineItems(
@@ -286,7 +327,6 @@ export function QuotationBuilderForm({
       )
       showToast(`Applied package: ${pkg.name}`)
     } else {
-      // Fallback single line item if package has flat price
       setLineItems([
         {
           id: `${pkg.id}-pkg`,
@@ -323,6 +363,7 @@ export function QuotationBuilderForm({
           eventDate,
           validityDate,
           lineItems,
+          addons,
           subtotal,
           gstEnabled,
           cgst,
@@ -345,6 +386,7 @@ export function QuotationBuilderForm({
           eventDate,
           validityDate,
           lineItems,
+          addons,
           subtotal,
           gstEnabled,
           gstRate: 18,
@@ -483,7 +525,7 @@ export function QuotationBuilderForm({
               </span>
             </div>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
-              Select template stationery, add itemized deliverables, toggle GST, and download branded A4 PDF.
+              Select Package 1, 2, or 3, customize deliverables and add-ons, toggle GST, and download print-ready PDF.
             </p>
           </div>
         </div>
@@ -594,10 +636,10 @@ export function QuotationBuilderForm({
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                1. Select Stationery Template
+                1. Select Quotation Package Template
               </span>
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                3 Branded Studio Zoom Styles
+                Package 1, 2, or 3
               </span>
             </div>
 
@@ -882,7 +924,7 @@ export function QuotationBuilderForm({
             </div>
           )}
 
-          {/* 4. LINE ITEMS TABLE */}
+          {/* 4. PRIMARY DELIVERABLES & SERVICES TABLE */}
           <div
             style={{
               backgroundColor: 'var(--color-surface)',
@@ -934,9 +976,9 @@ export function QuotationBuilderForm({
                   }}
                 >
                   <Input
-                    placeholder="Item description / service"
+                    placeholder="Deliverable description / service"
                     value={item.description}
-                    onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                    onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
                     style={{ height: '32px', fontSize: 'var(--text-xs)' }}
                   />
 
@@ -945,7 +987,7 @@ export function QuotationBuilderForm({
                     min={1}
                     placeholder="Qty"
                     value={item.qty}
-                    onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
+                    onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
                     style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
                   />
 
@@ -954,7 +996,7 @@ export function QuotationBuilderForm({
                     min={0}
                     placeholder="Rate"
                     value={item.rate || ''}
-                    onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
+                    onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
                     style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
                   />
 
@@ -984,83 +1026,223 @@ export function QuotationBuilderForm({
                 </div>
               ))}
             </div>
+          </div>
 
-            {/* 5. TOTALS & GST SWITCH */}
+          {/* 5. ADD-ONS SECTION (DEDICATED FOR PACKAGE 3 OR SPECIAL REQUESTS) */}
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  4. Add-ons / Optional Services
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)', marginLeft: '8px' }}>
+                  {templateId === 'floral' ? '(Rendered in Package 3 ADD ONS area)' : '(Optional additional equipment/service)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddAddon}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-accent)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: 'var(--text-xs)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <i className="ti ti-plus" />
+                <span>Add Add-on</span>
+              </button>
+            </div>
+
+            {addons.length === 0 ? (
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-surface-raised)',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-foreground-muted)',
+                  textAlign: 'center',
+                }}
+              >
+                No add-ons added yet. Click &quot;Add Add-on&quot; to include extra services (e.g. Drone, Live Streaming, Express Delivery).
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {addons.map((item, idx) => (
+                  <div
+                    key={item.id || idx}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) 60px 100px 90px 30px',
+                      gap: '8px',
+                      alignItems: 'center',
+                      padding: '8px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                    }}
+                  >
+                    <Input
+                      placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
+                      value={item.description}
+                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                    />
+
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Qty"
+                      value={item.qty}
+                      onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
+                    />
+
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Rate"
+                      value={item.rate || ''}
+                      onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
+                    />
+
+                    <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                      ₹{item.amount.toLocaleString('en-IN')}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAddon(idx)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--color-danger)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                      title="Remove add-on"
+                    >
+                      <i className="ti ti-trash" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 6. TOTALS & GST SWITCH */}
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}>
+              <span style={{ color: 'var(--color-foreground-muted)' }}>Deliverables Subtotal</span>
+              <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                ₹{lineItemsSubtotal.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            {addonsSubtotal > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}>
+                <span style={{ color: 'var(--color-foreground-muted)' }}>Add-ons Subtotal</span>
+                <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  ₹{addonsSubtotal.toLocaleString('en-IN')}
+                </span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)', borderTop: '0.5px solid var(--color-border)', paddingTop: '8px' }}>
+              <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>Total Subtotal</span>
+              <span style={{ fontWeight: 700, color: 'var(--color-foreground)' }}>
+                ₹{subtotal.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            {/* GST SWITCH TOGGLE */}
             <div
               style={{
                 display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                borderTop: '0.5px solid var(--color-border)',
-                paddingTop: '12px',
-                marginTop: '4px',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: 'var(--text-sm)',
+                backgroundColor: 'var(--color-surface-raised)',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '0.5px solid var(--color-border)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--color-foreground-muted)' }}>Subtotal</span>
-                <span style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
-                  ₹{subtotal.toLocaleString('en-IN')}
-                </span>
-              </div>
-
-              {/* GST SWITCH TOGGLE */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: 'var(--text-sm)',
-                  backgroundColor: 'var(--color-surface-raised)',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '0.5px solid var(--color-border)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Switch checked={gstEnabled} onCheckedChange={setGstEnabled} />
-                  <div>
-                    <span style={{ fontWeight: 600, color: 'var(--color-foreground)', fontSize: 'var(--text-xs)' }}>
-                      Apply 18% GST
-                    </span>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)' }}>
-                      {gstEnabled ? 'CGST 9% + SGST 9%' : 'No tax added to quotation'}
-                    </div>
-                  </div>
-                </div>
-
-                {gstEnabled ? (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                    CGST ₹{cgst.toLocaleString('en-IN')} + SGST ₹{sgst.toLocaleString('en-IN')}
-                  </span>
-                ) : (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>₹0 (Exempt)</span>
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'baseline',
-                  paddingTop: '6px',
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Switch checked={gstEnabled} onCheckedChange={setGstEnabled} />
                 <div>
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                    Grand Total
+                  <span style={{ fontWeight: 600, color: 'var(--color-foreground)', fontSize: 'var(--text-xs)' }}>
+                    Apply 18% GST
                   </span>
                   <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)' }}>
-                    ({numberToWordsINR(grandTotal)})
+                    {gstEnabled ? 'CGST 9% + SGST 9%' : 'No tax added to quotation'}
                   </div>
                 </div>
-                <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
-                  ₹{grandTotal.toLocaleString('en-IN')}
-                </span>
               </div>
+
+              {gstEnabled ? (
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  CGST ₹{cgst.toLocaleString('en-IN')} + SGST ₹{sgst.toLocaleString('en-IN')}
+                </span>
+              ) : (
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>₹0 (Exempt)</span>
+              )}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                paddingTop: '6px',
+              }}
+            >
+              <div>
+                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                  Grand Total
+                </span>
+                <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)' }}>
+                  ({numberToWordsINR(grandTotal)})
+                </div>
+              </div>
+              <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
+                ₹{grandTotal.toLocaleString('en-IN')}
+              </span>
             </div>
           </div>
 
-          {/* 6. TERMS & FOOTER */}
+          {/* 7. TERMS & FOOTER */}
           <div
             style={{
               backgroundColor: 'var(--color-surface)',
@@ -1128,7 +1310,7 @@ export function QuotationBuilderForm({
             style={{
               position: 'relative',
               width: '100%',
-              aspectRatio: '724 / 1024',
+              aspectRatio: '595 / 842',
               backgroundColor: '#ffffff',
               borderRadius: '8px',
               boxShadow: '0 12px 36px rgba(0,0,0,0.45)',
@@ -1206,7 +1388,7 @@ export function QuotationBuilderForm({
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
 
-                    {lineItems.slice(0, 7).map((item, i) => (
+                    {lineItems.slice(0, 6).map((item, i) => (
                       <div
                         key={i}
                         style={{
@@ -1225,6 +1407,33 @@ export function QuotationBuilderForm({
                         <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                       </div>
                     ))}
+
+                    {addons.length > 0 && (
+                      <>
+                        <div style={{ marginTop: '4px', padding: '2px 6px', fontSize: '8px', fontWeight: 700, color: '#c6539f' }}>
+                          ADD-ONS
+                        </div>
+                        {addons.slice(0, 2).map((item, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 30px 60px 65px',
+                              padding: '2px 6px',
+                              fontSize: '8px',
+                              color: '#444',
+                            }}
+                          >
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              + {item.description}
+                            </span>
+                            <span style={{ textAlign: 'center' }}>{item.qty}</span>
+                            <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
+                            <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
 
                   {/* TOTALS */}
@@ -1258,7 +1467,7 @@ export function QuotationBuilderForm({
 
               {templateId === 'modern' && (
                 <>
-                  <div style={{ marginTop: '57%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                  <div style={{ marginTop: '46%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '11px' }}>{clientName || 'Client Name'}</div>
                       <div style={{ color: '#666' }}>{eventType} • {place}</div>
@@ -1288,7 +1497,7 @@ export function QuotationBuilderForm({
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
 
-                    {lineItems.slice(0, 6).map((item, i) => (
+                    {lineItems.slice(0, 5).map((item, i) => (
                       <div
                         key={i}
                         style={{
@@ -1307,6 +1516,33 @@ export function QuotationBuilderForm({
                         <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                       </div>
                     ))}
+
+                    {addons.length > 0 && (
+                      <>
+                        <div style={{ marginTop: '3px', padding: '1px 6px', fontSize: '7.5px', fontWeight: 700, color: '#c6539f' }}>
+                          ADD-ONS
+                        </div>
+                        {addons.slice(0, 2).map((item, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 30px 60px 65px',
+                              padding: '2px 6px',
+                              fontSize: '8px',
+                              color: '#444',
+                            }}
+                          >
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              + {item.description}
+                            </span>
+                            <span style={{ textAlign: 'center' }}>{item.qty}</span>
+                            <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
+                            <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
 
                   {/* TOTALS */}
@@ -1340,22 +1576,22 @@ export function QuotationBuilderForm({
 
               {templateId === 'floral' && (
                 <>
-                  <div style={{ marginTop: '55%', textAlign: 'center', fontSize: '10px', fontWeight: 700, color: '#666' }}>
+                  <div style={{ marginTop: '39.8%', textAlign: 'center', fontSize: '9.5px', fontWeight: 700, color: '#555', letterSpacing: '0.04em' }}>
                     {format(eventDate || new Date(), 'dd MMM yyyy').toUpperCase()} — {eventType.toUpperCase()}
                   </div>
 
-                  <div style={{ marginTop: '2%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                  <div style={{ marginTop: '1.5%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
                     <span style={{ fontWeight: 700 }}>Prepared For: {clientName || 'Client Name'}</span>
                     <span style={{ color: '#c6539f', fontWeight: 700 }}>{quotationNumber}</span>
                   </div>
 
                   {/* ITEM TABLE */}
-                  <div style={{ marginTop: '3%', flex: 1 }}>
+                  <div style={{ marginTop: '2.5%', flex: 1 }}>
                     <div
                       style={{
                         display: 'grid',
                         gridTemplateColumns: '1fr 30px 60px 65px',
-                        padding: '4px 6px',
+                        padding: '3px 6px',
                         backgroundColor: 'rgba(0,0,0,0.04)',
                         fontWeight: 700,
                         fontSize: '8px',
@@ -1368,15 +1604,15 @@ export function QuotationBuilderForm({
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
 
-                    {lineItems.slice(0, 6).map((item, i) => (
+                    {lineItems.slice(0, 4).map((item, i) => (
                       <div
                         key={i}
                         style={{
                           display: 'grid',
                           gridTemplateColumns: '1fr 30px 60px 65px',
-                          padding: '3px 6px',
+                          padding: '2px 6px',
                           borderBottom: '0.5px solid rgba(0,0,0,0.06)',
-                          fontSize: '8.5px',
+                          fontSize: '8px',
                         }}
                       >
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1387,18 +1623,44 @@ export function QuotationBuilderForm({
                         <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                       </div>
                     ))}
+
+                    {/* PACKAGE DELIVERABLES PRICE */}
+                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', fontWeight: 700, color: '#8b2e67' }}>
+                      <span>Package Price:</span>
+                      <span>Rs. {lineItemsSubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* DEDICATED ADD-ONS SECTION FOR PACKAGE 3 (UNDER PRE-PRINTED 'ADD ONS' HEADING) */}
+                  <div style={{ position: 'absolute', top: '75.5%', left: '6%', right: '6%' }}>
+                    {addons.length === 0 ? (
+                      <div style={{ fontSize: '7.5px', color: '#888', fontStyle: 'italic' }}>
+                        - None (No optional add-ons selected)
+                      </div>
+                    ) : (
+                      addons.slice(0, 3).map((item, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            fontSize: '8px',
+                            padding: '1px 0',
+                          }}
+                        >
+                          <span>- {item.description || 'Add-on deliverable'}</span>
+                          <span style={{ fontWeight: 600 }}>Rs. {item.amount.toLocaleString('en-IN')}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
 
                   {/* TOTALS */}
-                  <div style={{ alignSelf: 'flex-end', width: '50%', marginBottom: '14%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
-                      <span>Subtotal</span>
-                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
-                    </div>
+                  <div style={{ position: 'absolute', bottom: '13.5%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                        <span>GST 18%</span>
-                        <span>₹{(cgst + sgst).toLocaleString('en-IN')}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '7.5px' }}>
+                        <span>Incl. 18% GST</span>
+                        <span>Rs. {(cgst + sgst).toLocaleString('en-IN')}</span>
                       </div>
                     )}
                     <div
@@ -1408,11 +1670,12 @@ export function QuotationBuilderForm({
                         fontWeight: 700,
                         color: '#8b2e67',
                         borderTop: '1px solid #8b2e67',
-                        paddingTop: '3px',
+                        paddingTop: '2px',
+                        fontSize: '9px',
                       }}
                     >
                       <span>Grand Total</span>
-                      <span>₹{grandTotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
                 </>

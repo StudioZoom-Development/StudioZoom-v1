@@ -733,6 +733,7 @@ export interface Quotation {
   eventDate?:         Date
   validityDate:       Date
   lineItems:          LineItem[]
+  addons?:            LineItem[]
   subtotal:           number
   gstEnabled:         boolean
   gstRate?:           number          // default 18 (9% CGST + 9% SGST)
