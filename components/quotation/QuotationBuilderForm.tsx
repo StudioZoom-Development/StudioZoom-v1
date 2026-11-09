@@ -1353,133 +1353,28 @@ export function QuotationBuilderForm({
             >
               {templateId === 'production' && (
                 <>
-                  <div style={{ marginTop: '13.5%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{place || 'Chennai'}</div>
-                      <div style={{ marginTop: '3px' }}>{format(new Date(), 'dd MMM yyyy')}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, color: '#c6539f' }}>{quotationNumber}</div>
-                    </div>
+                  {/* Values filling in the pre-printed "Place :" and "Date :" lines */}
+                  <div style={{ position: 'absolute', top: '18.1%', left: '16.5%', fontSize: '9px', fontWeight: 600, color: '#1a1a1a' }}>
+                    {place || 'Chennai'}
                   </div>
 
-                  <div style={{ marginTop: '8%', fontSize: '10px' }}>
+                  <div style={{ position: 'absolute', top: '20.5%', left: '16.5%', fontSize: '9px', color: '#1a1a1a' }}>
+                    {format(new Date(), 'dd MMM yyyy')}
+                  </div>
+
+                  <div style={{ position: 'absolute', top: '20.5%', right: '7%', fontSize: '9px', fontWeight: 700, color: '#c6539f' }}>
+                    {quotationNumber}
+                  </div>
+
+                  {/* Prepared For (placed comfortably below "We're delighted to Work with you.") */}
+                  <div style={{ position: 'absolute', top: '32.2%', left: '7.8%', fontSize: '9.5px', color: '#1a1a1a' }}>
                     <span style={{ fontWeight: 700 }}>Prepared For: </span>
                     <span>{clientName || 'Client Name'}</span>
-                    <span style={{ color: '#666', marginLeft: '6px' }}>({eventType})</span>
+                    <span style={{ color: '#555', marginLeft: '6px' }}>({eventType})</span>
                   </div>
 
                   {/* ITEM TABLE */}
-                  <div style={{ marginTop: '4%', flex: 1 }}>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 30px 60px 65px',
-                        padding: '4px 6px',
-                        backgroundColor: 'rgba(0,0,0,0.04)',
-                        fontWeight: 700,
-                        fontSize: '8px',
-                        color: '#555',
-                      }}
-                    >
-                      <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'center' }}>QTY</span>
-                      <span style={{ textAlign: 'right' }}>RATE</span>
-                      <span style={{ textAlign: 'right' }}>AMOUNT</span>
-                    </div>
-
-                    {lineItems.slice(0, 6).map((item, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 30px 60px 65px',
-                          padding: '3px 6px',
-                          borderBottom: '0.5px solid rgba(0,0,0,0.06)',
-                          fontSize: '8.5px',
-                        }}
-                      >
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.description || 'Deliverable Item'}
-                        </span>
-                        <span style={{ textAlign: 'center', color: '#666' }}>{item.qty}</span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
-                        <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-
-                    {addons.length > 0 && (
-                      <>
-                        <div style={{ marginTop: '4px', padding: '2px 6px', fontSize: '8px', fontWeight: 700, color: '#c6539f' }}>
-                          ADD-ONS
-                        </div>
-                        {addons.slice(0, 2).map((item, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 30px 60px 65px',
-                              padding: '2px 6px',
-                              fontSize: '8px',
-                              color: '#444',
-                            }}
-                          >
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              + {item.description}
-                            </span>
-                            <span style={{ textAlign: 'center' }}>{item.qty}</span>
-                            <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
-                            <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-
-                  {/* TOTALS */}
-                  <div style={{ alignSelf: 'flex-end', width: '48%', marginBottom: '14%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
-                      <span>Subtotal</span>
-                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
-                    </div>
-                    {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                        <span>GST 18%</span>
-                        <span>₹{(cgst + sgst).toLocaleString('en-IN')}</span>
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontWeight: 700,
-                        color: '#c6539f',
-                        borderTop: '1px solid #c6539f',
-                        paddingTop: '3px',
-                      }}
-                    >
-                      <span>Grand Total</span>
-                      <span>₹{grandTotal.toLocaleString('en-IN')}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {templateId === 'modern' && (
-                <>
-                  <div style={{ marginTop: '46%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '11px' }}>{clientName || 'Client Name'}</div>
-                      <div style={{ color: '#666' }}>{eventType} • {place}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, color: '#c6539f' }}>{quotationNumber}</div>
-                      <div style={{ color: '#666' }}>{format(new Date(), 'dd MMM yyyy')}</div>
-                    </div>
-                  </div>
-
-                  {/* ITEM TABLE */}
-                  <div style={{ marginTop: '3%', flex: 1 }}>
+                  <div style={{ position: 'absolute', top: '36.5%', left: '6%', right: '6%' }}>
                     <div
                       style={{
                         display: 'grid',
@@ -1545,16 +1440,16 @@ export function QuotationBuilderForm({
                     )}
                   </div>
 
-                  {/* TOTALS */}
-                  <div style={{ alignSelf: 'flex-end', width: '50%', marginBottom: '14%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {/* TOTALS (Sits comfortably above the pre-printed Thank You & Office footer) */}
+                  <div style={{ position: 'absolute', bottom: '15.5%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
                       <span>Subtotal</span>
-                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '7.5px' }}>
                         <span>GST 18%</span>
-                        <span>₹{(cgst + sgst).toLocaleString('en-IN')}</span>
+                        <span>Rs. {(cgst + sgst).toLocaleString('en-IN')}</span>
                       </div>
                     )}
                     <div
@@ -1562,14 +1457,116 @@ export function QuotationBuilderForm({
                         display: 'flex',
                         justifyContent: 'space-between',
                         fontWeight: 700,
-                        color: '#1a1a1a',
-                        borderTop: '1px solid #1a1a1a',
-                        paddingTop: '3px',
+                        color: '#c6539f',
+                        borderTop: '1px solid #c6539f',
+                        paddingTop: '2px',
+                        fontSize: '9px',
                       }}
                     >
                       <span>Grand Total</span>
-                      <span>₹{grandTotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
                     </div>
+                  </div>
+                </>
+              )}
+
+              {templateId === 'modern' && (
+                <>
+                  <div style={{ position: 'absolute', top: '51%', left: '6%', right: '6%', display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '10.5px' }}>{clientName || 'Client Name'}</div>
+                      <div style={{ color: '#666' }}>{eventType} • {place}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, color: '#c6539f' }}>{quotationNumber}</div>
+                      <div style={{ color: '#666' }}>{format(new Date(), 'dd MMM yyyy')}</div>
+                    </div>
+                  </div>
+
+                  {/* ITEM TABLE */}
+                  <div style={{ position: 'absolute', top: '57%', left: '6%', right: '6%' }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 30px 60px 65px',
+                        padding: '4px 6px',
+                        backgroundColor: 'rgba(0,0,0,0.04)',
+                        fontWeight: 700,
+                        fontSize: '8px',
+                        color: '#555',
+                      }}
+                    >
+                      <span>DESCRIPTION</span>
+                      <span style={{ textAlign: 'center' }}>QTY</span>
+                      <span style={{ textAlign: 'right' }}>RATE</span>
+                      <span style={{ textAlign: 'right' }}>AMOUNT</span>
+                    </div>
+
+                    {lineItems.slice(0, 4).map((item, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 30px 60px 65px',
+                          padding: '3px 6px',
+                          borderBottom: '0.5px solid rgba(0,0,0,0.06)',
+                          fontSize: '8.5px',
+                        }}
+                      >
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.description || 'Deliverable Item'}
+                        </span>
+                        <span style={{ textAlign: 'center', color: '#666' }}>{item.qty}</span>
+                        <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
+                        <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+
+                    {addons.length > 0 && (
+                      <>
+                        <div style={{ marginTop: '2px', padding: '1px 6px', fontSize: '7.5px', fontWeight: 700, color: '#c6539f' }}>
+                          ADD-ONS
+                        </div>
+                        {addons.slice(0, 2).map((item, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 30px 60px 65px',
+                              padding: '2px 6px',
+                              fontSize: '8px',
+                              color: '#444',
+                            }}
+                          >
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              + {item.description}
+                            </span>
+                            <span style={{ textAlign: 'center' }}>{item.qty}</span>
+                            <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
+                            <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+
+                  {/* TOTALS */}
+                  <div style={{ position: 'absolute', bottom: '15%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
+                      <span>Subtotal</span>
+                      <span>Rs. {subtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    {gstEnabled && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '7.5px' }}>
+                        <span>GST 18%</span>
+                        <span>Rs. {(cgst + sgst).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* GRAND TOTAL STAMPED RIGHT NEXT TO PRE-PRINTED "PRICE - Rs." */}
+                  <div style={{ position: 'absolute', bottom: '8.6%', left: '56%', fontSize: '11px', fontWeight: 700, color: '#1a1a1a' }}>
+                    {grandTotal.toLocaleString('en-IN')}/-
                   </div>
                 </>
               )}

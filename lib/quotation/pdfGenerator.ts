@@ -36,6 +36,18 @@ async function loadTemplateAsset(
     } catch (e) {
       console.warn(`Could not fetch template ${type} via browser:`, e)
     }
+  } else {
+    // Node / Server environment (testing, scripts, SSR)
+    try {
+      const fs = await import('fs')
+      const path = await import('path')
+      const localPath = path.resolve(process.cwd(), `public${relativePath}`)
+      if (fs.existsSync(localPath)) {
+        return new Uint8Array(fs.readFileSync(localPath))
+      }
+    } catch (e) {
+      console.warn(`Could not load template ${type} via fs:`, e)
+    }
   }
 
   return null
@@ -89,15 +101,16 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
   // ─────────────────────────────────────────────────────────────────────────────
   // TEMPLATE-SPECIFIC OVERLAYS
   // ─────────────────────────────────────────────────────────────────────────────
-  let tableStartY = 540
+  let tableStartY = 534
 
   if (template === 'production') {
     // ── PACKAGE 1: Media Production Estimation ──────────────────────────────────
-    // Top has: Place :, Date :, Respected Sir / Mam, Thank You for Giving us...
-    // Footer has: Thank You, OFFICE: No.3 Kasturi Bai Nagar..., Email, Contact
+    // Pre-printed Top has: STUDIO ZOOM (with logo right), MEDIA PRODUCTION ESTIMATION,
+    // Place :, Date :, Respected Sir / Mam, Thank You for Giving us...
+    // Pre-printed Bottom has: Thank You (center), OFFICE Address, Email, Contact (left)
     page.drawText(quotation.place || 'Chennai', {
-      x: 92,
-      y: 728,
+      x: 96,
+      y: 690,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
@@ -105,8 +118,8 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     const qDate = quotation.createdAt ? format(quotation.createdAt, 'dd MMM yyyy') : format(new Date(), 'dd MMM yyyy')
     page.drawText(qDate, {
-      x: 92,
-      y: 708,
+      x: 96,
+      y: 670,
       size: 10,
       font: fontRegular,
       color: COLOR_TEXT,
@@ -114,16 +127,16 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Quotation No: ${quotation.quotationNumber}`, {
       x: width - marginX - 165,
-      y: 708,
+      y: 670,
       size: 9.5,
       font: fontBold,
       color: COLOR_PRIMARY,
     })
 
-    // Prepared For
+    // Prepared For (placed comfortably below "We're delighted to Work with you.")
     page.drawText(`Prepared For:  ${quotation.clientName}  (${quotation.eventType})`, {
-      x: marginX,
-      y: 648,
+      x: 46,
+      y: 572,
       size: 11,
       font: fontBold,
       color: COLOR_TEXT,
@@ -131,23 +144,23 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     if (quotation.contact) {
       page.drawText(`Contact: ${quotation.contact}  ${quotation.email ? `•  ${quotation.email}` : ''}`, {
-        x: marginX,
-        y: 634,
+        x: 46,
+        y: 558,
         size: 9,
         font: fontRegular,
         color: COLOR_TEXT_MUTED,
       })
     }
 
-    tableStartY = 610
+    tableStartY = 534
   } else if (template === 'modern') {
     // ── PACKAGE 2: Wedding Editorial Photo-Strip ────────────────────────────────
-    // Top has: Wedding photo strip collage (rings, couple, shoes).
-    // Center: Logo.
-    // Bottom: PRICE - Rs. [value], Phone numbers, Instagram @studio_zoom_chennai
+    // Top: Wedding photo strip collage (rings, couple, shoes) and center Studio Zoom logo.
+    // Content starts below photo collage (y <= 425).
+    // Bottom: Pre-printed "PRICE - Rs.", Phone numbers, Instagram @studio_zoom_chennai
     page.drawText(`QUOTATION : ${quotation.quotationNumber}`, {
       x: marginX,
-      y: 508,
+      y: 412,
       size: 10,
       font: fontBold,
       color: COLOR_PRIMARY,
@@ -156,7 +169,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     const qDate = quotation.createdAt ? format(quotation.createdAt, 'dd MMM yyyy') : format(new Date(), 'dd MMM yyyy')
     page.drawText(`Date: ${qDate}  •  Valid Until: ${format(quotation.validityDate, 'dd MMM yyyy')}`, {
       x: width - marginX - 220,
-      y: 508,
+      y: 412,
       size: 9,
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
@@ -164,8 +177,8 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`${quotation.clientName}  —  ${quotation.eventType}`, {
       x: marginX,
-      y: 490,
-      size: 13,
+      y: 394,
+      size: 12.5,
       font: fontBold,
       color: COLOR_TEXT,
     })
@@ -174,20 +187,20 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       const evDateStr = quotation.eventDate ? format(quotation.eventDate, 'dd MMM yyyy') : ''
       page.drawText([quotation.place, evDateStr].filter(Boolean).join(' • '), {
         x: marginX,
-        y: 476,
+        y: 380,
         size: 9,
         font: fontRegular,
         color: COLOR_TEXT_MUTED,
       })
     }
 
-    tableStartY = 455
+    tableStartY = 356
   } else if (template === 'floral') {
     // ── PACKAGE 3: Royal Floral Wedding with Dedicated Add-ons Section ──────────
-    // Top: Blossom & Ring, Purple Badge "Wedding Quotation"
-    // "Thank you for giving us this great oppurtunity. We're delighted to work for you"
-    // Center Placeholder: [DATE - EVENT NAME]
-    // Middle-Lower Section: ADD ONS
+    // Top: Blossom & Ring, Purple Badge "Wedding Quotation", Studio Zoom Logo
+    // "Thank you for giving us this great oppurtunity. We're delighted to work for you" (y=520)
+    // Pre-printed Placeholder: [DATE - EVENT NAME] (y=494)
+    // Middle-Lower Section: Pre-printed ADD ONS (y=210)
     // Footer: Contact numbers, studiozoomindia@gmail.com, studiozoom.in, floral corners
     const evDateStr = quotation.eventDate ? format(quotation.eventDate, 'dd MMM yyyy') : format(new Date(), 'dd MMM yyyy')
     const eventHeader = `${evDateStr} - ${quotation.eventType.toUpperCase()}`
@@ -196,15 +209,15 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
     // Center header exactly aligned with the template's "[DATE - EVENT NAME]" placeholder
     page.drawText(eventHeader, {
       x: (width - evTextWidth) / 2,
-      y: 506,
+      y: 494,
       size: 10.5,
       font: fontBold,
-      color: COLOR_TEXT_MUTED,
+      color: COLOR_TEXT,
     })
 
     page.drawText(`Client: ${quotation.clientName}`, {
       x: marginX,
-      y: 486,
+      y: 472,
       size: 11,
       font: fontBold,
       color: COLOR_TEXT,
@@ -212,13 +225,13 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
 
     page.drawText(`Quote: ${quotation.quotationNumber}  •  Valid: ${format(quotation.validityDate, 'dd MMM yyyy')}`, {
       x: width - marginX - 220,
-      y: 486,
+      y: 472,
       size: 9,
       font: fontRegular,
       color: COLOR_TEXT_MUTED,
     })
 
-    tableStartY = 465
+    tableStartY = 446
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -372,8 +385,8 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
       color: COLOR_TEXT_MUTED,
     })
 
-    // 2. Add-ons rendered beneath the pre-printed "ADD ONS" template heading (y ≈ 208)
-    curY = 208
+    // 2. Add-ons rendered beneath the pre-printed "ADD ONS" template heading (y ≈ 210)
+    curY = 180
     if (addons.length > 0) {
       for (let i = 0; i < addons.length && i < 3; i++) {
         const addon = addons[i]
@@ -393,7 +406,7 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
           font: fontBold,
           color: COLOR_TEXT,
         })
-        curY -= 14
+        curY -= 18
       }
     } else {
       page.drawText('-  None (No optional add-ons selected)', {
@@ -403,11 +416,11 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
         font: fontRegular,
         color: COLOR_TEXT_MUTED,
       })
-      curY -= 14
+      curY -= 18
     }
 
-    // 3. Grand Total and GST bar above the footer (y ≈ 142)
-    curY = Math.min(curY - 4, 142)
+    // 3. Grand Total and GST bar above the footer (y ≈ 120)
+    curY = Math.min(curY, 122)
     if (quotation.gstEnabled) {
       const gstTotal = (quotation.cgst || 0) + (quotation.sgst || 0)
       const gstSummary = `Incl. 18% GST: ${formatPdfCurrency(gstTotal)}`
