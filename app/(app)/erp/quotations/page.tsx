@@ -481,8 +481,8 @@ export default function QuotationsPage() {
                 })}
               </tbody>
             </table>
-        </div>
-      )}
+          </div>
+        )}
       </div>
 
       {/* CONFIRM DELETE MODAL */}
