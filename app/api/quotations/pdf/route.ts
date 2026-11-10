@@ -55,7 +55,10 @@ export async function POST(req: NextRequest) {
       await browser.close()
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to generate PDF'
+    const rawMessage = error instanceof Error ? error.message : 'Failed to generate PDF'
+    const message = rawMessage.includes('Could not find Chrome')
+      ? 'Headless Chromium is not installed on this server. Please use the in-app Print / Save as PDF feature.'
+      : rawMessage
     console.error('[Quotation PDF Route Error]:', error)
     return NextResponse.json({ error: message }, { status: 500 })
   }

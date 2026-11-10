@@ -123,218 +123,215 @@ export default function QuotationsPage() {
       {/* DESKTOP CONTENT (>= 768px) */}
       <div className="hidden md:flex flex-col gap-6">
         {/* HEADER SECTION */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
-            Quotations & Estimations
-          </h1>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
-            Build, brand, customize GST, and dispatch production & wedding quotations in INR.
-          </p>
-        </div>
-
-        <Button
-          onClick={() => router.push('/erp/quotations/new')}
+        <div
           style={{
-            backgroundColor: 'var(--color-primary)',
-            color: '#ffffff',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
           }}
         >
-          <i className="ti ti-plus" />
-          <span>New Quotation</span>
-        </Button>
-      </div>
+          <div>
+            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+              Quotations & Estimations
+            </h1>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
+              Build, brand, customize GST, and dispatch production & wedding quotations in INR.
+            </p>
+          </div>
 
-      {/* KPI METRIC CARDS */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '16px',
-        }}
-      >
+          <Button
+            onClick={() => router.push('/erp/quotations/new')}
+            style={{
+              backgroundColor: 'var(--color-primary)',
+              color: '#ffffff',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <i className="ti ti-plus" />
+            <span>New Quotation</span>
+          </Button>
+        </div>
+
+        {/* KPI METRIC CARDS */}
         <div
           style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '16px',
           }}
         >
-          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
-            TOTAL QUOTATIONS
-          </span>
-          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-            {stats.total}
-          </span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            All active quotation records
-          </span>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-          }}
-        >
-          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
-            SENT TO CLIENTS
-          </span>
-          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-accent)' }}>
-            {stats.sentCount}
-          </span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            Awaiting client sign-off
-          </span>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-          }}
-        >
-          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
-            ACCEPTED / CONVERTED
-          </span>
-          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-success)' }}>
-            {stats.acceptedCount}
-          </span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            Won client estimates
-          </span>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-          }}
-        >
-          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
-            PIPELINE ESTIMATION
-          </span>
-          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
-            {formatIndianCurrency(stats.totalPipelineValue)}
-          </span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-            Gross quotation value
-          </span>
-        </div>
-      </div>
-
-      {/* FILTER & SEARCH STRIP */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          backgroundColor: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          padding: '12px 16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {STATUS_OPTIONS.map((opt) => {
-            const active = statusFilter === opt.key
-            return (
-              <button
-                key={opt.key}
-                onClick={() => setStatusFilter(opt.key)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  border: `0.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                  backgroundColor: active ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
-                  color: active ? 'var(--color-primary)' : 'var(--color-foreground)',
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
-        </div>
-
-        <div style={{ width: '260px' }}>
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search client, quote #, event..."
-            style={{ height: '36px', fontSize: 'var(--text-xs)' }}
-          />
-        </div>
-      </div>
-
-      {/* DATA TABLE (DESKTOP) & COMPACT CARDS (MOBILE) */}
-      {loading ? (
-        <div
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            overflow: 'hidden',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              <TableRowSkeleton rows={5} cols={8} />
-            </tbody>
-          </table>
-        </div>
-      ) : quotations.length === 0 ? (
-        <EmptyState
-          icon="ti-file-invoice"
-          title="No Quotations Found"
-          description="Create your first event or media production quotation with custom templates and GST."
-          action={{
-            label: 'Create Quotation',
-            onClick: () => router.push('/erp/quotations/new'),
-          }}
-        />
-      ) : (
-        <>
-          {/* DESKTOP TABLE */}
           <div
-            className="hidden md:block"
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+              TOTAL QUOTATIONS
+            </span>
+            <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+              {stats.total}
+            </span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+              All active quotation records
+            </span>
+          </div>
+
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+              SENT TO CLIENTS
+            </span>
+            <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-accent)' }}>
+              {stats.sentCount}
+            </span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+              Awaiting client sign-off
+            </span>
+          </div>
+
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+              ACCEPTED / CONVERTED
+            </span>
+            <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-success)' }}>
+              {stats.acceptedCount}
+            </span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+              Won client estimates
+            </span>
+          </div>
+
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+              PIPELINE ESTIMATION
+            </span>
+            <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
+              {formatIndianCurrency(stats.totalPipelineValue)}
+            </span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+              Gross quotation value
+            </span>
+          </div>
+        </div>
+
+        {/* FILTER & SEARCH STRIP */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '12px 16px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {STATUS_OPTIONS.map((opt) => {
+              const active = statusFilter === opt.key
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setStatusFilter(opt.key)}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    border: `0.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    backgroundColor: active ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                    color: active ? 'var(--color-primary)' : 'var(--color-foreground)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ width: '260px' }}>
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search client, quote #, event..."
+              style={{ height: '36px', fontSize: 'var(--text-xs)' }}
+            />
+          </div>
+        </div>
+
+        {/* DATA TABLE (DESKTOP) & COMPACT CARDS (MOBILE) */}
+        {loading ? (
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                <TableRowSkeleton rows={5} cols={8} />
+              </tbody>
+            </table>
+          </div>
+        ) : quotations.length === 0 ? (
+          <EmptyState
+            icon="ti-file-invoice"
+            title="No Quotations Found"
+            description="Create your first event or media production quotation with custom templates and GST."
+            action={{
+              label: 'Create Quotation',
+              onClick: () => router.push('/erp/quotations/new'),
+            }}
+          />
+        ) : (
+          <div
             style={{
               backgroundColor: 'var(--color-surface)',
               border: '0.5px solid var(--color-border)',
@@ -422,10 +419,10 @@ export default function QuotationsPage() {
                             q.status === 'accepted'
                               ? 'paid'
                               : q.status === 'converted'
-                              ? 'done'
-                              : q.status === 'sent'
-                              ? 'inProgress'
-                              : 'todo'
+                                ? 'done'
+                                : q.status === 'sent'
+                                  ? 'inProgress'
+                                  : 'todo'
                           }
                           label={q.status.toUpperCase()}
                         />
@@ -485,8 +482,7 @@ export default function QuotationsPage() {
               </tbody>
             </table>
           </div>
-        </>
-      )}
+        )}
       </div>
 
       {/* CONFIRM DELETE MODAL */}
