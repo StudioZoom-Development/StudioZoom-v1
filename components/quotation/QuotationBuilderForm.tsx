@@ -27,21 +27,21 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
   {
     id: 'package1',
     name: 'Package 1',
-    subtitle: 'Logo header, Line items, Contact & Instagram footer',
+    subtitle: 'Photo collage header, Line items, Contact & Instagram footer',
     thumbnailUrl: '/templates/quotations/package-1.png',
     tag: 'Wedding Editorial',
   },
   {
     id: 'package2',
     name: 'Package 2',
-    subtitle: 'Place & Date, Respected Sir/Mam greeting, Office address footer',
+    subtitle: 'StudioZoom logo header, Place & Date, Respected Sir/Mam greeting, Office footer',
     thumbnailUrl: '/templates/quotations/package-2.png',
     tag: 'Media Production Estimation',
   },
   {
     id: 'package3',
     name: 'Package 3',
-    subtitle: 'Great Opportunity greeting, [Date - Event], Dedicated Add-ons',
+    subtitle: 'Floral cream paper, Great Opportunity greeting, [Date - Event], Dedicated Add-ons',
     thumbnailUrl: '/templates/quotations/package-3.png',
     tag: 'Royal Wedding & Add-ons',
   },
@@ -1354,18 +1354,10 @@ export function QuotationBuilderForm({
               {/* ── PACKAGE 1: Wedding Editorial ─────────────────────────────────── */}
               {normalizeTemplateKey(templateId) === 'package1' && (
                 <>
-                  {/* {Header}: Logo & Metadata in white space below photo collage (which ends at ~49.5%) */}
-                  <div style={{ marginTop: '51%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="/logo.png"
-                      alt="Studio Zoom Logo"
-                      style={{ height: '28px', width: 'auto', objectFit: 'contain', marginBottom: '6px' }}
-                    />
-                  </div>
-
+                  {/* {Header}: Client Info & Metadata below photo collage (no logo in body) */}
                   <div
                     style={{
+                      marginTop: '45%',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
@@ -1380,7 +1372,7 @@ export function QuotationBuilderForm({
                         {clientName || 'Client Name'}
                       </div>
                       <div style={{ color: '#666', fontSize: '8px' }}>
-                        {eventType} {place ? `• ${place}` : ''}
+                        {eventType ? `${eventType}${place ? ` • ${place}` : ''}` : place || ''}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -1398,7 +1390,7 @@ export function QuotationBuilderForm({
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 30px 60px 65px',
+                        gridTemplateColumns: '1fr 35px 75px 85px',
                         padding: '4px 6px',
                         backgroundColor: 'rgba(0,0,0,0.04)',
                         fontWeight: 700,
@@ -1407,7 +1399,7 @@ export function QuotationBuilderForm({
                       }}
                     >
                       <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'center' }}>QTY</span>
+                      <span style={{ textAlign: 'right' }}>QTY</span>
                       <span style={{ textAlign: 'right' }}>RATE</span>
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
@@ -1417,7 +1409,7 @@ export function QuotationBuilderForm({
                         key={i}
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '1fr 30px 60px 65px',
+                          gridTemplateColumns: '1fr 35px 75px 85px',
                           padding: '3px 6px',
                           borderBottom: '0.5px solid rgba(0,0,0,0.06)',
                           fontSize: '8.5px',
@@ -1426,7 +1418,7 @@ export function QuotationBuilderForm({
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.description || 'Deliverable Item'}
                         </span>
-                        <span style={{ textAlign: 'center', color: '#666' }}>{item.qty}</span>
+                        <span style={{ textAlign: 'right', color: '#666' }}>{item.qty}</span>
                         <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
                         <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                       </div>
@@ -1442,7 +1434,7 @@ export function QuotationBuilderForm({
                             key={i}
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: '1fr 30px 60px 65px',
+                              gridTemplateColumns: '1fr 35px 75px 85px',
                               padding: '2px 6px',
                               fontSize: '8px',
                               color: '#444',
@@ -1451,7 +1443,7 @@ export function QuotationBuilderForm({
                             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               + {item.description}
                             </span>
-                            <span style={{ textAlign: 'center' }}>{item.qty}</span>
+                            <span style={{ textAlign: 'right' }}>{item.qty}</span>
                             <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
                             <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                           </div>
@@ -1461,29 +1453,38 @@ export function QuotationBuilderForm({
                   </div>
 
                   {/* Subtotal & Grand Total */}
-                  <div style={{ alignSelf: 'flex-end', width: '50%', marginBottom: '11%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <div style={{ alignSelf: 'flex-end', width: '48%', marginBottom: '11%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
                       <span>Subtotal</span>
-                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                        <span>GST 18%</span>
-                        <span>₹{(cgst + sgst).toLocaleString('en-IN')}</span>
-                      </div>
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
+                          <span>CGST 9%</span>
+                          <span>Rs. {cgst.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
+                          <span>SGST 9%</span>
+                          <span>Rs. {sgst.toLocaleString('en-IN')}</span>
+                        </div>
+                      </>
                     )}
                     <div
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         fontWeight: 700,
-                        color: '#c6539f',
-                        borderTop: '1px solid #c6539f',
-                        paddingTop: '3px',
+                        color: '#ffffff',
+                        backgroundColor: '#c6539f',
+                        padding: '3px 6px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                        marginTop: '2px',
                       }}
                     >
                       <span>Grand Total</span>
-                      <span>₹{grandTotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
 
@@ -1537,7 +1538,9 @@ export function QuotationBuilderForm({
                     <div>We&apos;re delighted to Work with you.</div>
                     <div style={{ marginTop: '6px', fontWeight: 600, fontSize: '9.5px' }}>
                       Prepared For: <span style={{ fontWeight: 700 }}>{clientName || 'Client Name'}</span>
-                      <span style={{ color: '#666', marginLeft: '6px' }}>({eventType})</span>
+                      {eventType && eventType.trim() && (
+                        <span style={{ color: '#666', marginLeft: '6px' }}>({eventType.trim()})</span>
+                      )}
                     </div>
                   </div>
 
@@ -1546,7 +1549,7 @@ export function QuotationBuilderForm({
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 30px 60px 65px',
+                        gridTemplateColumns: '1fr 35px 75px 85px',
                         padding: '4px 6px',
                         backgroundColor: 'rgba(0,0,0,0.04)',
                         fontWeight: 700,
@@ -1555,7 +1558,7 @@ export function QuotationBuilderForm({
                       }}
                     >
                       <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'center' }}>QTY</span>
+                      <span style={{ textAlign: 'right' }}>QTY</span>
                       <span style={{ textAlign: 'right' }}>RATE</span>
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
@@ -1565,7 +1568,7 @@ export function QuotationBuilderForm({
                         key={i}
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '1fr 30px 60px 65px',
+                          gridTemplateColumns: '1fr 35px 75px 85px',
                           padding: '3px 6px',
                           borderBottom: '0.5px solid rgba(0,0,0,0.06)',
                           fontSize: '8.5px',
@@ -1574,7 +1577,7 @@ export function QuotationBuilderForm({
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.description || 'Deliverable Item'}
                         </span>
-                        <span style={{ textAlign: 'center', color: '#666' }}>{item.qty}</span>
+                        <span style={{ textAlign: 'right', color: '#666' }}>{item.qty}</span>
                         <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
                         <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                       </div>
@@ -1590,7 +1593,7 @@ export function QuotationBuilderForm({
                             key={i}
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: '1fr 30px 60px 65px',
+                              gridTemplateColumns: '1fr 35px 75px 85px',
                               padding: '2px 6px',
                               fontSize: '8px',
                               color: '#444',
@@ -1599,7 +1602,7 @@ export function QuotationBuilderForm({
                             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               + {item.description}
                             </span>
-                            <span style={{ textAlign: 'center' }}>{item.qty}</span>
+                            <span style={{ textAlign: 'right' }}>{item.qty}</span>
                             <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
                             <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                           </div>
@@ -1612,26 +1615,35 @@ export function QuotationBuilderForm({
                   <div style={{ alignSelf: 'flex-end', width: '48%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
                       <span>Subtotal</span>
-                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                        <span>GST 18%</span>
-                        <span>₹{(cgst + sgst).toLocaleString('en-IN')}</span>
-                      </div>
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
+                          <span>CGST 9%</span>
+                          <span>Rs. {cgst.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
+                          <span>SGST 9%</span>
+                          <span>Rs. {sgst.toLocaleString('en-IN')}</span>
+                        </div>
+                      </>
                     )}
                     <div
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         fontWeight: 700,
-                        color: '#c6539f',
-                        borderTop: '1px solid #c6539f',
-                        paddingTop: '3px',
+                        color: '#ffffff',
+                        backgroundColor: '#c6539f',
+                        padding: '3px 6px',
+                        borderRadius: '3px',
+                        fontSize: '9px',
+                        marginTop: '2px',
                       }}
                     >
                       <span>Grand Total</span>
-                      <span>₹{grandTotal.toLocaleString('en-IN')}</span>
+                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
 
@@ -1673,36 +1685,38 @@ export function QuotationBuilderForm({
               {/* ── PACKAGE 3: Royal Wedding with Add-ons ────────────────────────── */}
               {normalizeTemplateKey(templateId) === 'package3' && (
                 <>
-                  {/* {Header}: Great Opportunity Greeting & Event Header below purple badge (which ends at ~38%) */}
-                  <div style={{ marginTop: '41.5%', textAlign: 'center', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '8.5px', color: '#555', fontStyle: 'italic', letterSpacing: '0.01em' }}>
+                  {/* {Header}: Great Opportunity Greeting & Event Header below purple badge inside cream area */}
+                  <div style={{ marginTop: '44%', textAlign: 'center', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '8.5px', color: '#666', fontStyle: 'italic', letterSpacing: '0.01em' }}>
                       Thank you for giving us this great oppurtunity. We&apos;re delighted to work for you
                     </div>
                     <div style={{ marginTop: '3px', fontSize: '10px', fontWeight: 700, color: '#222', letterSpacing: '0.04em' }}>
-                      [{format(eventDate || new Date(), 'dd MMM yyyy').toUpperCase()} - {eventType.toUpperCase()}]
+                      [{format(eventDate || new Date(), 'dd MMM yyyy').toUpperCase()}{eventType && eventType.trim() ? ` - ${eventType.trim().toUpperCase()}` : ''}]
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.08)', paddingBottom: '3px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', marginBottom: '6px', borderBottom: '0.5px solid rgba(139,46,103,0.15)', paddingBottom: '3px' }}>
                     <span style={{ fontWeight: 700, color: '#222' }}>Client: {clientName || 'Client Name'}</span>
                     <span style={{ color: '#8b2e67', fontWeight: 700 }}>Quote: {quotationNumber}</span>
                   </div>
 
-                  {/* {Body}: ITEM TABLE */}
+                  {/* {Body}: ITEM TABLE (Transparent, no white backgrounds) */}
                   <div style={{ flex: 1, minHeight: 0 }}>
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 30px 60px 65px',
+                        gridTemplateColumns: '1fr 35px 75px 85px',
                         padding: '3px 6px',
-                        backgroundColor: 'rgba(0,0,0,0.04)',
+                        backgroundColor: 'transparent',
+                        borderTop: '0.5px solid rgba(139,46,103,0.2)',
+                        borderBottom: '0.5px solid rgba(139,46,103,0.2)',
                         fontWeight: 700,
                         fontSize: '8px',
-                        color: '#555',
+                        color: '#65304b',
                       }}
                     >
                       <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'center' }}>QTY</span>
+                      <span style={{ textAlign: 'right' }}>QTY</span>
                       <span style={{ textAlign: 'right' }}>RATE</span>
                       <span style={{ textAlign: 'right' }}>AMOUNT</span>
                     </div>
@@ -1712,16 +1726,17 @@ export function QuotationBuilderForm({
                         key={i}
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '1fr 30px 60px 65px',
+                          gridTemplateColumns: '1fr 35px 75px 85px',
                           padding: '2px 6px',
-                          borderBottom: '0.5px solid rgba(0,0,0,0.06)',
+                          borderBottom: '0.5px solid rgba(139,46,103,0.08)',
                           fontSize: '8px',
+                          backgroundColor: 'transparent',
                         }}
                       >
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.description || 'Deliverable Item'}
                         </span>
-                        <span style={{ textAlign: 'center', color: '#666' }}>{item.qty}</span>
+                        <span style={{ textAlign: 'right', color: '#666' }}>{item.qty}</span>
                         <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
                         <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
                       </div>
@@ -1733,17 +1748,13 @@ export function QuotationBuilderForm({
                       <span>Rs. {lineItemsSubtotal.toLocaleString('en-IN')}</span>
                     </div>
 
-                    {/* ADDONS Section */}
-                    <div style={{ marginTop: '8px' }}>
-                      <div style={{ fontSize: '8.5px', fontWeight: 700, color: '#8b2e67', letterSpacing: '0.05em', borderBottom: '0.5px solid rgba(139,46,103,0.2)', paddingBottom: '2px', marginBottom: '3px' }}>
-                        ADDONS
-                      </div>
-                      {addons.length === 0 ? (
-                        <div style={{ fontSize: '7.5px', color: '#888', fontStyle: 'italic' }}>
-                          - None (No optional add-ons selected)
+                    {/* ADDONS Section: Only rendered if addons exist */}
+                    {addons.length > 0 && (
+                      <div style={{ marginTop: '8px' }}>
+                        <div style={{ fontSize: '8.5px', fontWeight: 700, color: '#8b2e67', letterSpacing: '0.05em', borderBottom: '0.5px solid rgba(139,46,103,0.2)', paddingBottom: '2px', marginBottom: '3px' }}>
+                          ADDONS
                         </div>
-                      ) : (
-                        addons.slice(0, 3).map((item, i) => (
+                        {addons.slice(0, 3).map((item, i) => (
                           <div
                             key={i}
                             style={{
@@ -1757,15 +1768,15 @@ export function QuotationBuilderForm({
                             <span>• {item.description || 'Add-on deliverable'}</span>
                             <span style={{ fontWeight: 600 }}>Rs. {item.amount.toLocaleString('en-IN')}</span>
                           </div>
-                        ))
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* TOTALS: Pinned above the pre-printed bottom footer */}
-                  <div style={{ position: 'absolute', bottom: '13.5%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {/* TOTALS: Above pre-printed bottom footer, continuous Grand Total bar */}
+                  <div style={{ position: 'absolute', bottom: '14%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '7.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px', marginBottom: '3px' }}>
                         <span>Incl. 18% GST</span>
                         <span>Rs. {(cgst + sgst).toLocaleString('en-IN')}</span>
                       </div>
@@ -1777,7 +1788,7 @@ export function QuotationBuilderForm({
                         fontWeight: 700,
                         color: '#ffffff',
                         backgroundColor: '#8b2e67',
-                        padding: '3px 6px',
+                        padding: '4px 8px',
                         borderRadius: '3px',
                         fontSize: '9px',
                       }}
