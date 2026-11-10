@@ -1,1 +1,521 @@
-export default function Page() { return <div style={{color:'var(--color-foreground-muted)',padding:'40px',textAlign:'center',fontFamily:'var(--font-inter)'}}><i className="ti ti-tools" style={{fontSize:'32px',display:'block',marginBottom:'12px'}}/>Quotations — coming in next build</div> }
+'use client'
+
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import type { Quotation, QuotationStatus } from '@/types'
+import {
+  subscribeToQuotations,
+  deleteQuotation,
+} from '@/lib/firebase/queries/quotations'
+import { formatIndianCurrency } from '@/lib/payroll/calculator'
+import { Badge } from '@/components/shared/Badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { TableRowSkeleton } from '@/components/shared/LoadingSkeleton'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
+import { format } from 'date-fns'
+
+const STATUS_OPTIONS: Array<{ key: QuotationStatus | 'all'; label: string }> = [
+  { key: 'all', label: 'All Quotes' },
+  { key: 'draft', label: 'Drafts' },
+  { key: 'sent', label: 'Sent' },
+  { key: 'accepted', label: 'Accepted' },
+  { key: 'converted', label: 'Converted' },
+]
+
+export default function QuotationsPage() {
+  const router = useRouter()
+  const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<QuotationStatus | 'all'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Modals & Action States
+  const [deleteTarget, setDeleteTarget] = useState<Quotation | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Real-time Firestore subscription
+  useEffect(() => {
+    const unsub = subscribeToQuotations(
+      {
+        status: statusFilter,
+        search: searchQuery,
+      },
+      (data) => {
+        setQuotations(data)
+        setLoading(false)
+      }
+    )
+
+    return () => unsub()
+  }, [statusFilter, searchQuery])
+
+  // KPI Calculations
+  const stats = useMemo(() => {
+    const total = quotations.length
+    const sentCount = quotations.filter((q) => q.status === 'sent').length
+    const acceptedCount = quotations.filter((q) => q.status === 'accepted').length
+    const totalPipelineValue = quotations.reduce((acc, q) => acc + (q.grandTotal || 0), 0)
+
+    return { total, sentCount, acceptedCount, totalPipelineValue }
+  }, [quotations])
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      setIsDeleting(true)
+      await deleteQuotation(deleteTarget.quotationId)
+      setDeleteTarget(null)
+    } catch (err) {
+      console.error('[Delete error]:', err)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        maxWidth: '1280px',
+        margin: '0 auto',
+        padding: '24px 16px',
+        fontFamily: 'var(--font-inter)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+      }}
+    >
+      {/* MOBILE SCREEN FALLBACK (< 768px) - DESKTOP ONLY */}
+      <div
+        className="flex md:hidden flex-col items-center justify-center text-center p-8"
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          minHeight: '320px',
+          gap: '14px',
+        }}
+      >
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--color-primary-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-primary)',
+            fontSize: '26px',
+          }}
+        >
+          <i className="ti ti-device-desktop" />
+        </div>
+        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+          Desktop View Only
+        </h2>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0, maxWidth: '320px', lineHeight: 1.5 }}>
+          Quotation management, layout preview, and A4 print generation are designed exclusively for desktop screens. Please open this page on a desktop display.
+        </p>
+      </div>
+
+      {/* DESKTOP CONTENT (>= 768px) */}
+      <div className="hidden md:flex flex-col gap-6">
+        {/* HEADER SECTION */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+            Quotations & Estimations
+          </h1>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: '4px 0 0 0' }}>
+            Build, brand, customize GST, and dispatch production & wedding quotations in INR.
+          </p>
+        </div>
+
+        <Button
+          onClick={() => router.push('/erp/quotations/new')}
+          style={{
+            backgroundColor: 'var(--color-primary)',
+            color: '#ffffff',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <i className="ti ti-plus" />
+          <span>New Quotation</span>
+        </Button>
+      </div>
+
+      {/* KPI METRIC CARDS */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '16px',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+            TOTAL QUOTATIONS
+          </span>
+          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+            {stats.total}
+          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+            All active quotation records
+          </span>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+            SENT TO CLIENTS
+          </span>
+          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-accent)' }}>
+            {stats.sentCount}
+          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+            Awaiting client sign-off
+          </span>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+            ACCEPTED / CONVERTED
+          </span>
+          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-success)' }}>
+            {stats.acceptedCount}
+          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+            Won client estimates
+          </span>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
+            PIPELINE ESTIMATION
+          </span>
+          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-primary)' }}>
+            {formatIndianCurrency(stats.totalPipelineValue)}
+          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+            Gross quotation value
+          </span>
+        </div>
+      </div>
+
+      {/* FILTER & SEARCH STRIP */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          backgroundColor: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          padding: '12px 16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {STATUS_OPTIONS.map((opt) => {
+            const active = statusFilter === opt.key
+            return (
+              <button
+                key={opt.key}
+                onClick={() => setStatusFilter(opt.key)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: `0.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  backgroundColor: active ? 'var(--color-primary-muted)' : 'var(--color-surface-raised)',
+                  color: active ? 'var(--color-primary)' : 'var(--color-foreground)',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={{ width: '260px' }}>
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search client, quote #, event..."
+            style={{ height: '36px', fontSize: 'var(--text-xs)' }}
+          />
+        </div>
+      </div>
+
+      {/* DATA TABLE (DESKTOP) & COMPACT CARDS (MOBILE) */}
+      {loading ? (
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}
+        >
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              <TableRowSkeleton rows={5} cols={8} />
+            </tbody>
+          </table>
+        </div>
+      ) : quotations.length === 0 ? (
+        <EmptyState
+          icon="ti-file-invoice"
+          title="No Quotations Found"
+          description="Create your first event or media production quotation with custom templates and GST."
+          action={{
+            label: 'Create Quotation',
+            onClick: () => router.push('/erp/quotations/new'),
+          }}
+        />
+      ) : (
+        <>
+          {/* DESKTOP TABLE */}
+          <div
+            className="hidden md:block"
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr>
+                  <th style={TH_STYLE}>Quote #</th>
+                  <th style={TH_STYLE}>Client / Event</th>
+                  <th style={TH_STYLE}>Template Style</th>
+                  <th style={TH_STYLE}>Event Date</th>
+                  <th style={TH_STYLE}>Valid Until</th>
+                  <th style={TH_STYLE}>Amount</th>
+                  <th style={TH_STYLE}>Status</th>
+                  <th style={{ ...TH_STYLE, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quotations.map((q) => {
+                  return (
+                    <tr
+                      key={q.quotationId}
+                      style={{
+                        borderBottom: '0.5px solid var(--color-border)',
+                        transition: 'background-color 0.15s ease',
+                      }}
+                    >
+                      <td style={TD_STYLE}>
+                        <span style={{ fontWeight: 700, color: 'var(--color-foreground)' }}>
+                          {q.quotationNumber}
+                        </span>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)' }}>
+                          {format(q.createdAt, 'dd MMM yyyy')}
+                        </div>
+                      </td>
+
+                      <td style={TD_STYLE}>
+                        <div style={{ fontWeight: 600, color: 'var(--color-foreground)' }}>
+                          {q.clientName}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)' }}>
+                          {q.eventType} {q.place ? `• ${q.place}` : ''}
+                        </div>
+                      </td>
+
+                      <td style={TD_STYLE}>
+                        <span
+                          style={{
+                            fontSize: 'var(--text-xs)',
+                            fontWeight: 500,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--color-surface-raised)',
+                            border: '0.5px solid var(--color-border)',
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {q.templateId || 'production'}
+                        </span>
+                      </td>
+
+                      <td style={TD_STYLE}>
+                        {q.eventDate ? format(q.eventDate, 'dd MMM yyyy') : '—'}
+                      </td>
+
+                      <td style={TD_STYLE}>
+                        {format(q.validityDate, 'dd MMM yyyy')}
+                      </td>
+
+                      <td style={TD_STYLE}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-foreground)' }}>
+                          {formatIndianCurrency(q.grandTotal)}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-muted)' }}>
+                          {q.gstEnabled ? 'Incl. 18% GST' : 'No GST'}
+                        </div>
+                      </td>
+
+                      <td style={TD_STYLE}>
+                        <Badge
+                          variant={
+                            q.status === 'accepted'
+                              ? 'paid'
+                              : q.status === 'converted'
+                              ? 'done'
+                              : q.status === 'sent'
+                              ? 'inProgress'
+                              : 'todo'
+                          }
+                          label={q.status.toUpperCase()}
+                        />
+                      </td>
+
+                      <td style={{ ...TD_STYLE, textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => router.push(`/erp/quotations/${q.quotationId}/edit`)}
+                            title="Edit Quotation"
+                            style={{
+                              height: '30px',
+                              padding: '0 10px',
+                              fontSize: 'var(--text-xs)',
+                              backgroundColor: 'var(--color-surface-raised)',
+                              border: '0.5px solid var(--color-border)',
+                              color: 'var(--color-foreground)',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            <i className="ti ti-edit" style={{ fontSize: '14px' }} />
+                            <span>Edit</span>
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteTarget(q)}
+                            title="Delete Quotation"
+                            style={{
+                              height: '30px',
+                              padding: '0 10px',
+                              fontSize: 'var(--text-xs)',
+                              backgroundColor: 'var(--color-danger-muted)',
+                              border: '0.5px solid var(--color-danger)',
+                              color: 'var(--color-danger)',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            <i className="ti ti-trash" style={{ fontSize: '14px', color: 'var(--color-danger)' }} />
+                            <span>Delete</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      </div>
+
+      {/* CONFIRM DELETE MODAL */}
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete Quotation"
+        description={`Are you sure you want to delete quotation ${deleteTarget?.quotationNumber} for ${deleteTarget?.clientName}? This action cannot be undone.`}
+        confirmLabel={isDeleting ? 'Deleting...' : 'Delete'}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </div>
+  )
+}
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: 'var(--color-foreground-subtle)',
+  padding: '12px 16px',
+  borderBottom: '0.5px solid var(--color-border-strong)',
+  background: 'var(--color-surface)',
+}
+
+const TD_STYLE: React.CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  padding: '14px 16px',
+  color: 'var(--color-foreground)',
+  verticalAlign: 'middle',
+}
