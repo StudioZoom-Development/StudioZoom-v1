@@ -1,20 +1,21 @@
-import type { Quotation, QuotationTemplateId } from '@/types'
+/**
+ * htmlTemplateEngine.ts
+ *
+ * Renders a Quotation into one of the 3 HTML templates using DOM parsing.
+ * Server-side: uses linkedom. Browser-side: uses DOMParser.
+ * Never modifies CSS, fonts, positions or static text in the templates.
+ * Only fills elements with data-slot="..." attributes.
+ */
+
+import type { Quotation } from '@/types'
 import { format } from 'date-fns'
+import { numberToWordsINR } from '@/lib/payroll/calculator'
 
-export function normalizeTemplateKey(id?: QuotationTemplateId): 'package1' | 'package2' | 'package3' {
-  if (id === 'package2' || id === 'production') return 'package2'
-  if (id === 'package3' || id === 'floral') return 'package3'
-  return 'package1'
-}
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
-export function formatINR(val?: number | null): string {
-  if (val === undefined || val === null || isNaN(val)) return '0'
-  return Math.round(val).toLocaleString('en-IN')
-}
-
-function escapeHtml(str?: string | null): string {
-  if (!str) return ''
-  return String(str)
+/** HTML-escape user-supplied text */
+function esc(text: string): string {
+  return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -22,388 +23,247 @@ function escapeHtml(str?: string | null): string {
     .replace(/'/g, '&#39;')
 }
 
-function numberBelowThousand(n: number): string {
-  const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
-  let str = ''
-  if (n >= 100) {
-    str += units[Math.floor(n / 100)] + ' Hundred '
-    n %= 100
-  }
-  if (n >= 20) {
-    str += tens[Math.floor(n / 10)] + (n % 10 > 0 ? ' ' + units[n % 10] : '')
-  } else if (n > 0) {
-    str += units[n]
-  }
-  return str.trim()
+/** Format a number with Indian grouping, no symbol, no decimals */
+function inr(amount: number): string {
+  return Math.round(amount).toLocaleString('en-IN')
 }
 
-export function numberToWordsINR(amount: number): string {
-  const rounded = Math.round(Math.abs(amount))
-  if (rounded === 0) return 'Rupees Zero Only'
-  let rem = rounded
-  let words = ''
-
-  const crore = Math.floor(rem / 10000000)
-  if (crore > 0) {
-    words += numberBelowThousand(crore) + ' Crore '
-    rem %= 10000000
-  }
-  const lakh = Math.floor(rem / 100000)
-  if (lakh > 0) {
-    words += numberBelowThousand(lakh) + ' Lakh '
-    rem %= 100000
-  }
-  const thousand = Math.floor(rem / 1000)
-  if (thousand > 0) {
-    words += numberBelowThousand(thousand) + ' Thousand '
-    rem %= 1000
-  }
-  if (rem > 0) {
-    words += numberBelowThousand(rem)
-  }
-  return words.trim()
+/** "Rs. X,XX,XXX" */
+function rsInr(amount: number): string {
+  return `Rs. ${inr(amount)}`
 }
 
-// In-memory cache for loaded raw templates
-const templateCache: Record<string, string> = {}
+/** Format a date as "09 Nov 2026" */
+function fmtDate(d: Date | string | undefined | null): string {
+  if (!d) return ''
+  try {
+    const date = typeof d === 'string' ? new Date(d) : d
+    return format(date, 'dd MMM yyyy')
+  } catch {
+    return ''
+  }
+}
 
-/**
- * Loads the raw HTML template string from disk (Node) or via fetch (Browser).
- */
-export async function getRawTemplateHtml(key: 'package1' | 'package2' | 'package3'): Promise<string> {
-  if (templateCache[key]) {
-    return templateCache[key]
+/** Format a date as "09 NOV 2026" (uppercase) */
+function fmtDateUpper(d: Date | string | undefined | null): string {
+  return fmtDate(d).toUpperCase()
+}
+
+export function normalizeTemplateKey(id?: string): 'package1' | 'package2' | 'package3' {
+  if (id === 'package2' || id === 'production') return 'package2'
+  if (id === 'package3' || id === 'floral') return 'package3'
+  return 'package1'
+}
+
+// ─── financial calculations ───────────────────────────────────────────────────
+
+interface Totals {
+  subtotal: number
+  cgst: number
+  sgst: number
+  grandTotal: number
+}
+
+function calcTotals(q: Quotation): Totals {
+  const subtotal = (q.lineItems ?? []).reduce(
+    (s, item) => s + (item.qty ?? 0) * (item.rate ?? 0),
+    0
+  )
+  const gstEnabled = q.gstEnabled ?? false
+  const taxRate = gstEnabled ? 0.09 : 0
+  const cgst = subtotal * taxRate
+  const sgst = subtotal * taxRate
+  const grandTotal = subtotal + cgst + sgst
+  return { subtotal, cgst, sgst, grandTotal }
+}
+
+// ─── row builders ────────────────────────────────────────────────────────────
+
+function buildRowsHtml(q: Quotation): string {
+  const items = q.lineItems ?? []
+  if (items.length === 0) return ''
+  return items
+    .map((item) => {
+      const qty = item.qty ?? 1
+      const rate = item.rate ?? 0
+      const amount = item.amount ?? qty * rate
+      return `<tr><td>${esc(item.description ?? '')}</td><td class="qty">${qty}</td><td>${inr(rate)}</td><td>${inr(amount)}</td></tr>`
+    })
+    .join('')
+}
+
+function buildTotalsHtml(totals: Totals, q: Quotation, includeGrandTotal = false): string {
+  const rows: string[] = []
+  rows.push(`<div class="r"><span>SUBTOTAL</span><span>${rsInr(totals.subtotal)}</span></div>`)
+  if (q.gstEnabled) {
+    rows.push(`<div class="r"><span>CGST (9%)</span><span>${rsInr(totals.cgst)}</span></div>`)
+    rows.push(`<div class="r"><span>SGST (9%)</span><span>${rsInr(totals.sgst)}</span></div>`)
+  }
+  if (includeGrandTotal) {
+    rows.push(
+      `<div class="r gt"><span>GRAND TOTAL</span><span>${rsInr(totals.grandTotal)}</span></div>`
+    )
+  }
+  return rows.join('')
+}
+
+// ─── DOM-based slot filler ────────────────────────────────────────────────────
+
+// Use a loose type so the same code works with both linkedom and browser DOM
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyDoc = any
+
+function setText(doc: AnyDoc, slot: string, value: string): void {
+  const el = doc.querySelector(`[data-slot="${slot}"]`)
+  if (!el) return
+  el.textContent = value
+}
+
+function setHtml(doc: AnyDoc, slot: string, html: string): void {
+  const el = doc.querySelector(`[data-slot="${slot}"]`)
+  if (!el) return
+  el.innerHTML = html
+}
+
+function removeSlot(doc: AnyDoc, slot: string): void {
+  const el = doc.querySelector(`[data-slot="${slot}"]`)
+  if (el) el.parentNode?.removeChild(el)
+}
+
+// ─── per-template filling ─────────────────────────────────────────────────────
+
+function fillPackage1(doc: AnyDoc, q: Quotation): void {
+  const totals = calcTotals(q)
+  setHtml(doc, 'rows', buildRowsHtml(q))
+  setHtml(doc, 'totals', buildTotalsHtml(totals, q, false))
+  setText(doc, 'grand-total', inr(totals.grandTotal))
+}
+
+function fillPackage2(doc: AnyDoc, q: Quotation): void {
+  const totals = calcTotals(q)
+
+  // Place / Date / Quotation No
+  setText(doc, 'place', q.place ?? '')
+  setText(doc, 'date', fmtDate(q.eventDate))
+  setText(doc, 'quotation-no', q.quotationNumber ? `Quotation No: ${q.quotationNumber}` : '')
+
+  // "Prepared For:" — only render when client name is non-empty
+  const clientName = (q.clientName ?? '').trim()
+  const eventType = (q.eventType ?? '').trim()
+  if (clientName) {
+    const prepText = eventType ? `${clientName} (${eventType})` : clientName
+    const el = doc.querySelector('[data-slot="prepared-for"]')
+    if (el) {
+      el.innerHTML = `<b>Prepared For:</b> ${esc(prepText)}`
+    }
+  } else {
+    removeSlot(doc, 'prepared-for')
   }
 
-  const fileNameMap = {
+  setHtml(doc, 'rows', buildRowsHtml(q))
+  // Package 2 totals block includes Grand Total row
+  setHtml(doc, 'totals', buildTotalsHtml(totals, q, true))
+}
+
+function fillPackage3(doc: AnyDoc, q: Quotation): void {
+  const totals = calcTotals(q)
+
+  // Event heading: "09 NOV 2026 - EVENT NAME" — no dangling dash
+  const dateStr = fmtDateUpper(q.eventDate)
+  const eventName = (q.eventType ?? '').trim().toUpperCase()
+  let heading = dateStr
+  if (eventName) heading += ` - ${eventName}`
+  setText(doc, 'event-heading', heading)
+
+  // Line item rows
+  setHtml(doc, 'rows', buildRowsHtml(q))
+
+  // Grand total (the number only, inside "Rs." span)
+  setText(doc, 'grand-total', inr(totals.grandTotal))
+
+  // Amount in words
+  const words = numberToWordsINR(totals.grandTotal)
+  setText(doc, 'amount-in-words', words ? `(${words})` : '')
+
+  // GST note
+  if (q.gstEnabled && totals.cgst > 0) {
+    setText(doc, 'gst-note', `Incl. 18% GST: Rs. ${inr(totals.cgst + totals.sgst)}`)
+  } else {
+    setText(doc, 'gst-note', '')
+  }
+
+  // Add-ons
+  const addons = (q.addons ?? []).filter((a) => (a.description ?? '').trim() !== '')
+  if (addons.length > 0) {
+    const addonRowsHtml = addons
+      .map(
+        (a) =>
+          `<div class="row"><span>${esc(a.description ?? '')}</span><span class="price-col"><span class="d">-</span><span class="rs">Rs.</span><span class="v">${inr(a.amount ?? 0)}</span></span></div>`
+      )
+      .join('')
+    setHtml(doc, 'addon-rows', addonRowsHtml)
+  } else {
+    removeSlot(doc, 'addons')
+  }
+}
+
+// ─── template loader ──────────────────────────────────────────────────────────
+
+async function loadTemplate(templateKey: 'package1' | 'package2' | 'package3'): Promise<string> {
+  const fileMap: Record<string, string> = {
     package1: 'Package_1.html',
     package2: 'Package_2.html',
     package3: 'Package_3.html',
   }
-  const fileName = fileNameMap[key]
+  const fileName = fileMap[templateKey]
 
   if (typeof window === 'undefined') {
-    const fs = await import('fs')
+    // Server-side: read from filesystem
     const path = await import('path')
+    const fs = await import('fs')
     const filePath = path.join(process.cwd(), 'public', 'templates', 'quotations', fileName)
-    const content = fs.readFileSync(filePath, 'utf8')
-    templateCache[key] = content
-    return content
+    return fs.readFileSync(filePath, 'utf-8')
+  } else {
+    // Client-side: fetch from public URL
+    const res = await fetch(`/templates/quotations/${fileName}`)
+    if (!res.ok) throw new Error(`Failed to load template: ${fileName}`)
+    return res.text()
   }
-
-  const res = await fetch(`/templates/quotations/${fileName}`)
-  if (!res.ok) {
-    throw new Error(`Failed to fetch quotation template ${fileName}`)
-  }
-  const content = await res.text()
-  templateCache[key] = content
-  return content
 }
+
+// ─── main export ─────────────────────────────────────────────────────────────
 
 /**
- * Pre-seeds template cache (e.g. from bundled string or client pre-fetch)
+ * Renders a Quotation into the matching HTML template.
+ * Uses linkedom on the server and DOMParser in the browser.
+ * Returns the full serialized HTML string.
  */
-export function seedTemplateCache(key: 'package1' | 'package2' | 'package3', html: string) {
-  templateCache[key] = html
-}
+export async function renderQuotationHtml(q: Quotation): Promise<string> {
+  const templateKey = normalizeTemplateKey(q.templateId)
+  const templateHtml = await loadTemplate(templateKey)
 
-export interface QuotationRenderData {
-  quotationNumber?: string
-  templateId?: QuotationTemplateId
-  clientName?: string
-  clientPhone?: string
-  clientEmail?: string
-  eventType?: string
-  eventDate?: string | Date
-  place?: string
-  validUntil?: string | Date
-  lineItems?: Array<{ name?: string; description?: string; qty?: number; rate?: number; amount?: number }>
-  addons?: Array<{ name?: string; description?: string; amount?: number }>
-  subtotal?: number
-  taxAmount?: number
-  taxRate?: number
-  grandTotal?: number
-  termsAndConditions?: string
-}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let doc: any
+  let serialize: () => string
 
-/**
- * Renders a complete, standalone, print-ready HTML quotation string based on the selected package template.
- */
-export async function renderQuotationHtml(data: QuotationRenderData): Promise<string> {
-  const packageKey = normalizeTemplateKey(data.templateId)
-  const rawHtml = await getRawTemplateHtml(packageKey)
-
-  const items = data.lineItems && data.lineItems.length > 0 ? data.lineItems : []
-  const addons = data.addons && data.addons.length > 0 ? data.addons : []
-
-  const subtotal = data.subtotal ?? items.reduce((sum, it) => sum + (it.amount ?? (it.qty || 1) * (it.rate || 0)), 0)
-  const taxRate = data.taxRate ?? 18
-  const taxAmount = data.taxAmount ?? Math.round(subtotal * (taxRate / 100))
-  const addonsTotal = addons.reduce((sum, a) => sum + (a.amount || 0), 0)
-  const grandTotal = data.grandTotal ?? (subtotal + taxAmount + addonsTotal)
-
-  const formattedEventDate = data.eventDate ? format(new Date(data.eventDate), 'dd MMM yyyy') : ''
-  const formattedValidUntil = data.validUntil ? format(new Date(data.validUntil), 'dd MMM yyyy') : ''
-
-  if (packageKey === 'package1') {
-    return renderPackage1(rawHtml, {
-      ...data,
-      subtotal,
-      taxRate,
-      taxAmount,
-      grandTotal,
-      formattedEventDate,
-      formattedValidUntil,
-      items,
-    })
-  } else if (packageKey === 'package2') {
-    return renderPackage2(rawHtml, {
-      ...data,
-      subtotal,
-      taxRate,
-      taxAmount,
-      grandTotal,
-      formattedEventDate,
-      formattedValidUntil,
-      items,
-    })
+  if (typeof window === 'undefined') {
+    // Server-side: linkedom
+    const { parseHTML } = await import('linkedom')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parsed = parseHTML(templateHtml) as any
+    doc = parsed.document
+    serialize = () => `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`
   } else {
-    return renderPackage3(rawHtml, {
-      ...data,
-      subtotal,
-      taxRate,
-      taxAmount,
-      grandTotal,
-      formattedEventDate,
-      formattedValidUntil,
-      items,
-      addons,
-    })
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PACKAGE 1 RENDERER
-// ─────────────────────────────────────────────────────────────────────────────
-function renderPackage1(rawHtml: string, d: any): string {
-  // 1. Table rows
-  const rowsHtml = d.items
-    .map((it: any) => {
-      const title = escapeHtml(it.name || it.description || 'Deliverable Item')
-      const qty = it.qty || 1
-      const rate = it.rate ?? 0
-      const amt = it.amount ?? qty * rate
-      return `        <tr><td>${title}</td><td class="qty">${qty}</td><td>${formatINR(rate)}</td><td>${formatINR(amt)}</td></tr>`
-    })
-    .join('\n')
-
-  // 2. Totals block
-  const halfTaxRate = (d.taxRate / 2).toFixed(1).replace(/\.0$/, '')
-  const halfTaxAmt = Math.round(d.taxAmount / 2)
-  let totalsHtml = `      <div class="r"><span>SUBTOTAL</span><span>Rs. ${formatINR(d.subtotal)}</span></div>`
-  if (d.taxAmount > 0) {
-    totalsHtml += `\n      <div class="r"><span>CGST (${halfTaxRate}%)</span><span>Rs. ${formatINR(halfTaxAmt)}</span></div>`
-    totalsHtml += `\n      <div class="r"><span>SGST (${halfTaxRate}%)</span><span>Rs. ${formatINR(halfTaxAmt)}</span></div>`
+    // Browser-side: native DOMParser
+    const parser = new DOMParser()
+    doc = parser.parseFromString(templateHtml, 'text/html')
+    serialize = () => `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`
   }
 
-  // 3. Client metadata row (rendered above table inside .content if client or quote exists)
-  let clientMetaHtml = ''
-  if (d.clientName || d.quotationNumber) {
-    clientMetaHtml = `    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12pt;font-size:9pt;color:#3d2c21;">
-      <div>
-        ${d.clientName ? `<strong style="font-size:9.5pt;">Client:</strong> ${escapeHtml(d.clientName)}${d.eventType ? ` (${escapeHtml(d.eventType)})` : ''}` : ''}
-      </div>
-      <div style="text-align:right;">
-        ${d.quotationNumber ? `<strong>Quote:</strong> ${escapeHtml(d.quotationNumber)}` : ''}
-        ${d.formattedValidUntil ? `<span style="margin-left:8pt;color:#6b574a;font-size:8.5pt;">Valid: ${escapeHtml(d.formattedValidUntil)}</span>` : ''}
-      </div>
-    </div>\n`
-  }
+  // Fill slots based on template
+  if (templateKey === 'package1') fillPackage1(doc, q)
+  else if (templateKey === 'package2') fillPackage2(doc, q)
+  else fillPackage3(doc, q)
 
-  let html = rawHtml
-
-  // Inject client metadata before <table class="items">
-  html = html.replace(
-    /(<div class="content" data-slot="line-item-content">[\s\S]*?)(<!-- SAMPLE DATA[\s\S]*?-->\s*)?(<table class="items">)/,
-    `$1${clientMetaHtml}    $3`
-  )
-
-  // Replace tbody rows
-  html = html.replace(
-    /(<tbody data-slot="rows">)[\s\S]*?(<\/tbody>)/,
-    `$1\n${rowsHtml}\n      $2`
-  )
-
-  // Replace totals
-  html = html.replace(
-    /(<div class="totals" data-slot="totals">)[\s\S]*?(<\/div>\s*<\/div>)/,
-    `$1\n${totalsHtml}\n    </div>\n  </div>`
-  )
-
-  // Replace grand total in price
-  html = html.replace(
-    /(<span data-slot="grand-total">)[\s\S]*?(<\/span>)/,
-    `$1${formatINR(d.grandTotal)}$2`
-  )
-
-  return html
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PACKAGE 2 RENDERER
-// ─────────────────────────────────────────────────────────────────────────────
-function renderPackage2(rawHtml: string, d: any): string {
-  let html = rawHtml
-
-  // Place
-  html = html.replace(
-    /(data-slot="place">)[\s\S]*?(<\/div>)/,
-    `$1${escapeHtml(d.place || 'Chennai')}$2`
-  )
-
-  // Date
-  html = html.replace(
-    /(data-slot="date">)[\s\S]*?(<\/div>)/,
-    `$1${escapeHtml(d.formattedEventDate || format(new Date(), 'dd MMM yyyy'))}$2`
-  )
-
-  // Quotation No + Valid Until
-  const validUntilStr = d.formattedValidUntil ? `<br><span style="font-size:8pt;color:#555">Valid: ${escapeHtml(d.formattedValidUntil)}</span>` : ''
-  html = html.replace(
-    /(data-slot="quotation-no">)[\s\S]*?(<\/div>)/,
-    `$1Quotation No: ${escapeHtml(d.quotationNumber || 'ZS-Q-2026-001')}${validUntilStr}$2`
-  )
-
-  // Prepared For:
-  let prepHtml = ''
-  if (d.clientName) {
-    const extra = d.eventType ? ` (${escapeHtml(d.eventType)})` : ''
-    prepHtml = `<b>Prepared For:</b> ${escapeHtml(d.clientName)}${extra}`
-  }
-  html = html.replace(
-    /(<p class="prep" data-slot="prepared-for">)[\s\S]*?(<\/p>)/,
-    `$1${prepHtml}$2`
-  )
-
-  // Table rows
-  const rowsHtml = d.items
-    .map((it: any) => {
-      const title = escapeHtml(it.name || it.description || 'Deliverable Item')
-      const qty = it.qty || 1
-      const rate = it.rate ?? 0
-      const amt = it.amount ?? qty * rate
-      return `        <tr><td>${title}</td><td class="qty">${qty}</td><td>${formatINR(rate)}</td><td>${formatINR(amt)}</td></tr>`
-    })
-    .join('\n')
-
-  html = html.replace(
-    /(<tbody data-slot="rows">)[\s\S]*?(<\/tbody>)/,
-    `$1\n${rowsHtml}\n      $2`
-  )
-
-  // Totals block
-  const halfTaxRate = (d.taxRate / 2).toFixed(1).replace(/\.0$/, '')
-  const halfTaxAmt = Math.round(d.taxAmount / 2)
-  let totalsHtml = `      <div class="r"><span>Subtotal</span><span>Rs. ${formatINR(d.subtotal)}</span></div>`
-  if (d.taxAmount > 0) {
-    totalsHtml += `\n      <div class="r"><span>CGST (${halfTaxRate}%)</span><span>Rs. ${formatINR(halfTaxAmt)}</span></div>`
-    totalsHtml += `\n      <div class="r"><span>SGST (${halfTaxRate}%)</span><span>Rs. ${formatINR(halfTaxAmt)}</span></div>`
-  }
-  totalsHtml += `\n      <div class="r gt"><span>GRAND TOTAL</span><span>Rs. ${formatINR(d.grandTotal)}</span></div>`
-
-  html = html.replace(
-    /(<div class="totals" data-slot="totals">)[\s\S]*?(<\/div>\s*<\/div>)/,
-    `$1\n${totalsHtml}\n    </div>\n  </div>`
-  )
-
-  return html
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PACKAGE 3 RENDERER
-// ─────────────────────────────────────────────────────────────────────────────
-function renderPackage3(rawHtml: string, d: any): string {
-  let html = rawHtml
-
-  // Heading: e.g. "09 NOV 2026 - IHM SCHOOL - WEDDING & RECEPTION"
-  // Never print dangling dash!
-  const headingParts: string[] = []
-  if (d.formattedEventDate) {
-    headingParts.push(d.formattedEventDate.toUpperCase())
-  }
-  const eventDetails: string[] = []
-  if (d.clientName) {
-    eventDetails.push(d.clientName.toUpperCase())
-  }
-  if (d.eventType) {
-    eventDetails.push(d.eventType.toUpperCase())
-  }
-  if (eventDetails.length > 0) {
-    headingParts.push(eventDetails.join(' - '))
-  }
-  const headingText = headingParts.join(' - ')
-  html = html.replace(
-    /(data-slot="event-heading">)[\s\S]*?(<\/div>)/,
-    `$1${escapeHtml(headingText)}$2`
-  )
-
-  // Table rows
-  const rowsHtml = d.items
-    .map((it: any) => {
-      const title = escapeHtml(it.name || it.description || 'Deliverable Item')
-      const qty = it.qty || 1
-      const rate = it.rate ?? 0
-      const amt = it.amount ?? qty * rate
-      return `        <tr><td>${title}</td><td class="qty">${qty}</td><td>${formatINR(rate)}</td><td>${formatINR(amt)}</td></tr>`
-    })
-    .join('\n')
-
-  html = html.replace(
-    /(<tbody data-slot="rows">)[\s\S]*?(<\/tbody>)/,
-    `$1\n${rowsHtml}\n      $2`
-  )
-
-  // Package Price block
-  const words = `(${numberToWordsINR(d.grandTotal)} Rupees only)`
-  const gstLine = d.taxAmount > 0 ? `<div class="gst" data-slot="gst-note">Incl. ${d.taxRate}% GST: Rs. ${formatINR(d.taxAmount)}</div>` : ''
-
-  const pkgPriceHtml = `    <div class="pkg" data-slot="package-price">
-      <div class="price-col amt"><span class="d">-</span><span class="rs">Rs.</span><span class="v" data-slot="grand-total">${formatINR(d.grandTotal)}</span></div>
-      <div class="words" data-slot="amount-in-words">${escapeHtml(words)}</div>
-      ${gstLine}
-    </div>`
-
-  html = html.replace(
-    /<div class="pkg" data-slot="package-price">[\s\S]*?<\/div>\s*(?=<!-- ADD ONS|<div class="addons")/i,
-    pkgPriceHtml + '\n\n    '
-  )
-
-  // ADD ONS block: hide this whole block if there are none!
-  const addonsRegex = /\s*<!-- ADD ONS: hide this whole block when there are none -->\s*<div class="addons" data-slot="addons">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/
-  if (d.addons && d.addons.length > 0) {
-    const addonRows = d.addons
-      .map((a: any) => {
-        const title = escapeHtml(a.name || a.description || 'Add-on Deliverable')
-        const amt = a.amount ?? 0
-        return `        <div class="row"><span>${title}</span><span class="price-col"><span class="d">-</span><span class="rs">Rs.</span><span class="v">${formatINR(amt)}</span></span></div>`
-      })
-      .join('\n')
-
-    const addonsBlock = `\n\n    <!-- ADD ONS: hide this whole block when there are none -->
-    <div class="addons" data-slot="addons">
-      <h3>ADD ONS</h3>
-      <div data-slot="addon-rows">
-${addonRows}
-      </div>
-    </div>`
-
-    html = html.replace(addonsRegex, addonsBlock)
-  } else {
-    // Completely remove the addons block when there are none
-    html = html.replace(addonsRegex, '')
-  }
-
-  return html
+  return serialize()
 }

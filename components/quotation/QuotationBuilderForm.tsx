@@ -7,8 +7,7 @@ import { createQuotation, updateQuotation } from '@/lib/firebase/queries/quotati
 import { subscribeToClients } from '@/lib/firebase/queries/clients'
 import { subscribeToPackageConfig, type PackageTemplate } from '@/lib/firebase/queries/settings'
 import { formatIndianCurrency, numberToWordsINR } from '@/lib/payroll/calculator'
-import { generateQuotationPdf, normalizeTemplateKey } from '@/lib/quotation/pdfGenerator'
-import { renderQuotationHtml } from '@/lib/quotation/htmlTemplateEngine'
+import { renderQuotationHtml, normalizeTemplateKey } from '@/lib/quotation/htmlTemplateEngine'
 import { DateField } from '@/components/shared/DateField'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -141,6 +140,29 @@ export function QuotationBuilderForm({
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor')
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
+  // Live HTML Preview & Capacity Guard
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [previewScale, setPreviewScale] = useState<number>(0.6)
+  const [isOverflowing, setIsOverflowing] = useState<boolean>(false)
+  const previewContainerRef = React.useRef<HTMLDivElement>(null)
+  const iframeRef = React.useRef<HTMLIFrameElement>(null)
+
+  // Measure container and scale 794x1123 iframe to fit
+  useEffect(() => {
+    const el = previewContainerRef.current
+    if (!el) return
+    const updateScale = () => {
+      const width = el.getBoundingClientRect().width
+      if (width > 0) {
+        setPreviewScale(width / 794)
+      }
+    }
+    updateScale()
+    const observer = new ResizeObserver(updateScale)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMsg({ text, type })
     setTimeout(() => setToastMsg(null), 3500)
@@ -206,7 +228,7 @@ export function QuotationBuilderForm({
       quotationNumber,
       templateId,
       clientId,
-      clientName: clientName.trim() || 'Valued Client',
+      clientName: clientName.trim(),
       contact,
       email,
       place,
@@ -250,72 +272,32 @@ export function QuotationBuilderForm({
     appUser,
   ])
 
-  // ─── LIVE HTML PREVIEW STATE & AUTO-SYNC ──────────────────────────────────
-  const [previewHtml, setPreviewHtml] = useState<string>('')
-  const [previewScale, setPreviewScale] = useState<number>(0.5)
-  const previewContainerRef = React.useRef<HTMLDivElement>(null)
-
-  // Measure container and scale iframe to fit standard 210mm (793.7px)
+  // Re-render preview on form change debounced 150ms
   useEffect(() => {
-    const updateScale = () => {
-      if (previewContainerRef.current) {
-        const w = previewContainerRef.current.clientWidth
-        if (w > 0) {
-          setPreviewScale(w / 793.7)
-        }
+    const timer = setTimeout(async () => {
+      try {
+        const html = await renderQuotationHtml(quotationSnapshot)
+        setPreviewHtml(html)
+      } catch (err) {
+        console.error('[Preview generation error]:', err)
       }
-    }
-    updateScale()
-    window.addEventListener('resize', updateScale)
-    return () => window.removeEventListener('resize', updateScale)
-  }, [])
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [quotationSnapshot])
 
-  // Auto-render quotation HTML template on any change
-  useEffect(() => {
-    let isCurrent = true
-    renderQuotationHtml({
-      templateId,
-      clientName: clientName.trim(),
-      quotationNumber,
-      eventType,
-      eventDate: eventDate || undefined,
-      place,
-      validUntil: validityDate || undefined,
-      lineItems,
-      addons,
-      subtotal,
-      taxAmount: gstEnabled ? cgst + sgst : 0,
-      taxRate: gstEnabled ? 18 : 0,
-      grandTotal,
-      termsAndConditions,
-    })
-      .then((html) => {
-        if (isCurrent) setPreviewHtml(html)
-      })
-      .catch((err) => {
-        console.error('Failed to update quotation preview:', err)
-      })
-
-    return () => {
-      isCurrent = false
+  // Check overflow inside iframe content
+  const checkOverflow = () => {
+    try {
+      const iframeDoc = iframeRef.current?.contentDocument
+      if (!iframeDoc) return
+      const contentEl = iframeDoc.querySelector('.content') as HTMLElement | null
+      if (contentEl) {
+        setIsOverflowing(contentEl.scrollHeight > contentEl.clientHeight + 2)
+      }
+    } catch {
+      // ignore
     }
-  }, [
-    templateId,
-    clientName,
-    quotationNumber,
-    eventType,
-    eventDate,
-    place,
-    validityDate,
-    lineItems,
-    addons,
-    subtotal,
-    gstEnabled,
-    cgst,
-    sgst,
-    grandTotal,
-    termsAndConditions,
-  ])
+  }
 
   // ─── LINE ITEM HANDLERS ────────────────────────────────────────────────────
   const handleItemChange = (
@@ -482,20 +464,28 @@ export function QuotationBuilderForm({
   const handleDownloadPdf = async () => {
     try {
       setIsGeneratingPdf(true)
-      const pdfBytes = await generateQuotationPdf(quotationSnapshot)
-      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' })
+      const res = await fetch('/api/quotations/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotation: quotationSnapshot }),
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to generate PDF')
+      }
+      const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Quotation_${quotationNumber}_${clientName.replace(/\s+/g, '_')}.pdf`
+      a.download = `Quotation_${quotationNumber}_${(clientName || 'Draft').replace(/\s+/g, '_')}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       setTimeout(() => URL.revokeObjectURL(url), 20000)
       showToast('Quotation PDF downloaded!')
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('[PDF Download Error]:', err)
-      showToast('Failed to generate PDF', 'error')
+      showToast(err instanceof Error ? err.message : 'Failed to generate PDF', 'error')
     } finally {
       setIsGeneratingPdf(false)
     }
@@ -504,33 +494,22 @@ export function QuotationBuilderForm({
   const handlePreviewPdf = async () => {
     try {
       setIsGeneratingPdf(true)
-      const html = await renderQuotationHtml({
-        templateId,
-        clientName: clientName.trim(),
-        quotationNumber,
-        eventType,
-        eventDate: eventDate || undefined,
-        place,
-        validUntil: validityDate || undefined,
-        lineItems,
-        addons,
-        subtotal,
-        taxAmount: gstEnabled ? cgst + sgst : 0,
-        taxRate: gstEnabled ? 18 : 0,
-        grandTotal,
-        termsAndConditions,
+      const res = await fetch('/api/quotations/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotation: quotationSnapshot }),
       })
-      const win = window.open('', '_blank')
-      if (win) {
-        win.document.open()
-        win.document.write(html)
-        win.document.close()
-      } else {
-        showToast('Popup blocked. Please allow popups to view full PDF.', 'error')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to generate PDF')
       }
-    } catch (err) {
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch (err: unknown) {
       console.error('[PDF Preview Error]:', err)
-      showToast('Failed to open PDF preview', 'error')
+      showToast(err instanceof Error ? err.message : 'Failed to open PDF preview', 'error')
     } finally {
       setIsGeneratingPdf(false)
     }
@@ -1392,48 +1371,58 @@ export function QuotationBuilderForm({
             </div>
           </div>
 
-          {/* A4 CANVAS CONTAINER */}
+          {/* CAPACITY WARNING IF OVERFLOWING */}
+          {isOverflowing && (
+            <div
+              style={{
+                padding: '8px 12px',
+                backgroundColor: 'var(--color-danger-muted)',
+                border: '0.5px solid var(--color-danger)',
+                borderRadius: '6px',
+                color: 'var(--color-danger)',
+                fontSize: 'var(--text-xs)',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <i className="ti ti-alert-triangle" style={{ fontSize: '16px' }} />
+              <span>
+                Content exceeds single-page capacity and will clip when printed. Reduce line items or shorten descriptions.
+              </span>
+            </div>
+          )}
+
+          {/* A4 IFRAME CONTAINER */}
           <div
             ref={previewContainerRef}
             style={{
-              position: "relative",
-              width: "100%",
-              aspectRatio: "210 / 297",
-              backgroundColor: "#ffffff",
-              borderRadius: "8px",
-              boxShadow: "0 12px 36px rgba(0,0,0,0.45)",
-              overflow: "hidden",
-              border: "0.5px solid var(--color-border)",
+              position: 'relative',
+              width: '100%',
+              height: `${Math.round(1123 * previewScale)}px`,
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              boxShadow: '0 12px 36px rgba(0,0,0,0.45)',
+              overflow: 'hidden',
+              border: '0.5px solid var(--color-border)',
             }}
           >
-            {previewHtml ? (
+            {previewHtml && (
               <iframe
-                key={templateId}
-                title="A4 Quotation Preview"
+                ref={iframeRef}
                 srcDoc={previewHtml}
+                title="Quotation Live Preview"
+                onLoad={checkOverflow}
                 style={{
-                  width: "793.7px",
-                  height: "1122.5px",
-                  border: "none",
-                  transformOrigin: "top left",
+                  width: '794px',
+                  height: '1123px',
+                  border: 'none',
                   transform: `scale(${previewScale})`,
-                  pointerEvents: "none",
-                  display: "block",
+                  transformOrigin: 'top left',
+                  pointerEvents: 'none',
                 }}
               />
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  color: "var(--color-foreground-muted)",
-                  fontSize: "var(--text-sm)",
-                }}
-              >
-                <i className="ti ti-loader ti-spin" style={{ marginRight: "8px" }} /> Generating live preview...
-              </div>
             )}
           </div>
         </div>

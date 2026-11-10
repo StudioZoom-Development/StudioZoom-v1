@@ -88,14 +88,20 @@ export function formatINR(val?: number | null): string {
 }
 
 /**
- * Fetch background template image bytes dynamically.
- * Reads the high-res artwork extracted from the HTML template.
+ * Fetch background template PNG bytes dynamically.
+ * High-res raster PNG is preferred as it ensures clean PDF graphics state with zero
+ * inherited clipping paths or vector bounding box masks.
  */
 async function loadTemplateImage(
   templateKey: 'package1' | 'package2' | 'package3'
 ): Promise<Uint8Array | null> {
-  const num = templateKey === 'package1' ? '1' : templateKey === 'package2' ? '2' : '3'
-  const relativePath = `/templates/quotations/thumbnail-${num}.jpg`
+  const fileNameMap: Record<string, string> = {
+    package1: 'package-1.png',
+    package2: 'package-2.png',
+    package3: 'package-3.png',
+  }
+  const fileName = fileNameMap[templateKey] || 'package-1.png'
+  const relativePath = `/templates/quotations/${fileName}`
 
   // Browser fetch
   if (typeof window !== 'undefined') {
@@ -114,17 +120,9 @@ async function loadTemplateImage(
     try {
       const fs = await import('fs')
       const path = await import('path')
-      const thumbPath = path.join(process.cwd(), 'public', 'templates', 'quotations', `thumbnail-${num}.jpg`)
-      if (fs.existsSync(thumbPath)) {
-        return new Uint8Array(fs.readFileSync(thumbPath))
-      }
-      const htmlPath = path.join(process.cwd(), 'public', 'templates', 'quotations', `Package_${num}.html`)
-      if (fs.existsSync(htmlPath)) {
-        const text = fs.readFileSync(htmlPath, 'utf8')
-        const m = text.match(/data:image\/jpeg;base64,([^\x22\x27\)]+)/)
-        if (m) {
-          return new Uint8Array(Buffer.from(m[1], 'base64'))
-        }
+      const fullPath = path.join(process.cwd(), 'public', relativePath)
+      if (fs.existsSync(fullPath)) {
+        return new Uint8Array(fs.readFileSync(fullPath))
       }
     } catch {
       // Ignore if unavailable
@@ -142,13 +140,9 @@ export async function generateQuotationPdf(quotation: Quotation): Promise<Uint8A
   const templateKey = normalizeTemplateKey(quotation.templateId)
   const config = TEMPLATE_CONFIGS[templateKey]
 
-  // Pre-load background template image
+  // Pre-load background template PNG
   const bgBytes = await loadTemplateImage(templateKey)
-  let bgImage = null
-  if (bgBytes) {
-    const isJpg = bgBytes[0] === 0xff && bgBytes[1] === 0xd8
-    bgImage = isJpg ? await doc.embedJpg(bgBytes) : await doc.embedPng(bgBytes)
-  }
+  const bgImage = bgBytes ? await doc.embedPng(bgBytes) : null
 
   // Helper to add a new page with the exact background template artwork
   const addPageWithTemplate = async (): Promise<PDFPage> => {
