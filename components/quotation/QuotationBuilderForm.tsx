@@ -8,6 +8,7 @@ import { subscribeToClients } from '@/lib/firebase/queries/clients'
 import { subscribeToPackageConfig, type PackageTemplate } from '@/lib/firebase/queries/settings'
 import { formatIndianCurrency, numberToWordsINR } from '@/lib/payroll/calculator'
 import { generateQuotationPdf, normalizeTemplateKey } from '@/lib/quotation/pdfGenerator'
+import { renderQuotationHtml } from '@/lib/quotation/htmlTemplateEngine'
 import { DateField } from '@/components/shared/DateField'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -28,21 +29,21 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     id: 'package1',
     name: 'Package 1',
     subtitle: 'Photo collage header, Line items, Contact & Instagram footer',
-    thumbnailUrl: '/templates/quotations/package-1.png',
+    thumbnailUrl: '/templates/quotations/thumbnail-1.jpg',
     tag: 'Wedding Editorial',
   },
   {
     id: 'package2',
     name: 'Package 2',
     subtitle: 'StudioZoom logo header, Place & Date, Respected Sir/Mam greeting, Office footer',
-    thumbnailUrl: '/templates/quotations/package-2.png',
+    thumbnailUrl: '/templates/quotations/thumbnail-2.jpg',
     tag: 'Media Production Estimation',
   },
   {
     id: 'package3',
     name: 'Package 3',
     subtitle: 'Floral cream paper, Great Opportunity greeting, [Date - Event], Dedicated Add-ons',
-    thumbnailUrl: '/templates/quotations/package-3.png',
+    thumbnailUrl: '/templates/quotations/thumbnail-3.jpg',
     tag: 'Royal Wedding & Add-ons',
   },
 ]
@@ -249,6 +250,73 @@ export function QuotationBuilderForm({
     appUser,
   ])
 
+  // ─── LIVE HTML PREVIEW STATE & AUTO-SYNC ──────────────────────────────────
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [previewScale, setPreviewScale] = useState<number>(0.5)
+  const previewContainerRef = React.useRef<HTMLDivElement>(null)
+
+  // Measure container and scale iframe to fit standard 210mm (793.7px)
+  useEffect(() => {
+    const updateScale = () => {
+      if (previewContainerRef.current) {
+        const w = previewContainerRef.current.clientWidth
+        if (w > 0) {
+          setPreviewScale(w / 793.7)
+        }
+      }
+    }
+    updateScale()
+    window.addEventListener('resize', updateScale)
+    return () => window.removeEventListener('resize', updateScale)
+  }, [])
+
+  // Auto-render quotation HTML template on any change
+  useEffect(() => {
+    let isCurrent = true
+    renderQuotationHtml({
+      templateId,
+      clientName: clientName.trim(),
+      quotationNumber,
+      eventType,
+      eventDate: eventDate || undefined,
+      place,
+      validUntil: validityDate || undefined,
+      lineItems,
+      addons,
+      subtotal,
+      taxAmount: gstEnabled ? cgst + sgst : 0,
+      taxRate: gstEnabled ? 18 : 0,
+      grandTotal,
+      termsAndConditions,
+    })
+      .then((html) => {
+        if (isCurrent) setPreviewHtml(html)
+      })
+      .catch((err) => {
+        console.error('Failed to update quotation preview:', err)
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [
+    templateId,
+    clientName,
+    quotationNumber,
+    eventType,
+    eventDate,
+    place,
+    validityDate,
+    lineItems,
+    addons,
+    subtotal,
+    gstEnabled,
+    cgst,
+    sgst,
+    grandTotal,
+    termsAndConditions,
+  ])
+
   // ─── LINE ITEM HANDLERS ────────────────────────────────────────────────────
   const handleItemChange = (
     index: number,
@@ -436,11 +504,30 @@ export function QuotationBuilderForm({
   const handlePreviewPdf = async () => {
     try {
       setIsGeneratingPdf(true)
-      const pdfBytes = await generateQuotationPdf(quotationSnapshot)
-      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 30000)
+      const html = await renderQuotationHtml({
+        templateId,
+        clientName: clientName.trim(),
+        quotationNumber,
+        eventType,
+        eventDate: eventDate || undefined,
+        place,
+        validUntil: validityDate || undefined,
+        lineItems,
+        addons,
+        subtotal,
+        taxAmount: gstEnabled ? cgst + sgst : 0,
+        taxRate: gstEnabled ? 18 : 0,
+        grandTotal,
+        termsAndConditions,
+      })
+      const win = window.open('', '_blank')
+      if (win) {
+        win.document.open()
+        win.document.write(html)
+        win.document.close()
+      } else {
+        showToast('Popup blocked. Please allow popups to view full PDF.', 'error')
+      }
     } catch (err) {
       console.error('[PDF Preview Error]:', err)
       showToast('Failed to open PDF preview', 'error')
@@ -1307,499 +1394,47 @@ export function QuotationBuilderForm({
 
           {/* A4 CANVAS CONTAINER */}
           <div
+            ref={previewContainerRef}
             style={{
-              position: 'relative',
-              width: '100%',
-              aspectRatio: '595 / 842',
-              backgroundColor: '#ffffff',
-              borderRadius: '8px',
-              boxShadow: '0 12px 36px rgba(0,0,0,0.45)',
-              overflow: 'hidden',
-              border: '0.5px solid var(--color-border)',
+              position: "relative",
+              width: "100%",
+              aspectRatio: "210 / 297",
+              backgroundColor: "#ffffff",
+              borderRadius: "8px",
+              boxShadow: "0 12px 36px rgba(0,0,0,0.45)",
+              overflow: "hidden",
+              border: "0.5px solid var(--color-border)",
             }}
           >
-            {/* BACKGROUND TEMPLATE IMAGE */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/templates/quotations/${normalizeTemplateKey(templateId) === 'package1' ? 'package-1' : normalizeTemplateKey(templateId) === 'package2' ? 'package-2' : 'package-3'}.png`}
-              alt="Template Background"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-              }}
-            />
-
-            {/* LIVE DYNAMIC CONTENT OVERLAY */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                padding: '4.5% 6%',
-                boxSizing: 'border-box',
-                color: '#1a1a1a',
-                fontFamily: 'var(--font-inter)',
-                fontSize: '11px',
-                display: 'flex',
-                flexDirection: 'column',
-                pointerEvents: 'none',
-              }}
-            >
-              {/* ── PACKAGE 1: Wedding Editorial ─────────────────────────────────── */}
-              {normalizeTemplateKey(templateId) === 'package1' && (
-                <>
-                  {/* {Header}: Client Info & Metadata below photo collage (no logo in body) */}
-                  <div
-                    style={{
-                      marginTop: '45%',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      fontSize: '9px',
-                      marginBottom: '8px',
-                      borderBottom: '0.5px solid rgba(0,0,0,0.08)',
-                      paddingBottom: '4px',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '10.5px', color: '#1a1a1a' }}>
-                        {clientName || 'Client Name'}
-                      </div>
-                      <div style={{ color: '#666', fontSize: '8px' }}>
-                        {eventType ? `${eventType}${place ? ` • ${place}` : ''}` : place || ''}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, color: '#c6539f', fontSize: '9.5px' }}>
-                        {quotationNumber}
-                      </div>
-                      <div style={{ color: '#666', fontSize: '8px' }}>
-                        {format(new Date(), 'dd MMM yyyy')}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* {Body}: Deliverables Table */}
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 35px 75px 85px',
-                        padding: '4px 6px',
-                        backgroundColor: 'rgba(0,0,0,0.04)',
-                        fontWeight: 700,
-                        fontSize: '8px',
-                        color: '#555',
-                      }}
-                    >
-                      <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'right' }}>QTY</span>
-                      <span style={{ textAlign: 'right' }}>RATE</span>
-                      <span style={{ textAlign: 'right' }}>AMOUNT</span>
-                    </div>
-
-                    {lineItems.slice(0, 4).map((item, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 35px 75px 85px',
-                          padding: '3px 6px',
-                          borderBottom: '0.5px solid rgba(0,0,0,0.06)',
-                          fontSize: '8.5px',
-                        }}
-                      >
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.description || 'Deliverable Item'}
-                        </span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.qty}</span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
-                        <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-
-                    {addons.length > 0 && (
-                      <>
-                        <div style={{ marginTop: '3px', padding: '1px 6px', fontSize: '7.5px', fontWeight: 700, color: '#c6539f' }}>
-                          ADD-ONS
-                        </div>
-                        {addons.slice(0, 2).map((item, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 35px 75px 85px',
-                              padding: '2px 6px',
-                              fontSize: '8px',
-                              color: '#444',
-                            }}
-                          >
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              + {item.description}
-                            </span>
-                            <span style={{ textAlign: 'right' }}>{item.qty}</span>
-                            <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
-                            <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Subtotal & Grand Total */}
-                  <div style={{ alignSelf: 'flex-end', width: '48%', marginBottom: '11%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
-                      <span>Subtotal</span>
-                      <span>Rs. {subtotal.toLocaleString('en-IN')}</span>
-                    </div>
-                    {gstEnabled && (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                          <span>CGST 9%</span>
-                          <span>Rs. {cgst.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                          <span>SGST 9%</span>
-                          <span>Rs. {sgst.toLocaleString('en-IN')}</span>
-                        </div>
-                      </>
-                    )}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        backgroundColor: '#c6539f',
-                        padding: '3px 6px',
-                        borderRadius: '3px',
-                        fontSize: '9px',
-                        marginTop: '2px',
-                      }}
-                    >
-                      <span>Grand Total</span>
-                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
-                    </div>
-                  </div>
-
-                  {/* {Footer}: Contact & Instagram pinned to bottom */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: '3%',
-                      left: '6%',
-                      right: '6%',
-                      borderTop: '0.5px solid #dcdcdc',
-                      paddingTop: '6px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-end',
-                      fontSize: '8px',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#1a1a1a', fontSize: '8.5px' }}>Contact</div>
-                      <div style={{ color: '#555', marginTop: '1px' }}>
-                        +91 93810 29555 &nbsp;|&nbsp; +91 80721 83903
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 600, color: '#c6539f', fontSize: '8.5px' }}>
-                      Instagram - @studio_zoom_chennai
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* ── PACKAGE 2: Media Production Estimation ──────────────────────── */}
-              {normalizeTemplateKey(templateId) === 'package2' && (
-                <>
-                  {/* {Header}: Place & Date, Quotation No comfortably below logo swirl (which ends at ~20%) */}
-                  <div style={{ marginTop: '23%', display: 'flex', justifyContent: 'space-between', fontSize: '9px', marginBottom: '8px' }}>
-                    <div>
-                      <div><span style={{ fontWeight: 600, color: '#333' }}>Place :</span> <span style={{ fontWeight: 500 }}>{place || 'Chennai'}</span></div>
-                      <div style={{ marginTop: '2px' }}><span style={{ fontWeight: 600, color: '#333' }}>Date :</span> <span style={{ fontWeight: 500 }}>{format(new Date(), 'dd MMM yyyy')}</span></div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, color: '#c6539f' }}>Quotation No: {quotationNumber}</div>
-                      <div style={{ color: '#666', fontSize: '8px' }}>Valid: {format(validityDate, 'dd MMM yyyy')}</div>
-                    </div>
-                  </div>
-
-                  {/* {Body}: Respected Sir / Mam Greeting & Client Info */}
-                  <div style={{ fontSize: '9px', lineHeight: 1.45, marginBottom: '8px', color: '#1a1a1a' }}>
-                    <div style={{ fontWeight: 700, marginBottom: '2px' }}>Respected Sir / Mam,</div>
-                    <div>Thank You for Giving us this Great Oppurtunity.</div>
-                    <div>We&apos;re delighted to Work with you.</div>
-                    <div style={{ marginTop: '6px', fontWeight: 600, fontSize: '9.5px' }}>
-                      Prepared For: <span style={{ fontWeight: 700 }}>{clientName || 'Client Name'}</span>
-                      {eventType && eventType.trim() && (
-                        <span style={{ color: '#666', marginLeft: '6px' }}>({eventType.trim()})</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ITEM TABLE */}
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 35px 75px 85px',
-                        padding: '4px 6px',
-                        backgroundColor: 'rgba(0,0,0,0.04)',
-                        fontWeight: 700,
-                        fontSize: '8px',
-                        color: '#555',
-                      }}
-                    >
-                      <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'right' }}>QTY</span>
-                      <span style={{ textAlign: 'right' }}>RATE</span>
-                      <span style={{ textAlign: 'right' }}>AMOUNT</span>
-                    </div>
-
-                    {lineItems.slice(0, 5).map((item, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 35px 75px 85px',
-                          padding: '3px 6px',
-                          borderBottom: '0.5px solid rgba(0,0,0,0.06)',
-                          fontSize: '8.5px',
-                        }}
-                      >
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.description || 'Deliverable Item'}
-                        </span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.qty}</span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
-                        <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-
-                    {addons.length > 0 && (
-                      <>
-                        <div style={{ marginTop: '4px', padding: '2px 6px', fontSize: '8px', fontWeight: 700, color: '#c6539f' }}>
-                          ADD-ONS
-                        </div>
-                        {addons.slice(0, 2).map((item, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 35px 75px 85px',
-                              padding: '2px 6px',
-                              fontSize: '8px',
-                              color: '#444',
-                            }}
-                          >
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              + {item.description}
-                            </span>
-                            <span style={{ textAlign: 'right' }}>{item.qty}</span>
-                            <span style={{ textAlign: 'right' }}>{item.rate.toLocaleString('en-IN')}</span>
-                            <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-
-                  {/* TOTALS */}
-                  <div style={{ alignSelf: 'flex-end', width: '48%', fontSize: '9px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
-                      <span>Subtotal</span>
-                      <span>Rs. {subtotal.toLocaleString('en-IN')}</span>
-                    </div>
-                    {gstEnabled && (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                          <span>CGST 9%</span>
-                          <span>Rs. {cgst.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px' }}>
-                          <span>SGST 9%</span>
-                          <span>Rs. {sgst.toLocaleString('en-IN')}</span>
-                        </div>
-                      </>
-                    )}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        backgroundColor: '#c6539f',
-                        padding: '3px 6px',
-                        borderRadius: '3px',
-                        fontSize: '9px',
-                        marginTop: '2px',
-                      }}
-                    >
-                      <span>Grand Total</span>
-                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
-                    </div>
-                  </div>
-
-                  {/* Centered "Thank You!" */}
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      marginTop: '6px',
-                      marginBottom: '15%',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      color: '#1a1a1a',
-                      letterSpacing: '0.02em',
-                    }}
-                  >
-                    Thank You!
-                  </div>
-
-                  {/* {Footer}: OFFICE Address on left end */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: '3%',
-                      left: '6%',
-                      textAlign: 'left',
-                      fontSize: '7.5px',
-                      lineHeight: 1.35,
-                      color: '#555',
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, color: '#1a1a1a', fontSize: '8px' }}>OFFICE:</div>
-                    <div>No.3, Kasturi Bai Nagar,N.M.Road, Avadi, Chennai-54.</div>
-                    <div>E-mail : studiozoomindia@gmail.com</div>
-                    <div>Contact : +91 9381029555 , +91 8072183903.</div>
-                  </div>
-                </>
-              )}
-
-              {/* ── PACKAGE 3: Royal Wedding with Add-ons ────────────────────────── */}
-              {normalizeTemplateKey(templateId) === 'package3' && (
-                <>
-                  {/* {Header}: Great Opportunity Greeting & Event Header below purple badge inside cream area */}
-                  <div style={{ marginTop: '44%', textAlign: 'center', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '8.5px', color: '#666', fontStyle: 'italic', letterSpacing: '0.01em' }}>
-                      Thank you for giving us this great oppurtunity. We&apos;re delighted to work for you
-                    </div>
-                    <div style={{ marginTop: '3px', fontSize: '10px', fontWeight: 700, color: '#222', letterSpacing: '0.04em' }}>
-                      [{format(eventDate || new Date(), 'dd MMM yyyy').toUpperCase()}{eventType && eventType.trim() ? ` - ${eventType.trim().toUpperCase()}` : ''}]
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', marginBottom: '6px', borderBottom: '0.5px solid rgba(139,46,103,0.15)', paddingBottom: '3px' }}>
-                    <span style={{ fontWeight: 700, color: '#222' }}>Client: {clientName || 'Client Name'}</span>
-                    <span style={{ color: '#8b2e67', fontWeight: 700 }}>Quote: {quotationNumber}</span>
-                  </div>
-
-                  {/* {Body}: ITEM TABLE (Transparent, no white backgrounds) */}
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 35px 75px 85px',
-                        padding: '3px 6px',
-                        backgroundColor: 'transparent',
-                        borderTop: '0.5px solid rgba(139,46,103,0.2)',
-                        borderBottom: '0.5px solid rgba(139,46,103,0.2)',
-                        fontWeight: 700,
-                        fontSize: '8px',
-                        color: '#65304b',
-                      }}
-                    >
-                      <span>DESCRIPTION</span>
-                      <span style={{ textAlign: 'right' }}>QTY</span>
-                      <span style={{ textAlign: 'right' }}>RATE</span>
-                      <span style={{ textAlign: 'right' }}>AMOUNT</span>
-                    </div>
-
-                    {lineItems.slice(0, 4).map((item, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 35px 75px 85px',
-                          padding: '2px 6px',
-                          borderBottom: '0.5px solid rgba(139,46,103,0.08)',
-                          fontSize: '8px',
-                          backgroundColor: 'transparent',
-                        }}
-                      >
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.description || 'Deliverable Item'}
-                        </span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.qty}</span>
-                        <span style={{ textAlign: 'right', color: '#666' }}>{item.rate.toLocaleString('en-IN')}</span>
-                        <span style={{ textAlign: 'right', fontWeight: 600 }}>{item.amount.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-
-                    {/* PACKAGE DELIVERABLES PRICE */}
-                    <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', fontWeight: 700, color: '#8b2e67' }}>
-                      <span>Package Deliverables:</span>
-                      <span>Rs. {lineItemsSubtotal.toLocaleString('en-IN')}</span>
-                    </div>
-
-                    {/* ADDONS Section: Only rendered if addons exist */}
-                    {addons.length > 0 && (
-                      <div style={{ marginTop: '8px' }}>
-                        <div style={{ fontSize: '8.5px', fontWeight: 700, color: '#8b2e67', letterSpacing: '0.05em', borderBottom: '0.5px solid rgba(139,46,103,0.2)', paddingBottom: '2px', marginBottom: '3px' }}>
-                          ADDONS
-                        </div>
-                        {addons.slice(0, 3).map((item, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              fontSize: '8px',
-                              padding: '1px 0',
-                              color: '#333',
-                            }}
-                          >
-                            <span>• {item.description || 'Add-on deliverable'}</span>
-                            <span style={{ fontWeight: 600 }}>Rs. {item.amount.toLocaleString('en-IN')}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* TOTALS: Above pre-printed bottom footer, continuous Grand Total bar */}
-                  <div style={{ position: 'absolute', bottom: '14%', right: '6%', width: '48%', fontSize: '8.5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {gstEnabled && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555', fontSize: '8px', marginBottom: '3px' }}>
-                        <span>Incl. 18% GST</span>
-                        <span>Rs. {(cgst + sgst).toLocaleString('en-IN')}</span>
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        backgroundColor: '#8b2e67',
-                        padding: '4px 8px',
-                        borderRadius: '3px',
-                        fontSize: '9px',
-                      }}
-                    >
-                      <span>GRAND TOTAL</span>
-                      <span>Rs. {grandTotal.toLocaleString('en-IN')}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            {previewHtml ? (
+              <iframe
+                key={templateId}
+                title="A4 Quotation Preview"
+                srcDoc={previewHtml}
+                style={{
+                  width: "793.7px",
+                  height: "1122.5px",
+                  border: "none",
+                  transformOrigin: "top left",
+                  transform: `scale(${previewScale})`,
+                  pointerEvents: "none",
+                  display: "block",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  color: "var(--color-foreground-muted)",
+                  fontSize: "var(--text-sm)",
+                }}
+              >
+                <i className="ti ti-loader ti-spin" style={{ marginRight: "8px" }} /> Generating live preview...
+              </div>
+            )}
           </div>
         </div>
       </div>

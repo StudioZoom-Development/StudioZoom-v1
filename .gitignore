@@ -60,3 +60,4 @@ scripts/inspect-db.mjs
 scripts/reset-and-sync-from-prod.mjs
 scripts/backup-prod-data.mjs
 backups/
+test-output/
