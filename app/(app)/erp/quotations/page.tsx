@@ -331,17 +331,14 @@ export default function QuotationsPage() {
           }}
         />
       ) : (
-        <>
-          {/* DESKTOP TABLE */}
-          <div
-            className="hidden md:block"
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-            }}
-          >
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '0.5px solid var(--color-border)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}
+        >
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
@@ -484,8 +481,7 @@ export default function QuotationsPage() {
                 })}
               </tbody>
             </table>
-          </div>
-        </>
+        </div>
       )}
       </div>
 
