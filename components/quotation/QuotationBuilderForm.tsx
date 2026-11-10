@@ -462,28 +462,33 @@ export function QuotationBuilderForm({
   const handleDownloadPdf = async () => {
     try {
       setIsGeneratingPdf(true)
-      const res = await fetch('/api/quotations/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotation: quotationSnapshot }),
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || 'Failed to generate PDF')
+      const html = await renderQuotationHtml(quotationSnapshot)
+      const printWin = window.open('', '_blank')
+      if (!printWin) {
+        showToast('Please allow popups to save/download PDF', 'error')
+        return
       }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Quotation_${quotationNumber}_${(clientName || 'Draft').replace(/\s+/g, '_')}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 20000)
-      showToast('Quotation PDF downloaded!')
+
+      // Inject auto-print script so the browser's native Save as PDF dialog opens directly
+      const printableHtml = html.replace(
+        '</body>',
+        `<script>
+          window.addEventListener('load', function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+            }, 300);
+          });
+        </script></body>`
+      )
+
+      printWin.document.open()
+      printWin.document.write(printableHtml)
+      printWin.document.close()
+      showToast('Opening print dialog — select "Save as PDF"')
     } catch (err: unknown) {
       console.error('[PDF Download Error]:', err)
-      showToast(err instanceof Error ? err.message : 'Failed to generate PDF', 'error')
+      showToast(err instanceof Error ? err.message : 'Failed to download PDF', 'error')
     } finally {
       setIsGeneratingPdf(false)
     }
@@ -492,22 +497,18 @@ export function QuotationBuilderForm({
   const handlePreviewPdf = async () => {
     try {
       setIsGeneratingPdf(true)
-      const res = await fetch('/api/quotations/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotation: quotationSnapshot }),
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || 'Failed to generate PDF')
+      const html = await renderQuotationHtml(quotationSnapshot)
+      const win = window.open('', '_blank')
+      if (win) {
+        win.document.open()
+        win.document.write(html)
+        win.document.close()
+      } else {
+        showToast('Please allow popups to open full PDF preview', 'error')
       }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch (err: unknown) {
       console.error('[PDF Preview Error]:', err)
-      showToast(err instanceof Error ? err.message : 'Failed to open PDF preview', 'error')
+      showToast(err instanceof Error ? err.message : 'Failed to open preview', 'error')
     } finally {
       setIsGeneratingPdf(false)
     }
