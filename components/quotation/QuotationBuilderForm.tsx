@@ -124,7 +124,7 @@ export function QuotationBuilderForm({
   )
   const [termsAndConditions, setTermsAndConditions] = useState<string>(
     initialQuotation?.termsAndConditions ||
-      '1. 50% advance upon confirmation.\n2. Final deliverables dispatched within 3-4 weeks post shoot.'
+    '1. 50% advance upon confirmation.\n2. Final deliverables dispatched within 3-4 weeks post shoot.'
   )
   const [status] = useState<Quotation['status']>(
     initialQuotation?.status || 'draft'
@@ -1306,40 +1306,6 @@ export function QuotationBuilderForm({
                 ₹{grandTotal.toLocaleString('en-IN')}
               </span>
             </div>
-          </div>
-
-          {/* 7. TERMS & FOOTER */}
-          <div
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '12px',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}
-          >
-            <label style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-              Terms & Conditions / Special Notes
-            </label>
-            <textarea
-              rows={3}
-              value={termsAndConditions}
-              onChange={(e) => setTermsAndConditions(e.target.value)}
-              placeholder="Enter quotation terms and deliverables conditions..."
-              style={{
-                width: '100%',
-                borderRadius: '8px',
-                backgroundColor: 'var(--color-surface-raised)',
-                border: '0.5px solid var(--color-border)',
-                color: 'var(--color-foreground)',
-                padding: '8px 10px',
-                fontSize: 'var(--text-xs)',
-                fontFamily: 'var(--font-inter)',
-                resize: 'vertical',
-              }}
-            />
           </div>
         </div>
 

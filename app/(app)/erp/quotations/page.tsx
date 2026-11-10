@@ -8,7 +8,6 @@ import {
   deleteQuotation,
 } from '@/lib/firebase/queries/quotations'
 import { formatIndianCurrency } from '@/lib/payroll/calculator'
-import { generateQuotationPdf } from '@/lib/quotation/pdfGenerator'
 import { Badge } from '@/components/shared/Badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +34,6 @@ export default function QuotationsPage() {
   // Modals & Action States
   const [deleteTarget, setDeleteTarget] = useState<Quotation | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null)
 
   // Real-time Firestore subscription
   useEffect(() => {
@@ -62,42 +60,6 @@ export default function QuotationsPage() {
 
     return { total, sentCount, acceptedCount, totalPipelineValue }
   }, [quotations])
-
-  // PDF Preview & Download
-  const handleDownloadPdf = async (q: Quotation) => {
-    try {
-      setGeneratingPdfId(q.quotationId)
-      const pdfBytes = await generateQuotationPdf(q)
-      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Quotation_${q.quotationNumber}_${q.clientName.replace(/\s+/g, '_')}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 20000)
-    } catch (err) {
-      console.error('[Download PDF error]:', err)
-    } finally {
-      setGeneratingPdfId(null)
-    }
-  }
-
-  const handlePreviewPdf = async (q: Quotation) => {
-    try {
-      setGeneratingPdfId(q.quotationId)
-      const pdfBytes = await generateQuotationPdf(q)
-      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 30000)
-    } catch (err) {
-      console.error('[Preview PDF error]:', err)
-    } finally {
-      setGeneratingPdfId(null)
-    }
-  }
 
   const confirmDelete = async () => {
     if (!deleteTarget) return
@@ -359,7 +321,6 @@ export default function QuotationsPage() {
               </thead>
               <tbody>
                 {quotations.map((q) => {
-                  const isGen = generatingPdfId === q.quotationId
                   return (
                     <tr
                       key={q.quotationId}
@@ -436,28 +397,6 @@ export default function QuotationsPage() {
 
                       <td style={{ ...TD_STYLE, textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handlePreviewPdf(q)}
-                            disabled={isGen}
-                            title="Preview live A4 PDF"
-                            style={{ height: '28px', padding: '0 8px', fontSize: 'var(--text-xs)' }}
-                          >
-                            <i className="ti ti-eye" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDownloadPdf(q)}
-                            disabled={isGen}
-                            title="Download PDF"
-                            style={{ height: '28px', padding: '0 8px', fontSize: 'var(--text-xs)' }}
-                          >
-                            <i className="ti ti-download" />
-                          </Button>
-
                           <Button
                             variant="ghost"
                             size="sm"
@@ -551,25 +490,7 @@ export default function QuotationsPage() {
                 </div>
 
                 {/* CARD FOOTER ACTIONS */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', paddingTop: '4px' }}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePreviewPdf(q)}
-                    style={{ fontSize: 'var(--text-xs)', padding: '6px' }}
-                  >
-                    <i className="ti ti-eye" style={{ marginRight: '4px' }} /> Preview
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownloadPdf(q)}
-                    style={{ fontSize: 'var(--text-xs)', padding: '6px' }}
-                  >
-                    <i className="ti ti-download" style={{ marginRight: '4px' }} /> PDF
-                  </Button>
-
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingTop: '4px' }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -577,6 +498,15 @@ export default function QuotationsPage() {
                     style={{ fontSize: 'var(--text-xs)', padding: '6px' }}
                   >
                     <i className="ti ti-edit" style={{ marginRight: '4px' }} /> Edit
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDeleteTarget(q)}
+                    style={{ fontSize: 'var(--text-xs)', padding: '6px', color: 'var(--color-danger)' }}
+                  >
+                    <i className="ti ti-trash" style={{ marginRight: '4px' }} /> Delete
                   </Button>
                 </div>
               </div>
