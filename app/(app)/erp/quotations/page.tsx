@@ -86,7 +86,43 @@ export default function QuotationsPage() {
         gap: '24px',
       }}
     >
-      {/* HEADER SECTION */}
+      {/* MOBILE SCREEN FALLBACK (< 768px) - DESKTOP ONLY */}
+      <div
+        className="flex md:hidden flex-col items-center justify-center text-center p-8"
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          minHeight: '320px',
+          gap: '14px',
+        }}
+      >
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--color-primary-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-primary)',
+            fontSize: '26px',
+          }}
+        >
+          <i className="ti ti-device-desktop" />
+        </div>
+        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+          Desktop View Only
+        </h2>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0, maxWidth: '320px', lineHeight: 1.5 }}>
+          Quotation management, layout preview, and A4 print generation are designed exclusively for desktop screens. Please open this page on a desktop display.
+        </p>
+      </div>
+
+      {/* DESKTOP CONTENT (>= 768px) */}
+      <div className="hidden md:flex flex-col gap-6">
+        {/* HEADER SECTION */}
       <div
         style={{
           display: 'flex',
@@ -396,15 +432,27 @@ export default function QuotationsPage() {
                       </td>
 
                       <td style={{ ...TD_STYLE, textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => router.push(`/erp/quotations/${q.quotationId}/edit`)}
                             title="Edit Quotation"
-                            style={{ height: '28px', padding: '0 8px', fontSize: 'var(--text-xs)' }}
+                            style={{
+                              height: '30px',
+                              padding: '0 10px',
+                              fontSize: 'var(--text-xs)',
+                              backgroundColor: 'var(--color-surface-raised)',
+                              border: '0.5px solid var(--color-border)',
+                              color: 'var(--color-foreground)',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
                           >
-                            <i className="ti ti-edit" />
+                            <i className="ti ti-edit" style={{ fontSize: '14px' }} />
+                            <span>Edit</span>
                           </Button>
 
                           <Button
@@ -412,9 +460,22 @@ export default function QuotationsPage() {
                             size="sm"
                             onClick={() => setDeleteTarget(q)}
                             title="Delete Quotation"
-                            style={{ height: '28px', padding: '0 8px', fontSize: 'var(--text-xs)', color: 'var(--color-danger)' }}
+                            style={{
+                              height: '30px',
+                              padding: '0 10px',
+                              fontSize: 'var(--text-xs)',
+                              backgroundColor: 'var(--color-danger-muted)',
+                              border: '0.5px solid var(--color-danger)',
+                              color: 'var(--color-danger)',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
                           >
-                            <i className="ti ti-trash" />
+                            <i className="ti ti-trash" style={{ fontSize: '14px', color: 'var(--color-danger)' }} />
+                            <span>Delete</span>
                           </Button>
                         </div>
                       </td>
@@ -424,96 +485,9 @@ export default function QuotationsPage() {
               </tbody>
             </table>
           </div>
-
-          {/* MOBILE COMPACT CARDS (< 768px) */}
-          <div className="flex flex-col gap-3 md:hidden">
-            {quotations.map((q) => (
-              <div
-                key={q.quotationId}
-                style={{
-                  backgroundColor: 'var(--color-surface)',
-                  border: '0.5px solid var(--color-border)',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-primary)' }}>
-                      {q.quotationNumber}
-                    </span>
-                    <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, margin: '2px 0 0 0', color: 'var(--color-foreground)' }}>
-                      {q.clientName}
-                    </h3>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                      {q.eventType} {q.place ? `• ${q.place}` : ''}
-                    </div>
-                  </div>
-
-                  <Badge
-                    variant={
-                      q.status === 'accepted'
-                        ? 'paid'
-                        : q.status === 'converted'
-                        ? 'done'
-                        : q.status === 'sent'
-                        ? 'inProgress'
-                        : 'todo'
-                    }
-                    label={q.status.toUpperCase()}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    backgroundColor: 'var(--color-surface-raised)',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--color-foreground-subtle)' }}>GRAND TOTAL</div>
-                    <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-foreground)' }}>
-                      {formatIndianCurrency(q.grandTotal)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                    <div>Valid: {format(q.validityDate, 'dd MMM yyyy')}</div>
-                    <div>Style: {q.templateId || 'production'}</div>
-                  </div>
-                </div>
-
-                {/* CARD FOOTER ACTIONS */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingTop: '4px' }}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/erp/quotations/${q.quotationId}/edit`)}
-                    style={{ fontSize: 'var(--text-xs)', padding: '6px' }}
-                  >
-                    <i className="ti ti-edit" style={{ marginRight: '4px' }} /> Edit
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDeleteTarget(q)}
-                    style={{ fontSize: 'var(--text-xs)', padding: '6px', color: 'var(--color-danger)' }}
-                  >
-                    <i className="ti ti-trash" style={{ marginRight: '4px' }} /> Delete
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
         </>
       )}
+      </div>
 
       {/* CONFIRM DELETE MODAL */}
       <ConfirmModal

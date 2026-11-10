@@ -122,9 +122,8 @@ export function QuotationBuilderForm({
   const [gstEnabled, setGstEnabled] = useState<boolean>(
     initialQuotation ? Boolean(initialQuotation.gstEnabled) : true
   )
-  const [termsAndConditions, setTermsAndConditions] = useState<string>(
-    initialQuotation?.termsAndConditions ||
-    '1. 50% advance upon confirmation.\n2. Final deliverables dispatched within 3-4 weeks post shoot.'
+  const [termsAndConditions] = useState<string>(
+    initialQuotation?.termsAndConditions || ''
   )
   const [status] = useState<Quotation['status']>(
     initialQuotation?.status || 'draft'
@@ -137,7 +136,6 @@ export function QuotationBuilderForm({
   // UI state
   const [isSaving, setIsSaving] = useState(false)
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor')
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // Live HTML Preview & Capacity Guard
@@ -640,43 +638,41 @@ export function QuotationBuilderForm({
         </div>
       </div>
 
-      {/* MOBILE TAB TOGGLE (< 768px) */}
-      <div className="flex md:hidden" style={{ gap: '8px' }}>
-        <button
-          type="button"
-          onClick={() => setActiveTab('editor')}
+      {/* MOBILE SCREEN NOTICE (< 768px): DESKTOP ONLY */}
+      <div
+        className="flex md:hidden flex-col items-center justify-center text-center p-8"
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '12px',
+          minHeight: '320px',
+          gap: '14px',
+        }}
+      >
+        <div
           style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: '0.5px solid var(--color-border)',
-            backgroundColor: activeTab === 'editor' ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: activeTab === 'editor' ? '#ffffff' : 'var(--color-foreground)',
-            fontWeight: 600,
-            fontSize: 'var(--text-xs)',
+            width: '52px',
+            height: '52px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--color-primary-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-primary)',
+            fontSize: '26px',
           }}
         >
-          Quotation Editor
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('preview')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: '0.5px solid var(--color-border)',
-            backgroundColor: activeTab === 'preview' ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: activeTab === 'preview' ? '#ffffff' : 'var(--color-foreground)',
-            fontWeight: 600,
-            fontSize: 'var(--text-xs)',
-          }}
-        >
-          Live A4 Preview
-        </button>
+          <i className="ti ti-device-desktop" />
+        </div>
+        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
+          Desktop View Only
+        </h2>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0, maxWidth: '320px', lineHeight: 1.5 }}>
+          Quotation editing and real-time A4 preview are optimized exclusively for desktop screens. Please open this page on a desktop or laptop display.
+        </p>
       </div>
 
-      {/* MAIN TWO-COLUMN SPLIT */}
+      {/* MAIN TWO-COLUMN SPLIT (DESKTOP >= 768px) */}
       <div
         style={{
           display: 'grid',
@@ -684,7 +680,7 @@ export function QuotationBuilderForm({
           gap: '24px',
           alignItems: 'start',
         }}
-        className={activeTab === 'preview' ? 'hidden md:grid' : 'grid'}
+        className="hidden md:grid"
       >
         {/* LEFT COLUMN: BUILDER CONTROLS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1318,7 +1314,7 @@ export function QuotationBuilderForm({
             flexDirection: 'column',
             gap: '12px',
           }}
-          className={activeTab === 'preview' ? 'block' : 'hidden md:flex'}
+          className="flex"
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
