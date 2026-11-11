@@ -543,12 +543,7 @@ export function QuotationBuilderForm({
       )}
 
       {/* HEADER BAR */}
-      <div
-        className="flex flex-col md:flex-row md:items-center md:justify-between gap-3.5 pb-4"
-        style={{
-          borderBottom: '0.5px solid var(--color-border)',
-        }}
-      >
+      <div className="erp-builder-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             onClick={() => router.push('/erp/quotations')}
@@ -593,7 +588,7 @@ export function QuotationBuilderForm({
         </div>
 
         {/* TOP ACTIONS */}
-        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full md:w-auto">
+        <div className="erp-builder-actions">
           <Button
             variant="outline"
             size="sm"
@@ -620,7 +615,7 @@ export function QuotationBuilderForm({
             size="sm"
             onClick={() => handleSave('sent')}
             disabled={isSaving}
-            className="col-span-2 sm:col-span-1"
+            className="erp-builder-primary-btn"
             style={{
               backgroundColor: 'var(--color-primary)',
               color: '#ffffff',
@@ -639,14 +634,7 @@ export function QuotationBuilderForm({
       </div>
 
       {/* MOBILE / TABLET MODE SWITCHER (< 1024px) */}
-      <div
-        className="flex lg:hidden p-1 gap-1"
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '10px',
-        }}
-      >
+      <div className="erp-mobile-switcher">
         <button
           type="button"
           onClick={() => setMobileTab('edit')}
@@ -695,14 +683,14 @@ export function QuotationBuilderForm({
         </button>
       </div>
 
-      {/* MAIN TWO-COLUMN SPLIT (SINGLE VIEW SWITCHER < 1024px, SIDE-BY-SIDE >= 1024px) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* MAIN TWO-COLUMN SPLIT (SINGLE VIEW SWITCHER < 1024px, SIDE-BY-SIDE 58/42 >= 1024px) */}
+      <div className="erp-builder-split erp-builder-split-quotation">
         {/* LEFT COLUMN: BUILDER CONTROLS */}
         <div
           className={
             mobileTab === 'preview'
-              ? 'hidden lg:flex lg:col-span-7 min-w-0 flex-col gap-5'
-              : 'flex lg:col-span-7 min-w-0 flex-col gap-5'
+              ? 'erp-builder-form-pane erp-pane-hidden-mobile'
+              : 'erp-builder-form-pane'
           }
         >
           {/* 1. TEMPLATE STATIONERY SELECTOR */}
@@ -726,7 +714,7 @@ export function QuotationBuilderForm({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="erp-grid-3">
               {TEMPLATE_OPTIONS.map((tmpl) => {
                 const isSelected = normalizeTemplateKey(tmpl.id) === normalizeTemplateKey(templateId)
                 return (
@@ -869,7 +857,7 @@ export function QuotationBuilderForm({
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Client Name *
@@ -895,7 +883,7 @@ export function QuotationBuilderForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Event Type
@@ -937,7 +925,7 @@ export function QuotationBuilderForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Event Date
@@ -1042,50 +1030,36 @@ export function QuotationBuilderForm({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {lineItems.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-2.5"
-                  style={{
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--color-surface-raised)',
-                    border: '0.5px solid var(--color-border)',
-                  }}
-                >
-                  <div className="md:col-span-5">
+                <div key={item.id || idx} className="erp-quote-item-row">
+                  <Input
+                    placeholder="Deliverable description / service"
+                    value={item.description}
+                    onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
+                    style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                  />
+
+                  <div className="erp-qty-rate-pair">
                     <Input
-                      placeholder="Deliverable description / service"
-                      value={item.description}
-                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                      type="number"
+                      min={1}
+                      placeholder="Qty"
+                      value={item.qty}
+                      onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
+                    />
+
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Rate"
+                      value={item.rate || ''}
+                      onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 md:contents">
-                    <div className="md:col-span-2">
-                      <Input
-                        type="number"
-                        min={1}
-                        placeholder="Qty"
-                        value={item.qty}
-                        onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
-                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        placeholder="Rate"
-                        value={item.rate || ''}
-                        onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
-                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-3 flex items-center justify-between md:justify-end gap-2">
-                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                  <div className="erp-item-footer">
+                    <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
                       ₹{item.amount.toLocaleString('en-IN')}
                     </div>
 
@@ -1171,50 +1145,36 @@ export function QuotationBuilderForm({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {addons.map((item, idx) => (
-                  <div
-                    key={item.id || idx}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-2.5"
-                    style={{
-                      borderRadius: '8px',
-                      backgroundColor: 'var(--color-surface-raised)',
-                      border: '0.5px solid var(--color-border)',
-                    }}
-                  >
-                    <div className="md:col-span-5">
+                  <div key={item.id || idx} className="erp-quote-item-row">
+                    <Input
+                      placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
+                      value={item.description}
+                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                    />
+
+                    <div className="erp-qty-rate-pair">
                       <Input
-                        placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
-                        value={item.description}
-                        onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
-                        style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                        type="number"
+                        min={1}
+                        placeholder="Qty"
+                        value={item.qty}
+                        onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
+                      />
+
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Rate"
+                        value={item.rate || ''}
+                        onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 md:contents">
-                      <div className="md:col-span-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          placeholder="Qty"
-                          value={item.qty}
-                          onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
-                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="Rate"
-                          value={item.rate || ''}
-                          onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
-                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-3 flex items-center justify-between md:justify-end gap-2">
-                      <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    <div className="erp-item-footer">
+                      <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
                         ₹{item.amount.toLocaleString('en-IN')}
                       </div>
 
@@ -1337,8 +1297,8 @@ export function QuotationBuilderForm({
         <div
           className={
             mobileTab === 'edit'
-              ? 'hidden lg:flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
-              : 'flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
+              ? 'erp-builder-preview-pane erp-pane-hidden-mobile'
+              : 'erp-builder-preview-pane'
           }
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

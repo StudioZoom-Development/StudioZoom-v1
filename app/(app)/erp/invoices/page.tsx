@@ -185,7 +185,7 @@ export default function InvoicesPage() {
       }}
     >
       {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="erp-header-row">
         <div>
           <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
             Invoices & Tax Billing
@@ -197,7 +197,7 @@ export default function InvoicesPage() {
 
         <Button
           onClick={() => router.push('/erp/invoices/new')}
-          className="w-full sm:w-auto justify-center"
+          className="erp-header-cta"
           style={{
             backgroundColor: 'var(--color-primary)',
             color: '#ffffff',
@@ -214,7 +214,7 @@ export default function InvoicesPage() {
       </div>
 
       {/* KPI CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div className="erp-kpi-grid">
         <div style={KPI_CARD_STYLE}>
           <span style={KPI_LABEL_STYLE}>TOTAL INVOICES</span>
           <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
@@ -287,7 +287,7 @@ export default function InvoicesPage() {
           })}
         </div>
 
-        <div className="w-full sm:w-[260px]">
+        <div className="erp-search-box">
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -670,15 +670,15 @@ export default function InvoicesPage() {
               </div>
             </div>
 
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setPaymentTarget(null)} className="w-full sm:w-auto">
+            <div className="erp-modal-footer">
+              <Button type="button" variant="ghost" onClick={() => setPaymentTarget(null)} className="erp-modal-btn">
                 Cancel
               </Button>
               <Button
                 type="button"
                 onClick={handleSubmitPayment}
                 disabled={isRecordingPay}
-                className="w-full sm:w-auto"
+                className="erp-modal-btn"
                 style={{ backgroundColor: 'var(--color-primary)', color: '#ffffff', fontWeight: 600 }}
               >
                 {isRecordingPay ? 'Saving...' : 'Record Payment'}

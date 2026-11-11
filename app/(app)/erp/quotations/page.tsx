@@ -87,9 +87,7 @@ export default function QuotationsPage() {
       {/* CONTENT WRAPPER (RESPONSIVE: MOBILE CARDS < 768px + DESKTOP TABLE >= 768px) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* HEADER SECTION */}
-        <div
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-        >
+        <div className="erp-header-row">
           <div>
             <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
               Quotations & Estimations
@@ -101,7 +99,7 @@ export default function QuotationsPage() {
 
           <Button
             onClick={() => router.push('/erp/quotations/new')}
-            className="w-full sm:w-auto justify-center"
+            className="erp-header-cta"
             style={{
               backgroundColor: 'var(--color-primary)',
               color: '#ffffff',
@@ -118,7 +116,7 @@ export default function QuotationsPage() {
         </div>
 
         {/* KPI METRIC CARDS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="erp-kpi-grid">
           <div
             style={{
               backgroundColor: 'var(--color-surface)',
@@ -247,7 +245,7 @@ export default function QuotationsPage() {
             })}
           </div>
 
-          <div className="w-full sm:w-[260px]">
+          <div className="erp-search-box">
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

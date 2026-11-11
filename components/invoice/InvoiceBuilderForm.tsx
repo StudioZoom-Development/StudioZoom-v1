@@ -775,12 +775,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
       )}
 
       {/* TOP BAR */}
-      <div
-        className="flex flex-col md:flex-row md:items-center md:justify-between gap-3.5 pb-4"
-        style={{
-          borderBottom: '0.5px solid var(--color-border)',
-        }}
-      >
+      <div className="erp-builder-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             type="button"
@@ -843,7 +838,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full md:w-auto">
+        <div className="erp-builder-actions">
           <Button
             type="button"
             variant="ghost"
@@ -894,14 +889,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
       </div>
 
       {/* MOBILE / TABLET MODE SWITCHER (< 1024px) */}
-      <div
-        className="flex lg:hidden p-1 gap-1"
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '10px',
-        }}
-      >
+      <div className="erp-mobile-switcher">
         <button
           type="button"
           onClick={() => setMobileTab('edit')}
@@ -951,13 +939,13 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
       </div>
 
       {/* MAIN SPLIT WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="erp-builder-split">
         {/* LEFT PANE: FORM */}
         <div
           className={
             mobileTab === 'preview'
-              ? 'hidden lg:flex lg:col-span-7 min-w-0 flex-col gap-5'
-              : 'flex lg:col-span-7 min-w-0 flex-col gap-5'
+              ? 'erp-builder-form-pane erp-pane-hidden-mobile'
+              : 'erp-builder-form-pane'
           }
         >
           {/* 1. PROJECT / CLIENT LINK & STUDIO ENTITY */}
@@ -969,7 +957,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <label style={LABEL_STYLE}>Select Project / Client Booking</label>
                 <select
@@ -1051,7 +1039,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
             </div>
 
             {/* Event Details (replaces Ship To) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5" style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '14px' }}>
+            <div className="erp-grid-3" style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '14px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <label style={LABEL_STYLE}>Event Name</label>
                 <Input
@@ -1086,7 +1074,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <label style={LABEL_STYLE}>Client Name *</label>
                 <Input
@@ -1205,8 +1193,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                     gap: '8px',
                   }}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
-                    <div className="md:col-span-5">
+                  <div className="erp-inv-item-main">
+                    <div className="erp-inv-col-5">
                       <Input
                         value={item.description}
                         onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)}
@@ -1215,7 +1203,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                       />
                     </div>
                     {gstEnabled && (
-                      <div className="md:col-span-2">
+                      <div className="erp-inv-col-2">
                         <Input
                           value={item.sacCode || ''}
                           onChange={(e) => handleUpdateItem(item.id, 'sacCode', e.target.value)}
@@ -1224,8 +1212,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                         />
                       </div>
                     )}
-                    <div className="grid grid-cols-2 gap-2.5 md:contents">
-                      <div className={gstEnabled ? 'md:col-span-1' : 'md:col-span-2'}>
+                    <div className="erp-qty-rate-pair">
+                      <div className={gstEnabled ? 'erp-inv-col-1' : 'erp-inv-col-2'}>
                         <Input
                           type="number"
                           min={1}
@@ -1235,7 +1223,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                           className="h-9"
                         />
                       </div>
-                      <div className="md:col-span-2">
+                      <div className="erp-inv-col-2">
                         <Input
                           type="number"
                           min={0}
@@ -1246,7 +1234,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                         />
                       </div>
                     </div>
-                    <div className="md:col-span-2 flex items-center justify-between md:justify-end gap-1.5">
+                    <div className="erp-inv-col-2 erp-inv-item-actions">
                       <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
                         ₹{Math.round(item.amount).toLocaleString('en-IN')}
                       </span>
@@ -1286,8 +1274,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                   </div>
 
                   {/* Optional 2nd line description & per-line discount */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-                    <div className={discountType === 'perLine' ? 'md:col-span-9' : 'md:col-span-12'}>
+                  <div className="erp-inv-item-sub">
+                    <div className={discountType === 'perLine' ? 'erp-inv-col-9' : 'erp-inv-col-12'}>
                       <Input
                         value={item.subDescription || ''}
                         onChange={(e) => handleUpdateItem(item.id, 'subDescription', e.target.value)}
@@ -1296,7 +1284,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                       />
                     </div>
                     {discountType === 'perLine' && (
-                      <div className="md:col-span-3">
+                      <div className="erp-inv-col-3">
                         <Input
                           type="number"
                           min={0}
@@ -1326,7 +1314,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="erp-grid-2">
               {/* Discount Box */}
               <div style={SUB_BOX_STYLE}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1508,7 +1496,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                   gap: '10px',
                 }}
               >
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+                <div className="erp-grid-4">
                   <div>
                     <label style={LABEL_STYLE}>Amount (₹)</label>
                     <Input
@@ -1632,7 +1620,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <label style={LABEL_STYLE}>Terms & Conditions</label>
                 <textarea
@@ -1659,8 +1647,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
         <div
           className={
             mobileTab === 'edit'
-              ? 'hidden lg:flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
-              : 'flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
+              ? 'erp-builder-preview-pane erp-pane-hidden-mobile'
+              : 'erp-builder-preview-pane'
           }
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
