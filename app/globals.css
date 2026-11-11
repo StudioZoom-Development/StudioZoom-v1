@@ -250,6 +250,9 @@
 }
 
 /* Quotation deliverable / addon row */
+.erp-quote-item-headers {
+  display: none;
+}
 .erp-quote-item-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -271,10 +274,22 @@
   gap: 8px;
 }
 @media (min-width: 768px) {
+  .erp-quote-item-headers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px 108px 112px 32px;
+    gap: 10px;
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-foreground-subtle);
+  }
   .erp-quote-item-row {
-    grid-template-columns: minmax(0, 1fr) 64px 100px 90px 30px;
+    grid-template-columns: minmax(0, 1fr) 68px 108px 112px 32px;
     align-items: center;
-    padding: 8px;
+    gap: 10px;
+    padding: 10px;
   }
   .erp-qty-rate-pair {
     display: contents;
@@ -285,6 +300,9 @@
 }
 
 /* Invoice line item rows */
+.erp-inv-item-headers {
+  display: none;
+}
 .erp-inv-item-main,
 .erp-inv-item-sub {
   display: grid;
@@ -295,12 +313,43 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 10px;
+  padding-top: 2px;
+}
+.erp-mobile-field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-foreground-subtle);
+  margin-bottom: 4px;
 }
 @media (min-width: 768px) {
+  .erp-mobile-field-label {
+    display: none;
+  }
+  .erp-inv-item-headers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px 108px 176px;
+    gap: 10px;
+    padding: 0 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-foreground-subtle);
+  }
+  .erp-inv-item-headers.erp-inv-item-main-gst {
+    grid-template-columns: minmax(0, 1fr) 92px 62px 102px 168px;
+  }
   .erp-inv-item-main {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) 68px 108px 176px;
     align-items: center;
+    gap: 10px;
+  }
+  .erp-inv-item-main.erp-inv-item-main-gst {
+    grid-template-columns: minmax(0, 1fr) 92px 62px 102px 168px;
   }
   .erp-inv-item-sub {
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -313,6 +362,7 @@
   .erp-inv-col-12 { grid-column: span 12 / span 12; }
   .erp-inv-item-actions {
     justify-content: flex-end;
+    padding-top: 0;
   }
 }
 

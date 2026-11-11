@@ -844,7 +844,12 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
             variant="ghost"
             onClick={handleOpenPreviewTab}
             disabled={isPrinting}
-            style={{ border: '0.5px solid var(--color-border)', fontSize: 'var(--text-xs)' }}
+            style={{
+              backgroundColor: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border-strong)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-xs)',
+            }}
           >
             <i className="ti ti-eye" style={{ marginRight: '6px' }} /> Preview
           </Button>
@@ -853,7 +858,12 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
             variant="ghost"
             onClick={handlePrintPdf}
             disabled={isPrinting}
-            style={{ border: '0.5px solid var(--color-border)', fontSize: 'var(--text-xs)' }}
+            style={{
+              backgroundColor: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border-strong)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-xs)',
+            }}
           >
             <i className="ti ti-printer" style={{ marginRight: '6px' }} /> Print / PDF
           </Button>
@@ -864,7 +874,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
             disabled={isSaving}
             style={{
               backgroundColor: 'var(--color-surface-raised)',
-              border: '0.5px solid var(--color-border)',
+              border: '0.5px solid var(--color-border-strong)',
               color: 'var(--color-foreground)',
               fontSize: 'var(--text-xs)',
             }}
@@ -1146,7 +1156,15 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                 variant="ghost"
                 size="sm"
                 onClick={handleAddItem}
-                style={{ fontSize: 'var(--text-xs)', color: 'var(--color-primary)', height: '28px', padding: '0 10px' }}
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  backgroundColor: 'var(--color-primary-muted)',
+                  border: '0.5px solid var(--color-primary)',
+                  color: 'var(--color-primary)',
+                  fontWeight: 600,
+                  height: '28px',
+                  padding: '0 10px',
+                }}
               >
                 <i className="ti ti-plus" style={{ marginRight: '4px' }} /> Add Row
               </Button>
@@ -1165,7 +1183,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                     style={{
                       padding: '4px 10px',
                       borderRadius: '6px',
-                      border: '0.5px solid var(--color-border)',
+                      border: '0.5px solid var(--color-border-strong)',
                       backgroundColor: 'var(--color-surface-raised)',
                       color: 'var(--color-foreground)',
                       fontSize: 'var(--text-xs)',
@@ -1178,6 +1196,14 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                 ))}
               </div>
             )}
+
+            <div className={`erp-inv-item-headers${gstEnabled ? ' erp-inv-item-main-gst' : ''}`}>
+              <span>Item / Service</span>
+              {gstEnabled && <span>SAC Code</span>}
+              <span style={{ textAlign: 'center' }}>Qty</span>
+              <span style={{ textAlign: 'right' }}>Rate (₹)</span>
+              <span style={{ textAlign: 'right' }}>Amount & Actions</span>
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {lineItems.map((item, idx) => (
@@ -1193,8 +1219,9 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                     gap: '8px',
                   }}
                 >
-                  <div className="erp-inv-item-main">
-                    <div className="erp-inv-col-5">
+                  <div className={`erp-inv-item-main${gstEnabled ? ' erp-inv-item-main-gst' : ''}`}>
+                    <div>
+                      <label className="erp-mobile-field-label">Item / Service</label>
                       <Input
                         value={item.description}
                         onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)}
@@ -1203,7 +1230,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                       />
                     </div>
                     {gstEnabled && (
-                      <div className="erp-inv-col-2">
+                      <div>
+                        <label className="erp-mobile-field-label">SAC Code</label>
                         <Input
                           value={item.sacCode || ''}
                           onChange={(e) => handleUpdateItem(item.id, 'sacCode', e.target.value)}
@@ -1213,7 +1241,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                       </div>
                     )}
                     <div className="erp-qty-rate-pair">
-                      <div className={gstEnabled ? 'erp-inv-col-1' : 'erp-inv-col-2'}>
+                      <div>
+                        <label className="erp-mobile-field-label">Qty</label>
                         <Input
                           type="number"
                           min={1}
@@ -1221,9 +1250,11 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                           onChange={(e) => handleUpdateItem(item.id, 'qty', Number(e.target.value) || 0)}
                           placeholder="Qty"
                           className="h-9"
+                          style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </div>
-                      <div className="erp-inv-col-2">
+                      <div>
+                        <label className="erp-mobile-field-label">Rate (₹)</label>
                         <Input
                           type="number"
                           min={0}
@@ -1231,11 +1262,20 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                           onChange={(e) => handleUpdateItem(item.id, 'rate', Number(e.target.value) || 0)}
                           placeholder="Rate ₹"
                           className="h-9"
+                          style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </div>
                     </div>
-                    <div className="erp-inv-col-2 erp-inv-item-actions">
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                    <div className="erp-inv-item-actions">
+                      <span
+                        style={{
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 700,
+                          color: 'var(--color-foreground)',
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         ₹{Math.round(item.amount).toLocaleString('en-IN')}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -1440,14 +1480,22 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
           <div style={CARD_STYLE}>
             <div style={CARD_HEADER_STYLE}>
               <span>5. Advance Payments ({payments.length}/3)</span>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 {selectedClientId && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={syncPaymentsFromSelectedClient}
-                    style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', height: '28px', padding: '0 8px' }}
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      backgroundColor: 'var(--color-accent-muted)',
+                      border: '0.5px solid var(--color-accent)',
+                      color: 'var(--color-accent)',
+                      fontWeight: 600,
+                      height: '28px',
+                      padding: '0 10px',
+                    }}
                   >
                     <i className="ti ti-refresh" style={{ marginRight: '4px' }} /> Sync from Booking
                   </Button>
@@ -1462,7 +1510,15 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                       setNewPayAmount(computed.balanceDue > 0 ? String(computed.balanceDue) : '')
                       setShowAddPaymentRow((prev) => !prev)
                     }}
-                    style={{ fontSize: 'var(--text-xs)', color: 'var(--color-primary)', height: '28px', padding: '0 10px' }}
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      backgroundColor: 'var(--color-primary-muted)',
+                      border: '0.5px solid var(--color-primary)',
+                      color: 'var(--color-primary)',
+                      fontWeight: 600,
+                      height: '28px',
+                      padding: '0 10px',
+                    }}
                   >
                     <i className="ti ti-plus" style={{ marginRight: '4px' }} /> Add Payment
                   </Button>
@@ -1535,7 +1591,16 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddPaymentRow(false)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAddPaymentRow(false)}
+                    style={{
+                      border: '0.5px solid var(--color-border-strong)',
+                      color: 'var(--color-foreground)',
+                    }}
+                  >
                     Cancel
                   </Button>
                   <Button
@@ -1599,7 +1664,18 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                     </button>
                   </div>
                 ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)', paddingTop: '4px', fontWeight: 600 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    fontSize: 'var(--text-sm)',
+                    paddingTop: '4px',
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
                   <span>Advance Received: ₹{computed.amountPaid.toLocaleString('en-IN')}</span>
                   <span style={{ color: computed.balanceDue <= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                     {computed.balanceDue <= 0
@@ -1660,7 +1736,14 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
               variant="ghost"
               size="sm"
               onClick={handleOpenPreviewTab}
-              style={{ fontSize: 'var(--text-xs)', height: '28px', padding: '0 8px' }}
+              style={{
+                fontSize: 'var(--text-xs)',
+                height: '28px',
+                padding: '0 10px',
+                backgroundColor: 'var(--color-surface-raised)',
+                border: '0.5px solid var(--color-border-strong)',
+                color: 'var(--color-foreground)',
+              }}
             >
               <i className="ti ti-external-link" style={{ marginRight: '4px' }} /> Full Page
             </Button>
@@ -1714,6 +1797,8 @@ const CARD_HEADER_STYLE: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
+  flexWrap: 'wrap',
+  gap: '8px',
   fontSize: 'var(--text-sm)',
   fontWeight: 700,
   color: 'var(--color-foreground)',
@@ -1763,9 +1848,11 @@ const SUB_BOX_STYLE: React.CSSProperties = {
 
 const TOTAL_ROW_STYLE: React.CSSProperties = {
   display: 'flex',
+  alignItems: 'center',
   justifyContent: 'space-between',
   fontSize: 'var(--text-xs)',
   color: 'var(--color-foreground-muted)',
+  fontVariantNumeric: 'tabular-nums',
 }
 
 function ICON_BTN_STYLE(disabled: boolean): React.CSSProperties {

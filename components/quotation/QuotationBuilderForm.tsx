@@ -590,22 +590,40 @@ export function QuotationBuilderForm({
         {/* TOP ACTIONS */}
         <div className="erp-builder-actions">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handlePreviewPdf}
             disabled={isGeneratingPdf}
-            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            style={{
+              backgroundColor: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border-strong)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-xs)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
           >
             <i className="ti ti-eye" />
             <span>Preview PDF</span>
           </Button>
 
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleDownloadPdf}
             disabled={isGeneratingPdf}
-            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            style={{
+              backgroundColor: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border-strong)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-xs)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
           >
             <i className="ti ti-download" />
             <span>Download PDF</span>
@@ -1012,9 +1030,11 @@ export function QuotationBuilderForm({
                 type="button"
                 onClick={handleAddLineItem}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--color-accent)',
+                  backgroundColor: 'var(--color-primary-muted)',
+                  border: '0.5px solid var(--color-primary)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  color: 'var(--color-primary)',
                   cursor: 'pointer',
                   fontWeight: 600,
                   fontSize: 'var(--text-xs)',
@@ -1028,38 +1048,64 @@ export function QuotationBuilderForm({
               </button>
             </div>
 
+            <div className="erp-quote-item-headers">
+              <span>Description</span>
+              <span style={{ textAlign: 'center' }}>Qty</span>
+              <span style={{ textAlign: 'right' }}>Rate (₹)</span>
+              <span style={{ textAlign: 'right' }}>Amount</span>
+              <span />
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {lineItems.map((item, idx) => (
                 <div key={item.id || idx} className="erp-quote-item-row">
-                  <Input
-                    placeholder="Deliverable description / service"
-                    value={item.description}
-                    onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)' }}
-                  />
-
-                  <div className="erp-qty-rate-pair">
+                  <div>
+                    <label className="erp-mobile-field-label">Description</label>
                     <Input
-                      type="number"
-                      min={1}
-                      placeholder="Qty"
-                      value={item.qty}
-                      onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                    />
-
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Rate"
-                      value={item.rate || ''}
-                      onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
+                      placeholder="Deliverable description / service"
+                      value={item.description}
+                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
                     />
                   </div>
 
+                  <div className="erp-qty-rate-pair">
+                    <div>
+                      <label className="erp-mobile-field-label">Qty</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="Qty"
+                        value={item.qty}
+                        onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="erp-mobile-field-label">Rate (₹)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Rate"
+                        value={item.rate || ''}
+                        onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                      />
+                    </div>
+                  </div>
+
                   <div className="erp-item-footer">
-                    <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                    <div
+                      style={{
+                        textAlign: 'right',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground)',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       ₹{item.amount.toLocaleString('en-IN')}
                     </div>
 
@@ -1113,8 +1159,10 @@ export function QuotationBuilderForm({
                 type="button"
                 onClick={handleAddAddon}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
+                  backgroundColor: 'var(--color-accent-muted)',
+                  border: '0.5px solid var(--color-accent)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
                   color: 'var(--color-accent)',
                   cursor: 'pointer',
                   fontWeight: 600,
@@ -1144,37 +1192,63 @@ export function QuotationBuilderForm({
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="erp-quote-item-headers">
+                  <span>Description</span>
+                  <span style={{ textAlign: 'center' }}>Qty</span>
+                  <span style={{ textAlign: 'right' }}>Rate (₹)</span>
+                  <span style={{ textAlign: 'right' }}>Amount</span>
+                  <span />
+                </div>
+
                 {addons.map((item, idx) => (
                   <div key={item.id || idx} className="erp-quote-item-row">
-                    <Input
-                      placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
-                      value={item.description}
-                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
-                    />
-
-                    <div className="erp-qty-rate-pair">
+                    <div>
+                      <label className="erp-mobile-field-label">Description</label>
                       <Input
-                        type="number"
-                        min={1}
-                        placeholder="Qty"
-                        value={item.qty}
-                        onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
-                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                      />
-
-                      <Input
-                        type="number"
-                        min={0}
-                        placeholder="Rate"
-                        value={item.rate || ''}
-                        onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
-                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
+                        placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
+                        value={item.description}
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)' }}
                       />
                     </div>
 
+                    <div className="erp-qty-rate-pair">
+                      <div>
+                        <label className="erp-mobile-field-label">Qty</label>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="Qty"
+                          value={item.qty}
+                          onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
+                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="erp-mobile-field-label">Rate (₹)</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Rate"
+                          value={item.rate || ''}
+                          onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
+                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                        />
+                      </div>
+                    </div>
+
                     <div className="erp-item-footer">
-                      <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                      <div
+                        style={{
+                          textAlign: 'right',
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         ₹{item.amount.toLocaleString('en-IN')}
                       </div>
 
@@ -1311,7 +1385,14 @@ export function QuotationBuilderForm({
                 size="sm"
                 onClick={handlePreviewPdf}
                 disabled={isGeneratingPdf}
-                style={{ fontSize: 'var(--text-xs)', height: '28px', padding: '0 8px' }}
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  height: '28px',
+                  padding: '0 10px',
+                  backgroundColor: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border-strong)',
+                  color: 'var(--color-foreground)',
+                }}
               >
                 <i className="ti ti-external-link" style={{ marginRight: '4px' }} /> Full PDF
               </Button>

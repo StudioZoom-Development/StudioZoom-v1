@@ -8,6 +8,34 @@ export interface ButtonProps
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className = '', variant = 'default', size = 'default', style, children, ...props }, ref) => {
+    const variantStyles: Record<NonNullable<ButtonProps['variant']>, React.CSSProperties> = {
+      default: {
+        background: 'var(--color-primary)',
+        color: '#ffffff',
+        border: 'none',
+      },
+      outline: {
+        background: 'transparent',
+        color: 'var(--color-foreground)',
+        border: '0.5px solid var(--color-border-strong)',
+      },
+      ghost: {
+        background: 'transparent',
+        color: 'var(--color-foreground)',
+        border: 'none',
+      },
+      secondary: {
+        background: 'var(--color-surface-raised)',
+        color: 'var(--color-foreground)',
+        border: '0.5px solid var(--color-border)',
+      },
+      danger: {
+        background: 'var(--color-danger-muted)',
+        color: 'var(--color-danger)',
+        border: '0.5px solid var(--color-danger)',
+      },
+    }
+
     return (
       <button
         ref={ref}
@@ -15,12 +43,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         style={{
           fontFamily: 'var(--font-inter)',
           cursor: 'pointer',
-          background: variant === 'outline' ? 'transparent' : 'var(--color-primary)',
-          color: variant === 'outline' ? 'var(--color-foreground)' : '#ffffff',
-          border: variant === 'outline' ? '0.5px solid var(--color-border)' : 'none',
           padding: '0 16px',
           height: size === 'sm' ? '32px' : '36px',
           borderRadius: '8px',
+          ...variantStyles[variant],
           ...style,
         }}
         {...props}
