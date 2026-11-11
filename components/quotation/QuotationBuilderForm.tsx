@@ -136,6 +136,7 @@ export function QuotationBuilderForm({
   // UI state
   const [isSaving, setIsSaving] = useState(false)
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // Live HTML Preview & Capacity Guard
@@ -152,14 +153,14 @@ export function QuotationBuilderForm({
     const updateScale = () => {
       const width = el.getBoundingClientRect().width
       if (width > 0) {
-        setPreviewScale(width / 794)
+        setPreviewScale(Math.min(1, width / 794))
       }
     }
     updateScale()
     const observer = new ResizeObserver(updateScale)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [mobileTab])
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMsg({ text, type })
@@ -542,18 +543,8 @@ export function QuotationBuilderForm({
       )}
 
       {/* HEADER BAR */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '14px',
-          paddingBottom: '16px',
-          borderBottom: '0.5px solid var(--color-border)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="erp-builder-topbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             onClick={() => router.push('/erp/quotations')}
             style={{
@@ -565,13 +556,14 @@ export function QuotationBuilderForm({
               padding: '6px',
               display: 'flex',
               alignItems: 'center',
+              flexShrink: 0,
             }}
             title="Back to quotations"
           >
             <i className="ti ti-arrow-left" />
           </button>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
                 {isEditMode ? `Edit Quotation ${quotationNumber}` : 'New Quotation Builder'}
               </h1>
@@ -596,24 +588,42 @@ export function QuotationBuilderForm({
         </div>
 
         {/* TOP ACTIONS */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="erp-builder-actions">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handlePreviewPdf}
             disabled={isGeneratingPdf}
-            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{
+              backgroundColor: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border-strong)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-xs)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
           >
             <i className="ti ti-eye" />
             <span>Preview PDF</span>
           </Button>
 
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleDownloadPdf}
             disabled={isGeneratingPdf}
-            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{
+              backgroundColor: 'var(--color-surface-raised)',
+              border: '0.5px solid var(--color-border-strong)',
+              color: 'var(--color-foreground)',
+              fontSize: 'var(--text-xs)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
           >
             <i className="ti ti-download" />
             <span>Download PDF</span>
@@ -623,6 +633,7 @@ export function QuotationBuilderForm({
             size="sm"
             onClick={() => handleSave('sent')}
             disabled={isSaving}
+            className="erp-builder-primary-btn"
             style={{
               backgroundColor: 'var(--color-primary)',
               color: '#ffffff',
@@ -630,6 +641,7 @@ export function QuotationBuilderForm({
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
             }}
           >
@@ -639,52 +651,66 @@ export function QuotationBuilderForm({
         </div>
       </div>
 
-      {/* MOBILE SCREEN NOTICE (< 768px): DESKTOP ONLY */}
-      <div
-        className="flex md:hidden flex-col items-center justify-center text-center p-8"
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          minHeight: '320px',
-          gap: '14px',
-        }}
-      >
-        <div
+      {/* MOBILE / TABLET MODE SWITCHER (< 1024px) */}
+      <div className="erp-mobile-switcher">
+        <button
+          type="button"
+          onClick={() => setMobileTab('edit')}
           style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--color-primary-muted)',
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            fontFamily: 'var(--font-inter)',
+            backgroundColor: mobileTab === 'edit' ? 'var(--color-primary)' : 'transparent',
+            color: mobileTab === 'edit' ? '#ffffff' : 'var(--color-foreground-muted)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--color-primary)',
-            fontSize: '26px',
+            gap: '6px',
           }}
         >
-          <i className="ti ti-device-desktop" />
-        </div>
-        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
-          Desktop View Only
-        </h2>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0, maxWidth: '320px', lineHeight: 1.5 }}>
-          Quotation editing and real-time A4 preview are optimized exclusively for desktop screens. Please open this page on a desktop or laptop display.
-        </p>
+          <i className="ti ti-edit" />
+          <span>Edit Quotation</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            fontFamily: 'var(--font-inter)',
+            backgroundColor: mobileTab === 'preview' ? 'var(--color-primary)' : 'transparent',
+            color: mobileTab === 'preview' ? '#ffffff' : 'var(--color-foreground-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+          }}
+        >
+          <i className="ti ti-file-text" />
+          <span>Live A4 Preview</span>
+        </button>
       </div>
 
-      {/* MAIN TWO-COLUMN SPLIT (DESKTOP >= 768px) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 58fr) minmax(0, 42fr)',
-          gap: '24px',
-          alignItems: 'start',
-        }}
-        className="hidden md:grid"
-      >
+      {/* MAIN TWO-COLUMN SPLIT (SINGLE VIEW SWITCHER < 1024px, SIDE-BY-SIDE 58/42 >= 1024px) */}
+      <div className="erp-builder-split erp-builder-split-quotation">
         {/* LEFT COLUMN: BUILDER CONTROLS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div
+          className={
+            mobileTab === 'preview'
+              ? 'erp-builder-form-pane erp-pane-hidden-mobile'
+              : 'erp-builder-form-pane'
+          }
+        >
           {/* 1. TEMPLATE STATIONERY SELECTOR */}
           <div
             style={{
@@ -706,13 +732,7 @@ export function QuotationBuilderForm({
               </span>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '12px',
-              }}
-            >
+            <div className="erp-grid-3">
               {TEMPLATE_OPTIONS.map((tmpl) => {
                 const isSelected = normalizeTemplateKey(tmpl.id) === normalizeTemplateKey(templateId)
                 return (
@@ -832,6 +852,8 @@ export function QuotationBuilderForm({
                   defaultValue=""
                   style={{
                     height: '36px',
+                    width: '100%',
+                    maxWidth: '100%',
                     borderRadius: '8px',
                     backgroundColor: 'var(--color-surface-raised)',
                     border: '0.5px solid var(--color-border)',
@@ -853,7 +875,7 @@ export function QuotationBuilderForm({
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Client Name *
@@ -879,7 +901,7 @@ export function QuotationBuilderForm({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Event Type
@@ -891,6 +913,7 @@ export function QuotationBuilderForm({
                   placeholder="e.g. Wedding & Reception"
                   style={{
                     height: '36px',
+                    width: '100%',
                     borderRadius: '8px',
                     backgroundColor: 'var(--color-surface-raised)',
                     border: '0.5px solid var(--color-border)',
@@ -920,7 +943,7 @@ export function QuotationBuilderForm({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="erp-grid-2">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Event Date
@@ -1007,9 +1030,11 @@ export function QuotationBuilderForm({
                 type="button"
                 onClick={handleAddLineItem}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--color-accent)',
+                  backgroundColor: 'var(--color-primary-muted)',
+                  border: '0.5px solid var(--color-primary)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  color: 'var(--color-primary)',
                   cursor: 'pointer',
                   fontWeight: 600,
                   fontSize: 'var(--text-xs)',
@@ -1023,69 +1048,87 @@ export function QuotationBuilderForm({
               </button>
             </div>
 
+            <div className="erp-quote-item-headers">
+              <span>Description</span>
+              <span style={{ textAlign: 'center' }}>Qty</span>
+              <span style={{ textAlign: 'right' }}>Rate (₹)</span>
+              <span style={{ textAlign: 'right' }}>Amount</span>
+              <span />
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {lineItems.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) 60px 100px 90px 30px',
-                    gap: '8px',
-                    alignItems: 'center',
-                    padding: '8px',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--color-surface-raised)',
-                    border: '0.5px solid var(--color-border)',
-                  }}
-                >
-                  <Input
-                    placeholder="Deliverable description / service"
-                    value={item.description}
-                    onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)' }}
-                  />
-
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Qty"
-                    value={item.qty}
-                    onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                  />
-
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="Rate"
-                    value={item.rate || ''}
-                    onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
-                  />
-
-                  <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                    ₹{item.amount.toLocaleString('en-IN')}
+                <div key={item.id || idx} className="erp-quote-item-row">
+                  <div>
+                    <label className="erp-mobile-field-label">Description</label>
+                    <Input
+                      placeholder="Deliverable description / service"
+                      value={item.description}
+                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                    />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveLineItem(idx)}
-                    disabled={lineItems.length <= 1}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: lineItems.length > 1 ? 'var(--color-danger)' : 'var(--color-foreground-subtle)',
-                      cursor: lineItems.length > 1 ? 'pointer' : 'not-allowed',
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: 0,
-                    }}
-                    title="Remove item"
-                  >
-                    <i className="ti ti-trash" />
-                  </button>
+                  <div className="erp-qty-rate-pair">
+                    <div>
+                      <label className="erp-mobile-field-label">Qty</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="Qty"
+                        value={item.qty}
+                        onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="erp-mobile-field-label">Rate (₹)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Rate"
+                        value={item.rate || ''}
+                        onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="erp-item-footer">
+                    <div
+                      style={{
+                        textAlign: 'right',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 600,
+                        color: 'var(--color-foreground)',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ₹{item.amount.toLocaleString('en-IN')}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLineItem(idx)}
+                      disabled={lineItems.length <= 1}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: lineItems.length > 1 ? 'var(--color-danger)' : 'var(--color-foreground-subtle)',
+                        cursor: lineItems.length > 1 ? 'pointer' : 'not-allowed',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                      }}
+                      title="Remove item"
+                    >
+                      <i className="ti ti-trash" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1116,8 +1159,10 @@ export function QuotationBuilderForm({
                 type="button"
                 onClick={handleAddAddon}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
+                  backgroundColor: 'var(--color-accent-muted)',
+                  border: '0.5px solid var(--color-accent)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
                   color: 'var(--color-accent)',
                   cursor: 'pointer',
                   fontWeight: 600,
@@ -1147,67 +1192,85 @@ export function QuotationBuilderForm({
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="erp-quote-item-headers">
+                  <span>Description</span>
+                  <span style={{ textAlign: 'center' }}>Qty</span>
+                  <span style={{ textAlign: 'right' }}>Rate (₹)</span>
+                  <span style={{ textAlign: 'right' }}>Amount</span>
+                  <span />
+                </div>
+
                 {addons.map((item, idx) => (
-                  <div
-                    key={item.id || idx}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(0, 1fr) 60px 100px 90px 30px',
-                      gap: '8px',
-                      alignItems: 'center',
-                      padding: '8px',
-                      borderRadius: '8px',
-                      backgroundColor: 'var(--color-surface-raised)',
-                      border: '0.5px solid var(--color-border)',
-                    }}
-                  >
-                    <Input
-                      placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
-                      value={item.description}
-                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
-                    />
-
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="Qty"
-                      value={item.qty}
-                      onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                    />
-
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Rate"
-                      value={item.rate || ''}
-                      onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
-                    />
-
-                    <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                      ₹{item.amount.toLocaleString('en-IN')}
+                  <div key={item.id || idx} className="erp-quote-item-row">
+                    <div>
+                      <label className="erp-mobile-field-label">Description</label>
+                      <Input
+                        placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
+                        value={item.description}
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                      />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAddon(idx)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--color-danger)',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
-                      }}
-                      title="Remove add-on"
-                    >
-                      <i className="ti ti-trash" />
-                    </button>
+                    <div className="erp-qty-rate-pair">
+                      <div>
+                        <label className="erp-mobile-field-label">Qty</label>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="Qty"
+                          value={item.qty}
+                          onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
+                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="erp-mobile-field-label">Rate (₹)</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Rate"
+                          value={item.rate || ''}
+                          onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
+                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="erp-item-footer">
+                      <div
+                        style={{
+                          textAlign: 'right',
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                          color: 'var(--color-foreground)',
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ₹{item.amount.toLocaleString('en-IN')}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAddon(idx)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-danger)',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '4px',
+                        }}
+                        title="Remove add-on"
+                      >
+                        <i className="ti ti-trash" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1251,10 +1314,8 @@ export function QuotationBuilderForm({
 
             {/* GST SWITCH TOGGLE */}
             <div
+              className="flex flex-wrap justify-between items-center gap-2"
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
                 fontSize: 'var(--text-sm)',
                 backgroundColor: 'var(--color-surface-raised)',
                 padding: '8px 12px',
@@ -1306,16 +1367,13 @@ export function QuotationBuilderForm({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: STICKY LIVE A4 PREVIEW (DESKTOP) */}
+        {/* RIGHT COLUMN: STICKY LIVE A4 PREVIEW */}
         <div
-          style={{
-            position: 'sticky',
-            top: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-          }}
-          className="flex"
+          className={
+            mobileTab === 'edit'
+              ? 'erp-builder-preview-pane erp-pane-hidden-mobile'
+              : 'erp-builder-preview-pane'
+          }
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
@@ -1327,7 +1385,14 @@ export function QuotationBuilderForm({
                 size="sm"
                 onClick={handlePreviewPdf}
                 disabled={isGeneratingPdf}
-                style={{ fontSize: 'var(--text-xs)', height: '28px', padding: '0 8px' }}
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  height: '28px',
+                  padding: '0 10px',
+                  backgroundColor: 'var(--color-surface-raised)',
+                  border: '0.5px solid var(--color-border-strong)',
+                  color: 'var(--color-foreground)',
+                }}
               >
                 <i className="ti ti-external-link" style={{ marginRight: '4px' }} /> Full PDF
               </Button>

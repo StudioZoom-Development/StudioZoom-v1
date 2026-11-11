@@ -77,61 +77,17 @@ export default function QuotationsPage() {
   return (
     <div
       style={{
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '24px 16px',
+        width: '100%',
         fontFamily: 'var(--font-inter)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px',
+        gap: '20px',
       }}
     >
-      {/* MOBILE SCREEN FALLBACK (< 768px) - DESKTOP ONLY */}
-      <div
-        className="flex md:hidden flex-col items-center justify-center text-center p-8"
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          minHeight: '320px',
-          gap: '14px',
-        }}
-      >
-        <div
-          style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--color-primary-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--color-primary)',
-            fontSize: '26px',
-          }}
-        >
-          <i className="ti ti-device-desktop" />
-        </div>
-        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
-          Desktop View Only
-        </h2>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0, maxWidth: '320px', lineHeight: 1.5 }}>
-          Quotation management, layout preview, and A4 print generation are designed exclusively for desktop screens. Please open this page on a desktop display.
-        </p>
-      </div>
-
-      {/* DESKTOP CONTENT (>= 768px) */}
-      <div className="hidden md:flex flex-col gap-6">
+      {/* CONTENT WRAPPER (RESPONSIVE: MOBILE CARDS < 768px + DESKTOP TABLE >= 768px) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* HEADER SECTION */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px',
-          }}
-        >
+        <div className="erp-header-row">
           <div>
             <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
               Quotations & Estimations
@@ -143,6 +99,7 @@ export default function QuotationsPage() {
 
           <Button
             onClick={() => router.push('/erp/quotations/new')}
+            className="erp-header-cta"
             style={{
               backgroundColor: 'var(--color-primary)',
               color: '#ffffff',
@@ -159,13 +116,7 @@ export default function QuotationsPage() {
         </div>
 
         {/* KPI METRIC CARDS */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px',
-          }}
-        >
+        <div className="erp-kpi-grid">
           <div
             style={{
               backgroundColor: 'var(--color-surface)',
@@ -294,7 +245,7 @@ export default function QuotationsPage() {
             })}
           </div>
 
-          <div style={{ width: '260px' }}>
+          <div className="erp-search-box">
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -306,20 +257,37 @@ export default function QuotationsPage() {
 
         {/* DATA TABLE (DESKTOP) & COMPACT CARDS (MOBILE) */}
         {loading ? (
-          <div
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-            }}
-          >
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <tbody>
-                <TableRowSkeleton rows={5} cols={8} />
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div
+              className="hidden md:block"
+              style={{
+                backgroundColor: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '12px',
+                overflow: 'hidden',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  <TableRowSkeleton rows={5} cols={8} />
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-col gap-3 md:hidden">
+              {[1, 2, 3].map((idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    backgroundColor: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    height: '120px',
+                  }}
+                />
+              ))}
+            </div>
+          </>
         ) : quotations.length === 0 ? (
           <EmptyState
             icon="ti-file-invoice"
@@ -331,15 +299,18 @@ export default function QuotationsPage() {
             }}
           />
         ) : (
-          <div
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              border: '0.5px solid var(--color-border)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-            }}
-          >
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <>
+            {/* DESKTOP TABLE (>= 768px) */}
+            <div
+              className="hidden md:block"
+              style={{
+                backgroundColor: 'var(--color-surface)',
+                border: '0.5px solid var(--color-border)',
+                borderRadius: '12px',
+                overflow: 'hidden',
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
                   <th style={TH_STYLE}>Quote #</th>
@@ -481,7 +452,129 @@ export default function QuotationsPage() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+
+            {/* MOBILE COMPACT CARDS (< 768px) */}
+            <div className="flex flex-col gap-3 md:hidden">
+              {quotations.map((q) => (
+                <div
+                  key={q.quotationId}
+                  style={{
+                    backgroundColor: 'var(--color-surface)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-primary)' }}>
+                        {q.quotationNumber}
+                      </div>
+                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {q.clientName}
+                      </div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {q.eventType} {q.place ? `· ${q.place}` : ''}
+                      </div>
+                    </div>
+                    <Badge
+                      variant={
+                        q.status === 'accepted'
+                          ? 'paid'
+                          : q.status === 'converted'
+                            ? 'done'
+                            : q.status === 'sent'
+                              ? 'inProgress'
+                              : 'todo'
+                      }
+                      label={q.status.toUpperCase()}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '8px',
+                      backgroundColor: 'var(--color-surface-raised)',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <div>
+                      <div style={{ color: 'var(--color-foreground-subtle)' }}>Grand Total</div>
+                      <div style={{ fontWeight: 700, color: 'var(--color-foreground)' }}>
+                        {formatIndianCurrency(q.grandTotal)}
+                      </div>
+                      <div style={{ color: 'var(--color-foreground-muted)' }}>
+                        {q.gstEnabled ? 'Incl. 18% GST' : 'No GST'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: 'var(--color-foreground-subtle)' }}>Dates & Style</div>
+                      <div style={{ fontWeight: 600, color: 'var(--color-foreground)', textTransform: 'capitalize' }}>
+                        {q.templateId || 'production'}
+                      </div>
+                      <div style={{ color: 'var(--color-foreground-muted)' }}>
+                        Valid {format(q.validityDate, 'dd MMM yy')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push(`/erp/quotations/${q.quotationId}/edit`)}
+                      style={{
+                        height: '32px',
+                        padding: '0 12px',
+                        fontSize: 'var(--text-xs)',
+                        backgroundColor: 'var(--color-surface-raised)',
+                        border: '0.5px solid var(--color-border)',
+                        color: 'var(--color-foreground)',
+                        borderRadius: '6px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      <i className="ti ti-edit" style={{ fontSize: '14px' }} />
+                      <span>Edit</span>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeleteTarget(q)}
+                      style={{
+                        height: '32px',
+                        padding: '0 12px',
+                        fontSize: 'var(--text-xs)',
+                        backgroundColor: 'var(--color-danger-muted)',
+                        border: '0.5px solid var(--color-danger)',
+                        color: 'var(--color-danger)',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      <i className="ti ti-trash" style={{ fontSize: '14px', color: 'var(--color-danger)' }} />
+                      <span>Delete</span>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
