@@ -790,8 +790,8 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                       ? 'partial'
                       : computed.derivedStatus === 'overdue'
                         ? 'overdue'
-                        : computed.derivedStatus === 'sent'
-                          ? 'inProgress'
+                        : computed.derivedStatus === 'unpaid'
+                          ? 'unpaid'
                           : 'todo'
                 }
                 label={
@@ -852,7 +852,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
           </Button>
           <Button
             type="button"
-            onClick={() => handleSave('sent')}
+            onClick={() => handleSave('unpaid')}
             disabled={isSaving}
             style={{
               backgroundColor: 'var(--color-primary)',

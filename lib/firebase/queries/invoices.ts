@@ -185,10 +185,10 @@ export function computeInvoiceTotals(params: {
   } else if (amountPaid > 0 && balanceDue > 0) {
     derivedStatus = 'partiallyPaid'
   } else {
-    derivedStatus = currentStatus === 'paid' || currentStatus === 'partiallyPaid' ? 'sent' : currentStatus
+    derivedStatus = currentStatus === 'paid' || currentStatus === 'partiallyPaid' ? 'unpaid' : currentStatus
   }
 
-  // Surface overdue when sent/partial and past due date
+  // Surface overdue when unpaid/partial and past due date
   if (
     balanceDue > 0 &&
     derivedStatus !== 'draft' &&
@@ -278,7 +278,7 @@ function parseInvoiceDoc(id: string, data: Record<string, unknown>): Invoice {
     payments,
     amountPaid: Number(data.amountPaid || 0),
     balanceDue: Number(data.balanceDue || 0),
-    status: (data.status as InvoiceStatus) || 'draft',
+    status: (data.status === 'sent' ? 'unpaid' : (data.status as InvoiceStatus)) || 'draft',
     termsAndConditions: data.termsAndConditions ? String(data.termsAndConditions) : undefined,
     thankYouNote: data.thankYouNote ? String(data.thankYouNote) : undefined,
     isDeleted: Boolean(data.isDeleted),

@@ -631,7 +631,7 @@ export function QuotationBuilderForm({
 
           <Button
             size="sm"
-            onClick={() => handleSave('sent')}
+            onClick={() => handleSave()}
             disabled={isSaving}
             className="erp-builder-primary-btn"
             style={{
@@ -646,7 +646,7 @@ export function QuotationBuilderForm({
             }}
           >
             {isSaving ? <i className="ti ti-loader ti-spin" /> : <i className="ti ti-check" />}
-            <span>Save & Finalize</span>
+            <span>{isEditMode ? 'Update Quotation' : 'Save Quotation'}</span>
           </Button>
         </div>
       </div>
