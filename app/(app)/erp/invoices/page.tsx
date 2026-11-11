@@ -177,25 +177,15 @@ export default function InvoicesPage() {
   return (
     <div
       style={{
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '24px 16px',
+        width: '100%',
         fontFamily: 'var(--font-inter)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px',
+        gap: '20px',
       }}
     >
       {/* HEADER */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
             Invoices & Tax Billing
@@ -207,6 +197,7 @@ export default function InvoicesPage() {
 
         <Button
           onClick={() => router.push('/erp/invoices/new')}
+          className="w-full sm:w-auto justify-center"
           style={{
             backgroundColor: 'var(--color-primary)',
             color: '#ffffff',
@@ -223,7 +214,7 @@ export default function InvoicesPage() {
       </div>
 
       {/* KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <div style={KPI_CARD_STYLE}>
           <span style={KPI_LABEL_STYLE}>TOTAL INVOICES</span>
           <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-foreground)' }}>
@@ -308,20 +299,37 @@ export default function InvoicesPage() {
 
       {/* DATA LIST */}
       {loading ? (
-        <div
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: '12px',
-            overflow: 'hidden',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              <TableRowSkeleton rows={5} cols={7} />
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div
+            className="hidden md:block"
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '0.5px solid var(--color-border)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                <TableRowSkeleton rows={5} cols={7} />
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-col gap-3 md:hidden">
+            {[1, 2, 3].map((idx) => (
+              <div
+                key={idx}
+                style={{
+                  backgroundColor: 'var(--color-surface)',
+                  border: '0.5px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  height: '120px',
+                }}
+              />
+            ))}
+          </div>
+        </>
       ) : invoices.length === 0 ? (
         <EmptyState
           icon="ti-receipt-tax"
@@ -471,15 +479,15 @@ export default function InvoicesPage() {
                   gap: '10px',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                  <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-primary)' }}>
                       {inv.invoiceNumber}
                     </div>
-                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {inv.clientName}
                     </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {inv.eventName} · {format(inv.invoiceDate, 'dd MMM yyyy')}
                     </div>
                   </div>
@@ -662,14 +670,15 @@ export default function InvoicesPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '8px' }}>
-              <Button type="button" variant="ghost" onClick={() => setPaymentTarget(null)}>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setPaymentTarget(null)} className="w-full sm:w-auto">
                 Cancel
               </Button>
               <Button
                 type="button"
                 onClick={handleSubmitPayment}
                 disabled={isRecordingPay}
+                className="w-full sm:w-auto"
                 style={{ backgroundColor: 'var(--color-primary)', color: '#ffffff', fontWeight: 600 }}
               >
                 {isRecordingPay ? 'Saving...' : 'Record Payment'}

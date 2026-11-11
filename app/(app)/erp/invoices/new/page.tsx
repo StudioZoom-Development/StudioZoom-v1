@@ -16,9 +16,7 @@ export default function NewInvoicePage() {
   return (
     <div
       style={{
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '24px 16px',
+        width: '100%',
         fontFamily: 'var(--font-inter)',
       }}
     >
@@ -28,3 +26,4 @@ export default function NewInvoicePage() {
     </div>
   )
 }
+

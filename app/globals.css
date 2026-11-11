@@ -54,6 +54,24 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .lg\:grid {
+    display: grid !important;
+  }
+  .lg\:flex {
+    display: flex !important;
+  }
+  .lg\:block {
+    display: block !important;
+  }
+  .lg\:inline-flex {
+    display: inline-flex !important;
+  }
+  .lg\:hidden {
+    display: none !important;
+  }
+}
+
 .dashboard-radars-grid-3 {
   display: grid;
   grid-template-columns: 1fr;

@@ -24,7 +24,7 @@ export default function EditInvoicePage() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ width: '100%' }}>
         <LoadingSkeleton />
       </div>
     )
@@ -32,7 +32,7 @@ export default function EditInvoicePage() {
 
   if (!invoice) {
     return (
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px 16px', textAlign: 'center', fontFamily: 'var(--font-inter)' }}>
+      <div style={{ width: '100%', padding: '32px 0', textAlign: 'center', fontFamily: 'var(--font-inter)' }}>
         <p style={{ color: 'var(--color-foreground-muted)', fontSize: 'var(--text-base)' }}>
           Invoice not found or was removed.
         </p>
@@ -58,9 +58,7 @@ export default function EditInvoicePage() {
   return (
     <div
       style={{
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '24px 16px',
+        width: '100%',
         fontFamily: 'var(--font-inter)',
       }}
     >
@@ -68,3 +66,4 @@ export default function EditInvoicePage() {
     </div>
   )
 }
+

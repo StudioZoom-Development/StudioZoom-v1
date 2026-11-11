@@ -166,6 +166,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
   // UI & Preview States
   const [isSaving, setIsSaving] = useState<boolean>(false)
   const [isPrinting, setIsPrinting] = useState<boolean>(false)
+  const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [previewScale, setPreviewScale] = useState<number>(0.62)
@@ -565,7 +566,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
     const ro = new ResizeObserver(updateScale)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [mobileTab])
 
   const handleSave = async (targetStatus: InvoiceStatus): Promise<void> => {
     if (!clientName.trim()) {
@@ -747,7 +748,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: 'var(--font-inter)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: 'var(--font-inter)', minWidth: 0 }}>
       {/* TOAST */}
       {toastMsg && (
         <div
@@ -775,17 +776,12 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
 
       {/* TOP BAR */}
       <div
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-3.5 pb-4"
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          paddingBottom: '16px',
           borderBottom: '0.5px solid var(--color-border)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             type="button"
             onClick={() => router.push('/erp/invoices')}
@@ -798,12 +794,13 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
               padding: '6px',
               display: 'flex',
               alignItems: 'center',
+              flexShrink: 0,
             }}
             title="Back to invoices"
           >
             <i className="ti ti-arrow-left" />
           </button>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
                 {isEditing ? 'Edit Invoice' : 'New Invoice'}
@@ -846,7 +843,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full md:w-auto">
           <Button
             type="button"
             variant="ghost"
@@ -863,7 +860,7 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
             disabled={isPrinting}
             style={{ border: '0.5px solid var(--color-border)', fontSize: 'var(--text-xs)' }}
           >
-            <i className="ti ti-printer" style={{ marginRight: '6px' }} /> Print / Save PDF
+            <i className="ti ti-printer" style={{ marginRight: '6px' }} /> Print / PDF
           </Button>
           <Button
             type="button"
@@ -896,10 +893,73 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
         </div>
       </div>
 
+      {/* MOBILE / TABLET MODE SWITCHER (< 1024px) */}
+      <div
+        className="flex lg:hidden p-1 gap-1"
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          border: '0.5px solid var(--color-border)',
+          borderRadius: '10px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setMobileTab('edit')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            fontFamily: 'var(--font-inter)',
+            backgroundColor: mobileTab === 'edit' ? 'var(--color-primary)' : 'transparent',
+            color: mobileTab === 'edit' ? '#ffffff' : 'var(--color-foreground-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+          }}
+        >
+          <i className="ti ti-edit" />
+          <span>Edit Invoice</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            fontFamily: 'var(--font-inter)',
+            backgroundColor: mobileTab === 'preview' ? 'var(--color-primary)' : 'transparent',
+            color: mobileTab === 'preview' ? '#ffffff' : 'var(--color-foreground-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+          }}
+        >
+          <i className="ti ti-file-text" />
+          <span>Live A4 Preview</span>
+        </button>
+      </div>
+
       {/* MAIN SPLIT WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT PANE: FORM */}
-        <div className="lg:col-span-7 flex flex-col gap-5">
+        <div
+          className={
+            mobileTab === 'preview'
+              ? 'hidden lg:flex lg:col-span-7 min-w-0 flex-col gap-5'
+              : 'flex lg:col-span-7 min-w-0 flex-col gap-5'
+          }
+        >
           {/* 1. PROJECT / CLIENT LINK & STUDIO ENTITY */}
           <div style={CARD_STYLE}>
             <div style={CARD_HEADER_STYLE}>
@@ -1164,25 +1224,27 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                         />
                       </div>
                     )}
-                    <div className={gstEnabled ? 'md:col-span-1' : 'md:col-span-2'}>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={item.qty}
-                        onChange={(e) => handleUpdateItem(item.id, 'qty', Number(e.target.value) || 0)}
-                        placeholder="Qty"
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={item.rate}
-                        onChange={(e) => handleUpdateItem(item.id, 'rate', Number(e.target.value) || 0)}
-                        placeholder="Rate ₹"
-                        className="h-9"
-                      />
+                    <div className="grid grid-cols-2 gap-2.5 md:contents">
+                      <div className={gstEnabled ? 'md:col-span-1' : 'md:col-span-2'}>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={item.qty}
+                          onChange={(e) => handleUpdateItem(item.id, 'qty', Number(e.target.value) || 0)}
+                          placeholder="Qty"
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={item.rate}
+                          onChange={(e) => handleUpdateItem(item.id, 'rate', Number(e.target.value) || 0)}
+                          placeholder="Rate ₹"
+                          className="h-9"
+                        />
+                      </div>
                     </div>
                     <div className="md:col-span-2 flex items-center justify-between md:justify-end gap-1.5">
                       <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
@@ -1594,7 +1656,13 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
         </div>
 
         {/* RIGHT PANE: STICKY LIVE A4 PREVIEW */}
-        <div className="lg:col-span-5 flex flex-col gap-3" style={{ position: 'sticky', top: '20px' }}>
+        <div
+          className={
+            mobileTab === 'edit'
+              ? 'hidden lg:flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
+              : 'flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
+          }
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
               Live A4 Preview · {gstEnabled ? 'Tax Invoice' : 'Invoice'}
@@ -1681,6 +1749,9 @@ const SELECT_STYLE: React.CSSProperties = {
   fontSize: 'var(--text-sm)',
   fontFamily: 'var(--font-inter)',
   width: '100%',
+  maxWidth: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 }
 
 const TEXTAREA_STYLE: React.CSSProperties = {

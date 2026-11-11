@@ -136,6 +136,7 @@ export function QuotationBuilderForm({
   // UI state
   const [isSaving, setIsSaving] = useState(false)
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit')
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // Live HTML Preview & Capacity Guard
@@ -152,14 +153,14 @@ export function QuotationBuilderForm({
     const updateScale = () => {
       const width = el.getBoundingClientRect().width
       if (width > 0) {
-        setPreviewScale(width / 794)
+        setPreviewScale(Math.min(1, width / 794))
       }
     }
     updateScale()
     const observer = new ResizeObserver(updateScale)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [mobileTab])
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMsg({ text, type })
@@ -543,17 +544,12 @@ export function QuotationBuilderForm({
 
       {/* HEADER BAR */}
       <div
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-3.5 pb-4"
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '14px',
-          paddingBottom: '16px',
           borderBottom: '0.5px solid var(--color-border)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             onClick={() => router.push('/erp/quotations')}
             style={{
@@ -565,13 +561,14 @@ export function QuotationBuilderForm({
               padding: '6px',
               display: 'flex',
               alignItems: 'center',
+              flexShrink: 0,
             }}
             title="Back to quotations"
           >
             <i className="ti ti-arrow-left" />
           </button>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
                 {isEditMode ? `Edit Quotation ${quotationNumber}` : 'New Quotation Builder'}
               </h1>
@@ -596,13 +593,13 @@ export function QuotationBuilderForm({
         </div>
 
         {/* TOP ACTIONS */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full md:w-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={handlePreviewPdf}
             disabled={isGeneratingPdf}
-            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
             <i className="ti ti-eye" />
             <span>Preview PDF</span>
@@ -613,7 +610,7 @@ export function QuotationBuilderForm({
             size="sm"
             onClick={handleDownloadPdf}
             disabled={isGeneratingPdf}
-            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
             <i className="ti ti-download" />
             <span>Download PDF</span>
@@ -623,6 +620,7 @@ export function QuotationBuilderForm({
             size="sm"
             onClick={() => handleSave('sent')}
             disabled={isSaving}
+            className="col-span-2 sm:col-span-1"
             style={{
               backgroundColor: 'var(--color-primary)',
               color: '#ffffff',
@@ -630,6 +628,7 @@ export function QuotationBuilderForm({
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
             }}
           >
@@ -639,52 +638,73 @@ export function QuotationBuilderForm({
         </div>
       </div>
 
-      {/* MOBILE SCREEN NOTICE (< 768px): DESKTOP ONLY */}
+      {/* MOBILE / TABLET MODE SWITCHER (< 1024px) */}
       <div
-        className="flex md:hidden flex-col items-center justify-center text-center p-8"
+        className="flex lg:hidden p-1 gap-1"
         style={{
           backgroundColor: 'var(--color-surface)',
           border: '0.5px solid var(--color-border)',
-          borderRadius: '12px',
-          minHeight: '320px',
-          gap: '14px',
+          borderRadius: '10px',
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => setMobileTab('edit')}
           style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--color-primary-muted)',
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            fontFamily: 'var(--font-inter)',
+            backgroundColor: mobileTab === 'edit' ? 'var(--color-primary)' : 'transparent',
+            color: mobileTab === 'edit' ? '#ffffff' : 'var(--color-foreground-muted)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--color-primary)',
-            fontSize: '26px',
+            gap: '6px',
           }}
         >
-          <i className="ti ti-device-desktop" />
-        </div>
-        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--color-foreground)' }}>
-          Desktop View Only
-        </h2>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-foreground-muted)', margin: 0, maxWidth: '320px', lineHeight: 1.5 }}>
-          Quotation editing and real-time A4 preview are optimized exclusively for desktop screens. Please open this page on a desktop or laptop display.
-        </p>
+          <i className="ti ti-edit" />
+          <span>Edit Quotation</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            fontFamily: 'var(--font-inter)',
+            backgroundColor: mobileTab === 'preview' ? 'var(--color-primary)' : 'transparent',
+            color: mobileTab === 'preview' ? '#ffffff' : 'var(--color-foreground-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+          }}
+        >
+          <i className="ti ti-file-text" />
+          <span>Live A4 Preview</span>
+        </button>
       </div>
 
-      {/* MAIN TWO-COLUMN SPLIT (DESKTOP >= 768px) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 58fr) minmax(0, 42fr)',
-          gap: '24px',
-          alignItems: 'start',
-        }}
-        className="hidden md:grid"
-      >
+      {/* MAIN TWO-COLUMN SPLIT (SINGLE VIEW SWITCHER < 1024px, SIDE-BY-SIDE >= 1024px) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN: BUILDER CONTROLS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div
+          className={
+            mobileTab === 'preview'
+              ? 'hidden lg:flex lg:col-span-7 min-w-0 flex-col gap-5'
+              : 'flex lg:col-span-7 min-w-0 flex-col gap-5'
+          }
+        >
           {/* 1. TEMPLATE STATIONERY SELECTOR */}
           <div
             style={{
@@ -706,13 +726,7 @@ export function QuotationBuilderForm({
               </span>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '12px',
-              }}
-            >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {TEMPLATE_OPTIONS.map((tmpl) => {
                 const isSelected = normalizeTemplateKey(tmpl.id) === normalizeTemplateKey(templateId)
                 return (
@@ -832,6 +846,8 @@ export function QuotationBuilderForm({
                   defaultValue=""
                   style={{
                     height: '36px',
+                    width: '100%',
+                    maxWidth: '100%',
                     borderRadius: '8px',
                     backgroundColor: 'var(--color-surface-raised)',
                     border: '0.5px solid var(--color-border)',
@@ -853,7 +869,7 @@ export function QuotationBuilderForm({
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Client Name *
@@ -879,7 +895,7 @@ export function QuotationBuilderForm({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Event Type
@@ -891,6 +907,7 @@ export function QuotationBuilderForm({
                   placeholder="e.g. Wedding & Reception"
                   style={{
                     height: '36px',
+                    width: '100%',
                     borderRadius: '8px',
                     backgroundColor: 'var(--color-surface-raised)',
                     border: '0.5px solid var(--color-border)',
@@ -920,7 +937,7 @@ export function QuotationBuilderForm({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--color-foreground-muted)' }}>
                   Event Date
@@ -1027,65 +1044,71 @@ export function QuotationBuilderForm({
               {lineItems.map((item, idx) => (
                 <div
                   key={item.id || idx}
+                  className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-2.5"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) 60px 100px 90px 30px',
-                    gap: '8px',
-                    alignItems: 'center',
-                    padding: '8px',
                     borderRadius: '8px',
                     backgroundColor: 'var(--color-surface-raised)',
                     border: '0.5px solid var(--color-border)',
                   }}
                 >
-                  <Input
-                    placeholder="Deliverable description / service"
-                    value={item.description}
-                    onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)' }}
-                  />
-
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Qty"
-                    value={item.qty}
-                    onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                  />
-
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="Rate"
-                    value={item.rate || ''}
-                    onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
-                    style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
-                  />
-
-                  <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                    ₹{item.amount.toLocaleString('en-IN')}
+                  <div className="md:col-span-5">
+                    <Input
+                      placeholder="Deliverable description / service"
+                      value={item.description}
+                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, false)}
+                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                    />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveLineItem(idx)}
-                    disabled={lineItems.length <= 1}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: lineItems.length > 1 ? 'var(--color-danger)' : 'var(--color-foreground-subtle)',
-                      cursor: lineItems.length > 1 ? 'pointer' : 'not-allowed',
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: 0,
-                    }}
-                    title="Remove item"
-                  >
-                    <i className="ti ti-trash" />
-                  </button>
+                  <div className="grid grid-cols-2 gap-2 md:contents">
+                    <div className="md:col-span-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="Qty"
+                        value={item.qty}
+                        onChange={(e) => handleItemChange(idx, 'qty', e.target.value, false)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Rate"
+                        value={item.rate || ''}
+                        onChange={(e) => handleItemChange(idx, 'rate', e.target.value, false)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-3 flex items-center justify-between md:justify-end gap-2">
+                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                      ₹{item.amount.toLocaleString('en-IN')}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLineItem(idx)}
+                      disabled={lineItems.length <= 1}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: lineItems.length > 1 ? 'var(--color-danger)' : 'var(--color-foreground-subtle)',
+                        cursor: lineItems.length > 1 ? 'pointer' : 'not-allowed',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                      }}
+                      title="Remove item"
+                    >
+                      <i className="ti ti-trash" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1150,64 +1173,70 @@ export function QuotationBuilderForm({
                 {addons.map((item, idx) => (
                   <div
                     key={item.id || idx}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-2.5"
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(0, 1fr) 60px 100px 90px 30px',
-                      gap: '8px',
-                      alignItems: 'center',
-                      padding: '8px',
                       borderRadius: '8px',
                       backgroundColor: 'var(--color-surface-raised)',
                       border: '0.5px solid var(--color-border)',
                     }}
                   >
-                    <Input
-                      placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
-                      value={item.description}
-                      onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)' }}
-                    />
-
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="Qty"
-                      value={item.qty}
-                      onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
-                    />
-
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Rate"
-                      value={item.rate || ''}
-                      onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
-                      style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
-                    />
-
-                    <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
-                      ₹{item.amount.toLocaleString('en-IN')}
+                    <div className="md:col-span-5">
+                      <Input
+                        placeholder="Add-on item (e.g. Drone Coverage, LED Wall)"
+                        value={item.description}
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value, true)}
+                        style={{ height: '32px', fontSize: 'var(--text-xs)' }}
+                      />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAddon(idx)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--color-danger)',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
-                      }}
-                      title="Remove add-on"
-                    >
-                      <i className="ti ti-trash" />
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 md:contents">
+                      <div className="md:col-span-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="Qty"
+                          value={item.qty}
+                          onChange={(e) => handleItemChange(idx, 'qty', e.target.value, true)}
+                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'center' }}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Rate"
+                          value={item.rate || ''}
+                          onChange={(e) => handleItemChange(idx, 'rate', e.target.value, true)}
+                          style={{ height: '32px', fontSize: 'var(--text-xs)', textAlign: 'right' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-3 flex items-center justify-between md:justify-end gap-2">
+                      <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground)' }}>
+                        ₹{item.amount.toLocaleString('en-IN')}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAddon(idx)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-danger)',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '4px',
+                        }}
+                        title="Remove add-on"
+                      >
+                        <i className="ti ti-trash" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1251,10 +1280,8 @@ export function QuotationBuilderForm({
 
             {/* GST SWITCH TOGGLE */}
             <div
+              className="flex flex-wrap justify-between items-center gap-2"
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
                 fontSize: 'var(--text-sm)',
                 backgroundColor: 'var(--color-surface-raised)',
                 padding: '8px 12px',
@@ -1306,16 +1333,13 @@ export function QuotationBuilderForm({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: STICKY LIVE A4 PREVIEW (DESKTOP) */}
+        {/* RIGHT COLUMN: STICKY LIVE A4 PREVIEW */}
         <div
-          style={{
-            position: 'sticky',
-            top: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-          }}
-          className="flex"
+          className={
+            mobileTab === 'edit'
+              ? 'hidden lg:flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
+              : 'flex lg:col-span-5 min-w-0 flex-col gap-3 lg:sticky lg:top-5'
+          }
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-foreground-subtle)' }}>
