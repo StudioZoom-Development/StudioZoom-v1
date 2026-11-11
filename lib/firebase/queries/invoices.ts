@@ -8,6 +8,7 @@ import {
   doc,
   setDoc,
   updateDoc,
+  deleteField,
   runTransaction,
   serverTimestamp,
   Timestamp,
@@ -442,6 +443,16 @@ function serializeLineItems(items: InvoiceLineItem[]): Array<Record<string, unkn
   }))
 }
 
+function omitUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value
+    }
+  }
+  return result
+}
+
 /** Create a new invoice and optionally link invoiceNumber to the associated client */
 export async function createInvoice(
   data: Omit<Invoice, 'invoiceId' | 'createdAt' | 'invoiceNumber'> & {
@@ -451,7 +462,7 @@ export async function createInvoice(
   const invoiceNumber = data.invoiceNumber || (await getNextInvoiceNumber())
   const newDocRef = doc(collection(db, 'invoices'))
 
-  const payload: Record<string, unknown> = {
+  const payload = omitUndefined({
     ...data,
     invoiceNumber,
     clientId: data.clientId || '',
@@ -464,7 +475,7 @@ export async function createInvoice(
     isDeleted: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  }
+  })
 
   await setDoc(newDocRef, payload)
 
@@ -488,27 +499,32 @@ export async function updateInvoice(
   updates: Partial<Omit<Invoice, 'invoiceId' | 'createdAt'>>
 ): Promise<void> {
   const docRef = doc(db, 'invoices', invoiceId)
-  const payload: Record<string, unknown> = {
+  const rawPayload: Record<string, unknown> = {
     ...updates,
     updatedAt: serverTimestamp(),
   }
 
   if (updates.lineItems) {
-    payload.lineItems = serializeLineItems(updates.lineItems)
+    rawPayload.lineItems = serializeLineItems(updates.lineItems)
   }
   if (updates.payments) {
-    payload.payments = serializePayments(updates.payments)
+    rawPayload.payments = serializePayments(updates.payments)
   }
   if (updates.invoiceDate) {
-    payload.invoiceDate = Timestamp.fromDate(updates.invoiceDate)
+    rawPayload.invoiceDate = Timestamp.fromDate(updates.invoiceDate)
   }
   if (updates.dueDate) {
-    payload.dueDate = Timestamp.fromDate(updates.dueDate)
+    rawPayload.dueDate = Timestamp.fromDate(updates.dueDate)
   }
   if (updates.eventDate) {
-    payload.eventDate = Timestamp.fromDate(updates.eventDate)
+    rawPayload.eventDate = Timestamp.fromDate(updates.eventDate)
   } else if (updates.eventDate === undefined && 'eventDate' in updates) {
-    payload.eventDate = null
+    rawPayload.eventDate = null
+  }
+
+  const payload: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(rawPayload)) {
+    payload[key] = value === undefined ? deleteField() : value
   }
 
   await updateDoc(docRef, payload)
@@ -592,3 +608,4 @@ export async function deleteInvoice(invoiceId: string): Promise<void> {
     updatedAt: serverTimestamp(),
   })
 }
+
