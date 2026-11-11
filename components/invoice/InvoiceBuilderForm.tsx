@@ -383,37 +383,6 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
     })
   }
 
-  const handleApplyPackage = (pkg: PackageTemplate): void => {
-    if (pkg.lineItems && pkg.lineItems.length > 0) {
-      setLineItems(
-        pkg.lineItems.map((it, idx) => ({
-          id: nextUid(`pkg-${idx}`),
-          description: it.description,
-          subDescription: '',
-          sacCode: '998386',
-          qty: Number(it.qty) || 1,
-          rate: Number(it.rate) || 0,
-          discount: 0,
-          amount: Number(it.amount) || (Number(it.qty) || 1) * (Number(it.rate) || 0),
-        }))
-      )
-    } else {
-      setLineItems([
-        {
-          id: nextUid('pkg'),
-          description: `${pkg.name} Package`,
-          subDescription: pkg.items || '',
-          sacCode: '998386',
-          qty: 1,
-          rate: Number(pkg.price) || 0,
-          discount: 0,
-          amount: Number(pkg.price) || 0,
-        },
-      ])
-    }
-    showToast(`Applied ${pkg.name} package deliverables`)
-  }
-
   // Advance Payment Helpers (max 3, block overpayment)
   const handleAddAdvancePayment = (): void => {
     setPaymentError(null)
@@ -1169,33 +1138,6 @@ export function InvoiceBuilderForm({ initialInvoice, initialClientId }: InvoiceB
                 <i className="ti ti-plus" style={{ marginRight: '4px' }} /> Add Row
               </Button>
             </div>
-
-            {studioPackages.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-                  Apply Studio Package:
-                </span>
-                {studioPackages.map((pkg) => (
-                  <button
-                    key={pkg.id}
-                    type="button"
-                    onClick={() => handleApplyPackage(pkg)}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      border: '0.5px solid var(--color-border-strong)',
-                      backgroundColor: 'var(--color-surface-raised)',
-                      color: 'var(--color-foreground)',
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {pkg.name} (₹{Number(pkg.price || 0).toLocaleString('en-IN')})
-                  </button>
-                ))}
-              </div>
-            )}
 
             <div className={`erp-inv-item-headers${gstEnabled ? ' erp-inv-item-main-gst' : ''}`}>
               <span>Item / Service</span>
