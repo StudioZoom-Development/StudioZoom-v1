@@ -718,7 +718,7 @@ export interface LineItem {
 }
 
 export type QuotationStatus =
-  | 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted'
+  | 'draft' | 'accepted' | 'rejected' | 'converted'
 
 export interface Quotation {
   quotationId:        string
@@ -750,7 +750,7 @@ export interface Quotation {
 }
 
 export type InvoiceStatus =
-  | 'draft' | 'sent' | 'partiallyPaid' | 'paid' | 'overdue'
+  | 'draft' | 'unpaid' | 'partiallyPaid' | 'paid' | 'overdue'
 
 export type InvoicePaymentTerms = 'dueOnReceipt' | 'net7' | 'net15' | 'net30' | 'custom'
 

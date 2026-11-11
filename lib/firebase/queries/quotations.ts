@@ -41,7 +41,7 @@ function parseQuotationDoc(id: string, data: Record<string, unknown>): Quotation
     cgst: Number(data.cgst || 0),
     sgst: Number(data.sgst || 0),
     grandTotal: Number(data.grandTotal || 0),
-    status: (data.status as QuotationStatus) || 'draft',
+    status: (data.status === 'sent' ? 'draft' : (data.status as QuotationStatus)) || 'draft',
     termsAndConditions: data.termsAndConditions ? String(data.termsAndConditions) : undefined,
     notes: data.notes ? String(data.notes) : undefined,
     isDeleted: Boolean(data.isDeleted),

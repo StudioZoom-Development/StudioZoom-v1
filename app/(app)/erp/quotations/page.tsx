@@ -19,7 +19,6 @@ import { format } from 'date-fns'
 const STATUS_OPTIONS: Array<{ key: QuotationStatus | 'all'; label: string }> = [
   { key: 'all', label: 'All Quotes' },
   { key: 'draft', label: 'Drafts' },
-  { key: 'sent', label: 'Sent' },
   { key: 'accepted', label: 'Accepted' },
   { key: 'converted', label: 'Converted' },
 ]
@@ -54,11 +53,11 @@ export default function QuotationsPage() {
   // KPI Calculations
   const stats = useMemo(() => {
     const total = quotations.length
-    const sentCount = quotations.filter((q) => q.status === 'sent').length
+    const draftCount = quotations.filter((q) => q.status === 'draft').length
     const acceptedCount = quotations.filter((q) => q.status === 'accepted').length
     const totalPipelineValue = quotations.reduce((acc, q) => acc + (q.grandTotal || 0), 0)
 
-    return { total, sentCount, acceptedCount, totalPipelineValue }
+    return { total, draftCount, acceptedCount, totalPipelineValue }
   }, [quotations])
 
   const confirmDelete = async () => {
@@ -151,13 +150,13 @@ export default function QuotationsPage() {
             }}
           >
             <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-foreground-subtle)' }}>
-              SENT TO CLIENTS
+              DRAFT QUOTES
             </span>
             <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, color: 'var(--color-accent)' }}>
-              {stats.sentCount}
+              {stats.draftCount}
             </span>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
-              Awaiting client sign-off
+              Saved quotation drafts
             </span>
           </div>
 
@@ -391,9 +390,7 @@ export default function QuotationsPage() {
                               ? 'paid'
                               : q.status === 'converted'
                                 ? 'done'
-                                : q.status === 'sent'
-                                  ? 'inProgress'
-                                  : 'todo'
+                                : 'todo'
                           }
                           label={q.status.toUpperCase()}
                         />
@@ -488,9 +485,7 @@ export default function QuotationsPage() {
                           ? 'paid'
                           : q.status === 'converted'
                             ? 'done'
-                            : q.status === 'sent'
-                              ? 'inProgress'
-                              : 'todo'
+                            : 'todo'
                       }
                       label={q.status.toUpperCase()}
                     />
