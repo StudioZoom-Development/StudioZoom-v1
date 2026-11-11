@@ -37,7 +37,8 @@ import {
   deleteEventType,
   toggleEventTypeStatus,
 } from '@/lib/firebase/queries/eventTypes'
-import type { SavedAddress, EventTypeOption } from '@/types'
+import { subscribeToBankAccounts } from '@/lib/firebase/queries/bankAccounts'
+import type { SavedAddress, EventTypeOption, BankAccount } from '@/types'
 import { Badge } from '@/components/shared/Badge'
 
 // ─────────────────────────────────────────────
@@ -104,13 +105,18 @@ const STUDIOS = [
   },
 ]
 
-const BRAND_FIELDS: Array<{ key: keyof BrandForm; label: string }> = [
-  { key: 'phone',   label: 'Phone'   },
-  { key: 'address', label: 'Address' },
-  { key: 'city',    label: 'City'    },
-  { key: 'email',   label: 'Email'   },
-  { key: 'upiId',   label: 'UPI ID'  },
-  { key: 'gstin',   label: 'GSTIN'   },
+const BRAND_FIELDS: Array<{ key: keyof BrandForm; label: string; placeholder?: string }> = [
+  { key: 'phone',          label: 'Primary Phone' },
+  { key: 'secondaryPhone', label: 'Secondary Phone (Optional)', placeholder: '+91 98765 43210' },
+  { key: 'address',        label: 'Address' },
+  { key: 'city',           label: 'City' },
+  { key: 'email',          label: 'Email' },
+  { key: 'gstin',          label: 'GSTIN' },
+  { key: 'upiId',          label: 'UPI ID' },
+  { key: 'bankName',       label: 'Bank Name', placeholder: 'e.g. HDFC Bank' },
+  { key: 'accountHolder',  label: 'Account Holder Name', placeholder: 'e.g. Studio Zoom' },
+  { key: 'accountNumber',  label: 'Bank Account Number', placeholder: 'e.g. 50200012345678' },
+  { key: 'ifsc',           label: 'IFSC Code', placeholder: 'e.g. HDFC0001234' },
 ]
 
 const PKG_COLOURS: Record<string, { bg: string; fg: string }> = {
@@ -130,15 +136,42 @@ const ROLE_STYLE: Record<string, { bg: string; fg: string }> = {
 // ─────────────────────────────────────────────
 
 interface BrandForm {
-  phone:   string
-  address: string
-  city:    string
-  email:   string
-  gstin:   string
-  upiId:   string
+  phone:          string
+  secondaryPhone: string
+  address:        string
+  city:           string
+  email:          string
+  gstin:          string
+  upiId:          string
+  bankName:       string
+  accountHolder:  string
+  accountNumber:  string
+  ifsc:           string
+  defaultTerms:   string
+  thankYouNote:   string
 }
 
-const EMPTY_BRAND: BrandForm = { phone: '', address: '', city: '', email: '', gstin: '', upiId: '' }
+const DEFAULT_INVOICE_TERMS =
+  '1. Advance payment confirms the event booking dates.\n2. Final deliverables will be shared after full balance settlement.\n3. Travel and accommodation outside city limits are billed as actuals.'
+
+const DEFAULT_THANK_YOU_NOTE =
+  'Thank you for choosing Studio Zoom to capture your special moments!'
+
+const EMPTY_BRAND: BrandForm = {
+  phone:          '',
+  secondaryPhone: '',
+  address:        '',
+  city:           '',
+  email:          '',
+  gstin:          '',
+  upiId:          '',
+  bankName:       '',
+  accountHolder:  '',
+  accountNumber:  '',
+  ifsc:           '',
+  defaultTerms:   DEFAULT_INVOICE_TERMS,
+  thankYouNote:   DEFAULT_THANK_YOU_NOTE,
+}
 
 function getInitials(name: string): string {
   if (!name) return '??'
@@ -1269,6 +1302,7 @@ export default function SettingsPage() {
     'studio-zoom':             { ...EMPTY_BRAND },
     'studio-zoom-productions': { ...EMPTY_BRAND },
   })
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   // Edit mode toggle
   const [brandEditMode, setBrandEditMode] = useState(false)
   const [brandSaving,   setBrandSaving]   = useState(false)
@@ -1387,23 +1421,42 @@ export default function SettingsPage() {
       setBrandData(prev => ({
         ...prev,
         'studio-zoom': {
-          phone:   b.studioZoom?.phone   ?? '',
-          address: b.studioZoom?.address ?? '',
-          city:    b.studioZoom?.city    ?? '',
-          email:   b.studioZoom?.email   ?? '',
-          gstin:   b.studioZoom?.gstin   ?? '',
-          upiId:   b.studioZoom?.upiId   ?? '',
+          phone:          b.studioZoom?.phone          ?? '',
+          secondaryPhone: b.studioZoom?.secondaryPhone ?? '',
+          address:        b.studioZoom?.address        ?? '',
+          city:           b.studioZoom?.city           ?? '',
+          email:          b.studioZoom?.email          ?? '',
+          gstin:          b.studioZoom?.gstin          ?? '',
+          upiId:          b.studioZoom?.upiId          ?? '',
+          bankName:       b.studioZoom?.bankName       ?? '',
+          accountHolder:  b.studioZoom?.accountHolder  ?? '',
+          accountNumber:  b.studioZoom?.accountNumber  ?? '',
+          ifsc:           b.studioZoom?.ifsc           ?? '',
+          defaultTerms:   b.studioZoom?.defaultTerms   ?? DEFAULT_INVOICE_TERMS,
+          thankYouNote:   b.studioZoom?.thankYouNote   ?? DEFAULT_THANK_YOU_NOTE,
         },
         'studio-zoom-productions': {
-          phone:   b.studioZoomProds?.phone   ?? '',
-          address: b.studioZoomProds?.address ?? '',
-          city:    b.studioZoomProds?.city    ?? '',
-          email:   b.studioZoomProds?.email   ?? '',
-          gstin:   b.studioZoomProds?.gstin   ?? '',
-          upiId:   b.studioZoomProds?.upiId   ?? '',
+          phone:          b.studioZoomProds?.phone          ?? '',
+          secondaryPhone: b.studioZoomProds?.secondaryPhone ?? '',
+          address:        b.studioZoomProds?.address        ?? '',
+          city:           b.studioZoomProds?.city           ?? '',
+          email:          b.studioZoomProds?.email          ?? '',
+          gstin:          b.studioZoomProds?.gstin          ?? '',
+          upiId:          b.studioZoomProds?.upiId          ?? '',
+          bankName:       b.studioZoomProds?.bankName       ?? '',
+          accountHolder:  b.studioZoomProds?.accountHolder  ?? '',
+          accountNumber:  b.studioZoomProds?.accountNumber  ?? '',
+          ifsc:           b.studioZoomProds?.ifsc           ?? '',
+          defaultTerms:   b.studioZoomProds?.defaultTerms   ?? DEFAULT_INVOICE_TERMS,
+          thankYouNote:   b.studioZoomProds?.thankYouNote   ?? DEFAULT_THANK_YOU_NOTE,
         },
       }))
     })
+  }, [])
+
+  // bankAccounts (for quick-filling studio bank & UPI details)
+  useEffect(() => {
+    return subscribeToBankAccounts(setBankAccounts)
   }, [])
 
   // numberingConfig
@@ -1858,7 +1911,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ── 6 branding fields — responsive grid */}
+            {/* ── Branding & Bank fields — responsive grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
               {BRAND_FIELDS.map(f => {
                 const val = (brandData[selectedStudio] ?? EMPTY_BRAND)[f.key]
@@ -1881,6 +1934,7 @@ export default function SettingsPage() {
                       ) : (
                         <Input
                           value={val}
+                          placeholder={f.placeholder}
                           onChange={e => setBrandData(prev => ({
                             ...prev,
                             [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), [f.key]: e.target.value },
@@ -1905,6 +1959,126 @@ export default function SettingsPage() {
                   </div>
                 )
               })}
+            </div>
+
+            {/* Quick-fill Bank & UPI from ERP Default Bank Account (in Edit mode) */}
+            {brandEditMode && bankAccounts.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                  Quick-fill bank & UPI from Accounts:
+                </span>
+                {bankAccounts.slice(0, 3).map(acc => (
+                  <button
+                    key={acc.bankAccountId}
+                    type="button"
+                    onClick={() => {
+                      setBrandData(prev => ({
+                        ...prev,
+                        [selectedStudio]: {
+                          ...(prev[selectedStudio] ?? EMPTY_BRAND),
+                          bankName: acc.bankName || '',
+                          accountHolder: acc.accountHolder || '',
+                          accountNumber: acc.accountNumberMasked || '',
+                          ifsc: acc.ifsc || '',
+                          upiId: acc.upiId || (prev[selectedStudio]?.upiId ?? ''),
+                        },
+                      }))
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '0.5px solid var(--color-border)',
+                      background: 'var(--color-surface-raised)',
+                      color: 'var(--color-accent)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {acc.nickname || acc.bankName}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ── Invoice Defaults: Terms & Photo Studio Closing Note */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5" style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Default Terms & Conditions</label>
+                {brandEditMode ? (
+                  <textarea
+                    rows={3}
+                    value={(brandData[selectedStudio] ?? EMPTY_BRAND).defaultTerms}
+                    onChange={e => setBrandData(prev => ({
+                      ...prev,
+                      [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), defaultTerms: e.target.value },
+                    }))}
+                    placeholder={DEFAULT_INVOICE_TERMS}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '0.5px solid var(--color-border)',
+                      background: 'var(--color-surface-raised)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                      fontFamily: 'var(--font-inter)',
+                      resize: 'vertical',
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    minHeight: '64px', padding: '8px 12px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    fontSize: 'var(--text-xs)',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-line',
+                    color: (brandData[selectedStudio] ?? EMPTY_BRAND).defaultTerms ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
+                  }}>
+                    {(brandData[selectedStudio] ?? EMPTY_BRAND).defaultTerms || DEFAULT_INVOICE_TERMS}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Invoice Closing / Thank You Note</label>
+                {brandEditMode ? (
+                  <textarea
+                    rows={3}
+                    value={(brandData[selectedStudio] ?? EMPTY_BRAND).thankYouNote}
+                    onChange={e => setBrandData(prev => ({
+                      ...prev,
+                      [selectedStudio]: { ...(prev[selectedStudio] ?? EMPTY_BRAND), thankYouNote: e.target.value },
+                    }))}
+                    placeholder={DEFAULT_THANK_YOU_NOTE}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '0.5px solid var(--color-border)',
+                      background: 'var(--color-surface-raised)',
+                      color: 'var(--color-foreground)',
+                      fontSize: 'var(--text-sm)',
+                      fontFamily: 'var(--font-inter)',
+                      resize: 'vertical',
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    minHeight: '64px', padding: '8px 12px',
+                    background: 'var(--color-surface-raised)',
+                    border: '0.5px solid var(--color-border)',
+                    borderRadius: '8px',
+                    fontSize: 'var(--text-xs)',
+                    lineHeight: 1.5,
+                    color: (brandData[selectedStudio] ?? EMPTY_BRAND).thankYouNote ? 'var(--color-foreground)' : 'var(--color-foreground-subtle)',
+                  }}>
+                    {(brandData[selectedStudio] ?? EMPTY_BRAND).thankYouNote || DEFAULT_THANK_YOU_NOTE}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ── Save — only in edit mode */}

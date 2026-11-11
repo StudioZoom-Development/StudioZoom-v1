@@ -752,23 +752,70 @@ export interface Quotation {
 export type InvoiceStatus =
   | 'draft' | 'sent' | 'partiallyPaid' | 'paid' | 'overdue'
 
+export type InvoicePaymentTerms = 'dueOnReceipt' | 'net7' | 'net15' | 'net30' | 'custom'
+
+export type InvoicePaymentMode = 'cash' | 'upi' | 'bank'
+
+export interface InvoiceLineItem {
+  id:              string
+  description:     string
+  subDescription?: string
+  sacCode?:        string
+  qty:             number
+  rate:            number
+  discount?:       number            // per-line flat discount in INR (when discountType === 'perLine')
+  amount:          number            // qty * rate - (discount if perLine)
+}
+
+export interface InvoicePaymentEntry {
+  id:         string
+  amount:     number
+  date:       Date
+  mode:       InvoicePaymentMode
+  reference?: string
+}
+
 export interface Invoice {
-  invoiceId:     string
-  invoiceNumber: string              // ZS-INV-2026-001
-  clientId:      string
-  projectId:     string
-  invoiceDate:   Date
-  dueDate:       Date
-  lineItems:     LineItem[]
-  totalAmount:   number
-  amountPaid:    number
-  balanceDue:    number
-  gstEnabled:    boolean
-  cgst?:         number
-  sgst?:         number
-  status:        InvoiceStatus
-  createdBy:     string
-  createdAt:     Date
+  invoiceId:          string
+  invoiceNumber:      string         // ZS-INV-2026-001
+  studioId?:          'studio-zoom' | 'studio-zoom-productions'
+  clientId?:          string
+  projectId?:         string
+  invoiceDate:        Date
+  dueDate:            Date
+  paymentTerms:       InvoicePaymentTerms
+  eventName:          string
+  eventDate?:         Date
+  eventVenue?:        string
+  clientName:         string
+  clientPhone?:       string
+  clientEmail?:       string
+  clientAddress?:     string
+  clientGstin?:       string
+  clientState:        string         // e.g. 'Tamil Nadu' -> CGST+SGST, else -> IGST
+  lineItems:          InvoiceLineItem[]
+  discountType:       'overall' | 'perLine'
+  discountValue:      number         // overall discount amount in INR (when discountType === 'overall')
+  discountAmount:     number         // total effective discount deducted before GST
+  subtotal:           number         // sum of qty * rate before discount
+  taxableAmount:      number         // subtotal - discountAmount
+  gstEnabled:         boolean
+  gstRate:            number         // default 18
+  gstSplit:           'cgst_sgst' | 'igst'
+  cgst:               number
+  sgst:               number
+  igst:               number
+  totalAmount:        number         // Grand Total
+  payments:           InvoicePaymentEntry[] // up to 3 advance payments
+  amountPaid:         number         // sum of advance payments
+  balanceDue:         number         // max(0, totalAmount - amountPaid)
+  status:             InvoiceStatus
+  termsAndConditions?: string
+  thankYouNote?:      string
+  isDeleted?:         boolean
+  createdBy:          string
+  createdAt:          Date
+  updatedAt?:         Date
 }
 
 // ─── LEADS ────────────────────────────────────────────────────────────────

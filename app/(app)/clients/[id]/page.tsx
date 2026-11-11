@@ -32,7 +32,10 @@ import { RecordPaymentModal } from '@/components/shared/RecordPaymentModal'
 import { Skeleton } from '@/components/shared/LoadingSkeleton'
 import { useBackSwipe } from '@/hooks/useMobileGestures'
 import { subscribeToBankAccounts } from '@/lib/firebase/queries/bankAccounts'
-import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry, Freelancer, BankAccount } from '@/types'
+import { subscribeToClientInvoices } from '@/lib/firebase/queries/invoices'
+import { subscribeToBrandConfig, type BrandConfig } from '@/lib/firebase/queries/settings'
+import { renderInvoiceHtml } from '@/lib/invoice/invoiceHtmlRenderer'
+import type { Client, Project, ProjectStage, StaffAssignment, EventDateEntry, Freelancer, BankAccount, Invoice } from '@/types'
 
 interface PaymentItem {
   paymentId:       string
@@ -230,12 +233,18 @@ export default function ClientDetailPage() {
 
   // Bank accounts
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([])
+  const [brandConfig, setBrandConfig] = useState<BrandConfig | null>(null)
 
   useEffect(() => {
-    const unsub = subscribeToBankAccounts((list) => {
+    const unsubBank = subscribeToBankAccounts((list) => {
       setBankAccounts(list)
     })
-    return () => unsub()
+    const unsubBrand = subscribeToBrandConfig((b) => setBrandConfig(b))
+    return () => {
+      unsubBank()
+      unsubBrand()
+    }
   }, [])
 
 
@@ -317,16 +326,20 @@ export default function ClientDetailPage() {
     }
   }, [id])
 
-  // Real-time Payments
+  // Real-time Payments & Linked Invoices
   useEffect(() => {
     if (!client?.clientId) return
 
     const unsubPayments = subscribeToPayments(client.clientId, data => {
       setPayments(data)
     })
+    const unsubInvoices = subscribeToClientInvoices(client.clientId, data => {
+      setClientInvoices(data)
+    })
 
     return () => {
       unsubPayments()
+      unsubInvoices()
     }
   }, [client?.clientId])
 
@@ -1676,40 +1689,195 @@ export default function ClientDetailPage() {
           {/* TAB CONTENT: DOCUMENTS */}
           {tab === 'Documents' && (
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {client.invoiceNumber ? (
-                /* INVOICE DOC CARD */
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <span style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'var(--color-foreground-subtle)',
+                }}>
+                  Associated Invoices ({clientInvoices.length})
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => router.push(`/erp/invoices/new?clientId=${client.clientId}`)}
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#ffffff',
+                    height: '30px',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    gap: '6px',
+                  }}
+                >
+                  <i className="ti ti-plus" />
+                  <span>Create Invoice</span>
+                </Button>
+              </div>
+
+              {clientInvoices.length > 0 ? (
+                clientInvoices.map((inv) => (
+                  <div
+                    key={inv.invoiceId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      background: 'var(--color-surface-raised)',
+                      border: '0.5px solid var(--color-border)',
+                      borderRadius: '10px',
+                      padding: '14px 16px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '10px',
+                        background: 'var(--color-primary-muted)',
+                        color: 'var(--color-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <i className="ti ti-receipt-tax" style={{ fontSize: '20px' }} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-foreground)' }}>
+                            {inv.invoiceNumber}
+                          </span>
+                          <Badge
+                            variant={
+                              inv.status === 'paid'
+                                ? 'paid'
+                                : inv.status === 'partiallyPaid'
+                                  ? 'partial'
+                                  : inv.status === 'overdue'
+                                    ? 'overdue'
+                                    : inv.status === 'sent'
+                                      ? 'inProgress'
+                                      : 'todo'
+                            }
+                            label={inv.status === 'partiallyPaid' ? 'PARTIAL' : inv.status.toUpperCase()}
+                          />
+                        </div>
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-muted)' }}>
+                          {format(inv.invoiceDate, 'dd MMM yyyy')} · Paid ₹{inv.amountPaid.toLocaleString('en-IN')} of ₹{inv.totalAmount.toLocaleString('en-IN')}
+                          {inv.balanceDue > 0 ? ` · Due ₹${inv.balanceDue.toLocaleString('en-IN')}` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const branding =
+                            inv.studioId === 'studio-zoom-productions'
+                              ? brandConfig?.studioZoomProds || brandConfig?.studioZoom || null
+                              : brandConfig?.studioZoom || null
+                          const html = await renderInvoiceHtml(inv, {
+                            branding,
+                            studioName:
+                              inv.studioId === 'studio-zoom-productions'
+                                ? 'Studio Zoom Productions'
+                                : 'Studio Zoom',
+                          })
+                          const win = window.open('', '_blank')
+                          if (!win) return
+                          const printable = html.replace(
+                            '</body>',
+                            `<script>window.addEventListener('load',function(){setTimeout(function(){window.focus();window.print();},300);});</script></body>`
+                          )
+                          win.document.open()
+                          win.document.write(printable)
+                          win.document.close()
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-inter)',
+                          background: 'transparent',
+                          border: '0.5px solid var(--color-border-strong)',
+                          color: 'var(--color-foreground)',
+                          borderRadius: '8px',
+                          height: '30px',
+                          padding: '0 10px',
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 500,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                        }}
+                      >
+                        <i className="ti ti-printer" style={{ fontSize: '14px' }} />
+                        <span>PDF</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/erp/invoices/${inv.invoiceId}/edit`)}
+                        style={{
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-inter)',
+                          background: 'var(--color-primary-muted)',
+                          border: '0.5px solid var(--color-primary)',
+                          color: 'var(--color-primary)',
+                          borderRadius: '8px',
+                          height: '30px',
+                          padding: '0 12px',
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : client.invoiceNumber ? (
+                /* BOOKING INVOICE SUMMARY FALLBACK */
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
                   gap: '14px',
                   background: 'var(--color-surface-raised)',
                   border: '0.5px solid var(--color-border)',
                   borderRadius: '10px',
                   padding: '14px 16px'
                 }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
-                    background: 'var(--color-primary-muted)',
-                    color: 'var(--color-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <i className="ti ti-receipt-tax" style={{ fontSize: '20px' }} />
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                      Invoice {client.invoiceNumber}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
-                      {client.paymentStatus === 'paid' ? 'Fully paid' : client.paymentStatus === 'partial' ? 'Partially paid' : 'Unpaid'} · ₹{advancePaid.toLocaleString('en-IN')} of ₹{totalAmount.toLocaleString('en-IN')}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '10px',
+                      background: 'var(--color-primary-muted)',
+                      color: 'var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <i className="ti ti-receipt-tax" style={{ fontSize: '20px' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                        Booking Ref {client.invoiceNumber}
+                      </span>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-foreground-subtle)' }}>
+                        {client.paymentStatus === 'paid' ? 'Fully paid' : client.paymentStatus === 'partial' ? 'Partially paid' : 'Unpaid'} · ₹{advancePaid.toLocaleString('en-IN')} of ₹{totalAmount.toLocaleString('en-IN')}
+                      </span>
+                    </div>
                   </div>
                   <button
-                    onClick={() => router.push('/erp/invoices')}
+                    type="button"
+                    onClick={() => router.push(`/erp/invoices/new?clientId=${client.clientId}`)}
                     style={{
                       cursor: 'pointer',
                       fontFamily: 'var(--font-inter)',
@@ -1723,7 +1891,7 @@ export default function ClientDetailPage() {
                       fontWeight: 500
                     }}
                   >
-                    View
+                    Generate Tax Invoice
                   </button>
                 </div>
               ) : (
@@ -1733,7 +1901,7 @@ export default function ClientDetailPage() {
                   fontSize: 'var(--text-sm)',
                   color: 'var(--color-foreground-subtle)'
                 }}>
-                  No documents generated for this booking yet.
+                  No invoices created for this booking yet. Click &quot;Create Invoice&quot; above to generate one.
                 </div>
               )}
             </div>
