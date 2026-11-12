@@ -28,12 +28,20 @@ export interface PackageTemplate {
 }
 
 export interface StudioBranding {
-  phone:   string
-  address: string
-  city:    string
-  email:   string
-  gstin:   string
-  upiId:   string
+  studioName?:     string
+  phone:           string
+  secondaryPhone?: string
+  address:         string
+  city:            string
+  email:           string
+  gstin:           string
+  upiId:           string
+  bankName?:       string
+  accountHolder?:  string
+  accountNumber?:  string
+  ifsc?:           string
+  defaultTerms?:   string
+  thankYouNote?:   string
 }
 
 // ─────────────────────────────────────────────

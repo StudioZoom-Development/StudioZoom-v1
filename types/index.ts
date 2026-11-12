@@ -531,19 +531,62 @@ export interface Salary {
   updatedAt?:     Date
 }
 
-export interface Payslip {
-  payslipId:          string
-  staffUid:           string
-  staffName:          string
-  month:              number
-  year:               number
-  baseSalary:         number
-  totalAdvances:      number
-  netPay:             number
-  attendanceSummary:  AttendanceRecord['summary']
-  generatedAt:        Date
-  generatedBy:        string
+export interface PayslipAdvanceItem {
+  label:  string
+  amount: number
+  date?:  string
 }
+
+export interface PayslipRecord {
+  payslipId:           string           // "ps_uid123_2026_10"
+  payslipNumber:       string           // "ZS-PS-0145"
+  staffUid:            string
+  staffName:           string
+  jobTitle:            string
+  month:               number           // 1–12
+  year:                number           // e.g. 2026
+
+  // Earnings
+  baseSalary:          number
+  allowances:          number
+  customBonus:         number
+  customBonusReason?:  string
+  grossEarnings:       number
+
+  // Attendance metrics
+  totalCalendarDays:   number
+  workingDays:         number
+  presentDays:         number
+  halfDays:            number
+  absentDays:          number
+  weekOffs:            number
+  payableDays:         number
+  dailyRate:           number
+  attendanceDeduction: number
+
+  // Advance recovery
+  advances:            PayslipAdvanceItem[]
+  totalAdvances:       number
+
+  // Custom deductions
+  customDeduction:     number
+  customDeductionReason?: string
+
+  // Totals
+  totalDeductions:     number
+  netPay:              number
+
+  // Status & Audit
+  paymentStatus:       'unpaid' | 'paid'
+  paymentDate?:        string
+  generatedAt:         Date
+  generatedByUid:      string
+  generatedByName:     string
+  isAdjusted:          boolean
+}
+
+export type Payslip = PayslipRecord
+
 
 // ─── FREELANCER ───────────────────────────────────────────────────────────
 export interface Freelancer {
@@ -664,7 +707,10 @@ export interface CashOpeningBalances {
 }
 
 // ─── QUOTATION & INVOICE ──────────────────────────────────────────────────
+export type QuotationTemplateId = 'package1' | 'package2' | 'package3' | 'production' | 'modern' | 'floral'
+
 export interface LineItem {
+  id?:         string
   description: string
   qty:         number
   rate:        number
@@ -672,49 +718,104 @@ export interface LineItem {
 }
 
 export type QuotationStatus =
-  | 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted'
+  | 'draft' | 'accepted' | 'rejected' | 'converted'
 
 export interface Quotation {
   quotationId:        string
   quotationNumber:    string          // ZS-Q-2026-001
+  templateId?:        QuotationTemplateId // 'production' | 'modern' | 'floral'
   clientId?:          string
   clientName:         string
   contact:            string
+  email?:             string
+  place?:             string          // e.g. Chennai, Mahabalipuram
   eventType:          string
   eventDate?:         Date
   validityDate:       Date
   lineItems:          LineItem[]
+  addons?:            LineItem[]
   subtotal:           number
   gstEnabled:         boolean
+  gstRate?:           number          // default 18 (9% CGST + 9% SGST)
   cgst?:              number
   sgst?:              number
   grandTotal:         number
   status:             QuotationStatus
-  termsAndConditions: string
+  termsAndConditions?: string
+  notes?:             string
+  isDeleted?:         boolean
   createdBy:          string
   createdAt:          Date
+  updatedAt?:         Date
 }
 
 export type InvoiceStatus =
-  | 'draft' | 'sent' | 'partiallyPaid' | 'paid' | 'overdue'
+  | 'draft' | 'unpaid' | 'partiallyPaid' | 'paid' | 'overdue'
+
+export type InvoicePaymentTerms = 'dueOnReceipt' | 'net7' | 'net15' | 'net30' | 'custom'
+
+export type InvoicePaymentMode = 'cash' | 'upi' | 'bank'
+
+export interface InvoiceLineItem {
+  id:              string
+  description:     string
+  subDescription?: string
+  sacCode?:        string
+  qty:             number
+  rate:            number
+  discount?:       number            // per-line flat discount in INR (when discountType === 'perLine')
+  amount:          number            // qty * rate - (discount if perLine)
+}
+
+export interface InvoicePaymentEntry {
+  id:         string
+  amount:     number
+  date:       Date
+  mode:       InvoicePaymentMode
+  reference?: string
+}
 
 export interface Invoice {
-  invoiceId:     string
-  invoiceNumber: string              // ZS-INV-2026-001
-  clientId:      string
-  projectId:     string
-  invoiceDate:   Date
-  dueDate:       Date
-  lineItems:     LineItem[]
-  totalAmount:   number
-  amountPaid:    number
-  balanceDue:    number
-  gstEnabled:    boolean
-  cgst?:         number
-  sgst?:         number
-  status:        InvoiceStatus
-  createdBy:     string
-  createdAt:     Date
+  invoiceId:          string
+  invoiceNumber:      string         // ZS-INV-2026-001
+  studioId?:          'studio-zoom' | 'studio-zoom-productions'
+  clientId?:          string
+  projectId?:         string
+  invoiceDate:        Date
+  dueDate:            Date
+  paymentTerms:       InvoicePaymentTerms
+  eventName:          string
+  eventDate?:         Date
+  eventVenue?:        string
+  clientName:         string
+  clientPhone?:       string
+  clientEmail?:       string
+  clientAddress?:     string
+  clientGstin?:       string
+  clientState:        string         // e.g. 'Tamil Nadu' -> CGST+SGST, else -> IGST
+  lineItems:          InvoiceLineItem[]
+  discountType:       'overall' | 'perLine'
+  discountValue:      number         // overall discount amount in INR (when discountType === 'overall')
+  discountAmount:     number         // total effective discount deducted before GST
+  subtotal:           number         // sum of qty * rate before discount
+  taxableAmount:      number         // subtotal - discountAmount
+  gstEnabled:         boolean
+  gstRate:            number         // default 18
+  gstSplit:           'cgst_sgst' | 'igst'
+  cgst:               number
+  sgst:               number
+  igst:               number
+  totalAmount:        number         // Grand Total
+  payments:           InvoicePaymentEntry[] // up to 3 advance payments
+  amountPaid:         number         // sum of advance payments
+  balanceDue:         number         // max(0, totalAmount - amountPaid)
+  status:             InvoiceStatus
+  termsAndConditions?: string
+  thankYouNote?:      string
+  isDeleted?:         boolean
+  createdBy:          string
+  createdAt:          Date
+  updatedAt?:         Date
 }
 
 // ─── LEADS ────────────────────────────────────────────────────────────────

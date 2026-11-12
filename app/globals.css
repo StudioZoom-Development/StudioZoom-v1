@@ -54,6 +54,24 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .lg\:grid {
+    display: grid !important;
+  }
+  .lg\:flex {
+    display: flex !important;
+  }
+  .lg\:block {
+    display: block !important;
+  }
+  .lg\:inline-flex {
+    display: inline-flex !important;
+  }
+  .lg\:hidden {
+    display: none !important;
+  }
+}
+
 .dashboard-radars-grid-3 {
   display: grid;
   grid-template-columns: 1fr;
@@ -78,6 +96,292 @@
 @media (min-width: 768px) {
   .dashboard-radars-grid-2 {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ─── ERP (Quotations & Invoices) responsive grids — immune to _ds_bundle.css overrides ─── */
+.erp-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.erp-header-cta {
+  width: 100%;
+  justify-content: center;
+}
+.erp-search-box {
+  width: 100%;
+}
+@media (min-width: 640px) {
+  .erp-header-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .erp-header-cta {
+    width: auto;
+  }
+  .erp-search-box {
+    width: 260px;
+  }
+}
+
+.erp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (min-width: 1024px) {
+  .erp-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+.erp-builder-topbar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 0.5px solid var(--color-border);
+}
+.erp-builder-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+.erp-builder-primary-btn {
+  grid-column: span 2 / span 2;
+}
+@media (min-width: 640px) {
+  .erp-builder-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .erp-builder-primary-btn {
+    grid-column: auto;
+  }
+}
+@media (min-width: 768px) {
+  .erp-builder-topbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .erp-builder-actions {
+    width: auto;
+    justify-content: flex-end;
+  }
+}
+
+.erp-mobile-switcher {
+  display: flex;
+  padding: 4px;
+  gap: 4px;
+  background-color: var(--color-surface);
+  border: 0.5px solid var(--color-border);
+  border-radius: 10px;
+}
+.erp-builder-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.erp-builder-form-pane,
+.erp-builder-preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.erp-builder-form-pane {
+  gap: 20px;
+}
+.erp-builder-preview-pane {
+  gap: 12px;
+}
+.erp-pane-hidden-mobile {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .erp-mobile-switcher {
+    display: none;
+  }
+  .erp-builder-split {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+  .erp-builder-split-quotation {
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+  }
+  .erp-builder-form-pane,
+  .erp-builder-preview-pane,
+  .erp-pane-hidden-mobile {
+    display: flex;
+  }
+  .erp-builder-preview-pane {
+    position: sticky;
+    top: 20px;
+  }
+}
+
+.erp-grid-2,
+.erp-grid-3,
+.erp-grid-4 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+@media (min-width: 640px) {
+  .erp-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 768px) {
+  .erp-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .erp-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
+/* Quotation deliverable / addon row */
+.erp-quote-item-headers {
+  display: none;
+}
+.erp-quote-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: var(--color-surface-raised);
+  border: 0.5px solid var(--color-border);
+}
+.erp-qty-rate-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.erp-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .erp-quote-item-headers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px 108px 112px 32px;
+    gap: 10px;
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-foreground-subtle);
+  }
+  .erp-quote-item-row {
+    grid-template-columns: minmax(0, 1fr) 68px 108px 112px 32px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+  }
+  .erp-qty-rate-pair {
+    display: contents;
+  }
+  .erp-item-footer {
+    display: contents;
+  }
+}
+
+/* Invoice line item rows */
+.erp-inv-item-headers {
+  display: none;
+}
+.erp-inv-item-main,
+.erp-inv-item-sub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.erp-inv-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 2px;
+}
+.erp-mobile-field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-foreground-subtle);
+  margin-bottom: 4px;
+}
+@media (min-width: 768px) {
+  .erp-mobile-field-label {
+    display: none;
+  }
+  .erp-inv-item-headers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px 108px 176px;
+    gap: 10px;
+    padding: 0 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-foreground-subtle);
+  }
+  .erp-inv-item-headers.erp-inv-item-main-gst {
+    grid-template-columns: minmax(0, 1fr) 92px 62px 102px 168px;
+  }
+  .erp-inv-item-main {
+    grid-template-columns: minmax(0, 1fr) 68px 108px 176px;
+    align-items: center;
+    gap: 10px;
+  }
+  .erp-inv-item-main.erp-inv-item-main-gst {
+    grid-template-columns: minmax(0, 1fr) 92px 62px 102px 168px;
+  }
+  .erp-inv-item-sub {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .erp-inv-col-1 { grid-column: span 1 / span 1; }
+  .erp-inv-col-2 { grid-column: span 2 / span 2; }
+  .erp-inv-col-3 { grid-column: span 3 / span 3; }
+  .erp-inv-col-5 { grid-column: span 5 / span 5; }
+  .erp-inv-col-9 { grid-column: span 9 / span 9; }
+  .erp-inv-col-12 { grid-column: span 12 / span 12; }
+  .erp-inv-item-actions {
+    justify-content: flex-end;
+    padding-top: 0;
+  }
+}
+
+.erp-modal-footer {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  padding-top: 8px;
+}
+.erp-modal-btn {
+  width: 100%;
+}
+@media (min-width: 640px) {
+  .erp-modal-footer {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+  .erp-modal-btn {
+    width: auto;
   }
 }
 
