@@ -27,7 +27,7 @@ import { DateField } from '@/components/shared/DateField'
 const STATUS_OPTIONS: Array<{ key: InvoiceStatus | 'all'; label: string }> = [
   { key: 'all', label: 'All Invoices' },
   { key: 'draft', label: 'Drafts' },
-  { key: 'sent', label: 'Sent' },
+  { key: 'unpaid', label: 'Unpaid' },
   { key: 'partiallyPaid', label: 'Partially Paid' },
   { key: 'paid', label: 'Paid' },
   { key: 'overdue', label: 'Overdue' },
@@ -37,7 +37,7 @@ function statusToBadgeVariant(status: InvoiceStatus): string {
   if (status === 'paid') return 'paid'
   if (status === 'partiallyPaid') return 'partial'
   if (status === 'overdue') return 'overdue'
-  if (status === 'sent') return 'inProgress'
+  if (status === 'unpaid') return 'unpaid'
   return 'todo'
 }
 

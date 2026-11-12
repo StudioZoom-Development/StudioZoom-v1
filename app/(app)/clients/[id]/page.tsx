@@ -1759,8 +1759,8 @@ export default function ClientDetailPage() {
                                   ? 'partial'
                                   : inv.status === 'overdue'
                                     ? 'overdue'
-                                    : inv.status === 'sent'
-                                      ? 'inProgress'
+                                    : inv.status === 'unpaid'
+                                      ? 'unpaid'
                                       : 'todo'
                             }
                             label={inv.status === 'partiallyPaid' ? 'PARTIAL' : inv.status.toUpperCase()}
